@@ -167,6 +167,17 @@ export const dailyCards = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     cardDate: localDate('card_date').notNull(),
+    /**
+     * The IANA zone actually used to compute `card_date`, recorded at creation.
+     *
+     * Additive, nullable, and worth its keep: `card_date` alone is
+     * uninterpretable after a user changes timezone, so "I made a card but the
+     * calendar shows the wrong day" goes from unanswerable to a five-minute
+     * diagnosis. It also lets F9 recompute a past card's local hour and weekday
+     * without assuming the *current* profile zone applied at the time.
+     * Null on any row written before F5.
+     */
+    timezone: text('timezone'),
     createdAt: tsz('created_at').notNull().defaultNow(),
   },
   (t) => [uniqueIndex('daily_cards_user_date_uniq').on(t.userId, t.cardDate)],

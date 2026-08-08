@@ -32,6 +32,8 @@ npm run test:layout      # the no-scroll spec; boots its own dev server on 3200
 npm run db:generate && npm run db:migrate
 npm run llm:check                        # smoke-test z.ai through the shared client
 npm run vocab:enrich -- "genteell"       # run the F3 prompt, no database writes
+npm run dates:check                      # F5's day-boundary + calendar assertions, offline
+npm run selection:check                  # 300 real draws; seeds and rolls back a fixture
 ```
 
 ## Authority order for the docs
@@ -82,4 +84,12 @@ throwing. Each cost real time.
   repair retry is allowed — never a loop.
 - zod 4: `z.uuid()`, not `z.string().uuid()` ([R2]).
 - Every "day" boundary is computed in the user's timezone. `date` columns are
-  read and written as `'YYYY-MM-DD'` strings, never as JS `Date`s.
+  read and written as `'YYYY-MM-DD'` strings, never as JS `Date`s. All of it goes
+  through `lib/time/local-date.ts` — the only place `Intl.DateTimeFormat` is
+  constructed, and the only file allowed to do date arithmetic. `grep toISOString`
+  should never find a new hit outside `lib/cards/serialize.ts`, where it
+  serialises an instant rather than a day.
+- Reads may fall back to a default timezone; **writes may not**. `POST /api/cards`
+  refuses with 409 rather than date a card by guesswork.
+- The daily card is created by `POST /api/cards` and by nothing else. No cron, no
+  `revalidate`, no creation on page load.

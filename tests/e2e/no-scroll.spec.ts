@@ -93,6 +93,24 @@ for (const scheme of SCHEMES) {
   });
 }
 
+/**
+ * F5's other card-region state, and the widest one: two buttons side by side
+ * where every other state has at most one. It occupies the same `flex-1` slot
+ * as the card, so it cannot push the strip or the tab bar off the screen — this
+ * asserts that rather than assuming it.
+ */
+for (const scheme of SCHEMES) {
+  test(`/today holds with the empty state (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/kitchen-sink/today?state=empty");
+
+    await expect(page.getByTestId("card-empty")).toBeVisible();
+    await pageDoesNotScroll(page);
+    await tabBarIsOnScreen(page);
+    await expect(page.getByTestId("day-strip")).toBeInViewport();
+  });
+}
+
 test("both card lines are clamped to exactly one line", async ({ page }) => {
   await page.goto("/kitchen-sink/today?n=6");
 
