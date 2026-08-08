@@ -16,6 +16,7 @@
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
     "llm:check": "tsx --conditions=react-server --env-file=.env.local scripts/check-llm.ts",
+    "vocab:enrich": "tsx --conditions=react-server --env-file=.env.local scripts/enrich-once.ts",
     "test:layout": "playwright test",
     "design:build": "node scripts/build-previews.mjs",
     "design:changed": "node scripts/dssync-changed.mjs"
