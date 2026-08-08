@@ -5,6 +5,7 @@ import { ChatBubble } from "@/components/ui/chat-bubble";
 import { TextInput } from "@/components/ui/text-input";
 import { Eyebrow } from "@/components/ui/text";
 import { lookupWord, CHAT_OPENER } from "@/lib/sample-data";
+import { vocabDetailHref } from "@/lib/vocab/links";
 
 /**
  * The practice chat. The model speaks FIRST — the opener below is fired before
@@ -29,7 +30,7 @@ export default async function ChatPage({
         className="flex shrink-0 items-center justify-between border-b border-rule px-[var(--gutter)] pb-3"
         style={{ paddingTop: "var(--pad-top)" }}
       >
-        <BackLink href={`/vocab/${id}`} label="Back" />
+        <BackLink href={vocabDetailHref(id)} label="Back" />
         <span className="flex items-baseline gap-2">
           <Eyebrow size="sm" className="tracking-[0.18em]">
             Practising

@@ -4,11 +4,18 @@ import {
   countEntriesCreatedSince,
   createVocabEntry,
   findEntryByNormalizedTerm,
+  listVocabEntries,
   DAILY_ADD_LIMIT,
 } from "@/lib/db/queries/vocab";
+import { decodeCursor, encodeCursor } from "@/lib/vocab/cursor";
 import { normalizeTerm, validateTerm } from "@/lib/vocab/normalize";
-import { createVocabRequestSchema, type CreateVocabResponse } from "@/lib/vocab/schemas";
-import { toSummary } from "@/lib/vocab/serialize";
+import {
+  createVocabRequestSchema,
+  listVocabQuerySchema,
+  type CreateVocabResponse,
+  type ListVocabResponse,
+} from "@/lib/vocab/schemas";
+import { toListItem, toSummary } from "@/lib/vocab/serialize";
 
 export const runtime = "nodejs";
 
@@ -38,6 +45,41 @@ function isUniqueViolation(err: unknown): boolean {
   if (code(err) === "23505") return true;
   const cause = typeof err === "object" && err !== null ? (err as { cause?: unknown }).cause : undefined;
   return code(cause) === "23505";
+}
+
+/**
+ * One page of the caller's collection. F4's `load more` is the only caller —
+ * `/vocab` itself renders page 1 from the database server-side, per the
+ * roadmap's rule that a page never fetches its own first paint.
+ *
+ * Junk query params degrade rather than 400: a bookmarked URL should show the
+ * list. The one exception is an undecodable `cursor`, because silently ignoring
+ * it would restart the scroll at page 1 forever and the user would watch the
+ * same fifty words append themselves.
+ */
+export async function GET(req: Request): Promise<Response> {
+  const auth = await requireApiUser();
+  if (!auth.ok) return auth.response;
+
+  const params = new URL(req.url).searchParams;
+  const query = listVocabQuerySchema.safeParse(Object.fromEntries(params));
+  if (!query.success) return fail(400, "Could not read that request.", "invalid_query");
+  const { q, cursor: rawCursor, limit } = query.data;
+
+  const cursor = rawCursor ? decodeCursor(rawCursor) : null;
+  if (rawCursor && !cursor) return fail(400, "Could not read that request.", "invalid_cursor");
+
+  // limit + 1 probes for a further page without a second count query.
+  const rows = await listVocabEntries(auth.user.id, { q, cursor, limit: limit + 1 });
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const last = page[page.length - 1];
+
+  return ok<ListVocabResponse>({
+    items: page.map(toListItem),
+    nextCursor:
+      hasMore && last ? encodeCursor({ term: last.sortKey, id: last.id }) : null,
+  });
 }
 
 export async function POST(req: Request): Promise<Response> {

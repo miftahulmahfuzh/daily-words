@@ -9,6 +9,7 @@ import { RetryEnrichmentButton } from "@/components/vocab/retry-enrichment-butto
 import { acceptCorrection, dismissCorrection } from "@/lib/vocab/client";
 import { enrichmentCopy } from "@/lib/vocab/display";
 import type { EnrichResponse } from "@/lib/vocab/schemas";
+import { vocabDetailHref } from "@/lib/vocab/links";
 
 /**
  * One entry, in whatever state it is in.
@@ -92,7 +93,7 @@ export function EnrichmentCard({
         <Prose size="body" tone="ink">
           You already had {merged.term}.
         </Prose>
-        <Button size="sm" fullWidth={false} href={`/vocab/${merged.id}`}>
+        <Button size="sm" fullWidth={false} href={vocabDetailHref(merged.id)}>
           Open it
         </Button>
       </Card>
@@ -183,7 +184,7 @@ export function EnrichmentCard({
                 onDone={onChange}
               />
             ) : (
-              <Button size="sm" fullWidth={false} href={`/vocab/${entry.id}`}>
+              <Button size="sm" fullWidth={false} href={vocabDetailHref(entry.id)}>
                 Open it
               </Button>
             )}

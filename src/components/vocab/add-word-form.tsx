@@ -12,6 +12,7 @@ import { EnrichmentCard } from "@/components/vocab/enrichment-card";
 import { createEntry, enrichEntry } from "@/lib/vocab/client";
 import { MAX_TERM_CHARS, normalizeTerm, validateTerm } from "@/lib/vocab/normalize";
 import type { EnrichResponse, VocabEntrySummary } from "@/lib/vocab/schemas";
+import { vocabDetailHref } from "@/lib/vocab/links";
 
 export type RecentWord = { id: string; term: string };
 
@@ -203,7 +204,7 @@ export function AddWordForm({ recent }: { recent: RecentWord[] }) {
           <Eyebrow size="sm">Just added</Eyebrow>
           <div className="flex flex-wrap gap-2">
             {justAdded.map((word) => (
-              <Pill key={word.id} href={`/vocab/${word.id}`}>
+              <Pill key={word.id} href={vocabDetailHref(word.id)}>
                 {word.term}
               </Pill>
             ))}
@@ -227,7 +228,7 @@ function DuplicateNotice({ duplicate }: { duplicate: Duplicate }) {
           ? `${duplicate.term} — you marked this mastered.`
           : `You already have ${duplicate.term}.`}
       </Prose>
-      <Button size="sm" fullWidth={false} href={`/vocab/${duplicate.id}`}>
+      <Button size="sm" fullWidth={false} href={vocabDetailHref(duplicate.id)}>
         Open it
       </Button>
     </Card>
