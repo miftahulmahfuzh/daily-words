@@ -1,6 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Screen, BackLink } from "@/components/screen";
+import { Screen, ScreenBody } from "@/components/layout/screen";
+import { BackLink } from "@/components/layout/back-link";
+import { Button } from "@/components/ui/button";
+import { Eyebrow, Prose } from "@/components/ui/text";
+import { MasteredToggle } from "./mastered-toggle";
 import { lookupWord } from "@/lib/sample-data";
 
 /* A real route, not a modal. On iOS Safari a full-page modal loses the
@@ -17,75 +20,49 @@ export default async function WordPage({
 
   return (
     <Screen>
-      <div
-        className="flex-1 overflow-y-auto px-6 pb-7"
-        style={{ paddingTop: "var(--pad-top)" }}
-      >
+      <ScreenBody scroll padded={false} className="px-6 pb-7">
         <BackLink href="/vocab" label="Collection" />
 
-        <h1 className="m-0 pt-2 text-[38px] leading-none font-normal tracking-[-0.02em]">
+        <h1 className="m-0 pt-2 text-[38px] leading-none font-normal tracking-display">
           {word.term}
         </h1>
 
         <div className="flex items-baseline gap-3 pt-3 pb-4.5">
+          {/* IPA in mono, always: Source Serif 4's latin subset does not
+              guarantee the IPA Extensions block and the fallback is visible. */}
           {word.ipa && (
-            <span className="font-mono text-[13px] text-ink-2">{word.ipa}</span>
+            <span className="font-mono text-mono-lg text-ink-2">{word.ipa}</span>
           )}
           {word.pos && (
-            <span className="text-[15px] italic text-ink-3">{word.pos}</span>
+            <span className="text-sm italic text-ink-3">{word.pos}</span>
           )}
         </div>
 
         <div className="h-px bg-rule" />
 
-        <p className="m-0 py-4.5 pb-6.5 text-[21px] leading-[1.35] tracking-[-0.005em] text-pretty">
+        <p className="m-0 py-4.5 pb-6.5 text-[21px] leading-[1.35] tracking-tight text-pretty">
           {word.definition}
         </p>
 
         {word.examples.length > 0 && (
           <>
-            <span className="font-mono text-[10px] tracking-[0.2em] text-ink-3 uppercase">
-              Usage
-            </span>
+            <Eyebrow>Usage</Eyebrow>
             <div className="flex flex-col gap-3.5 pt-3 pb-7">
               {word.examples.map((example, i) => (
-                <p
-                  key={i}
-                  className="m-0 border-l border-rule pl-3.5 text-[16px] leading-[1.45] text-ink-2 text-pretty"
-                >
+                <Prose key={i} size="body" className="border-l border-rule pl-3.5">
                   {example}
-                </p>
+                </Prose>
               ))}
             </div>
           </>
         )}
 
-        <Link
-          href={`/vocab/${id}/chat`}
-          className="flex h-[52px] w-full items-center justify-center rounded-[var(--r-field)] border border-ink bg-ink font-mono text-[12px] tracking-[0.16em] text-paper uppercase"
-        >
+        <Button variant="filled" href={`/vocab/${id}/chat`}>
           Practise this word
-        </Link>
+        </Button>
 
-        <button
-          type="button"
-          className="mt-4 flex min-h-[56px] w-full items-center justify-between gap-4 border-t border-rule-2 pt-4.5 text-left"
-        >
-          <span className="flex flex-col gap-[3px]">
-            <span className="text-[17px] text-ink">Mastered</span>
-            <span className="font-mono text-[10px] tracking-[0.06em] text-ink-3">
-              Stop putting it on cards
-            </span>
-          </span>
-          <span
-            className={`flex h-[30px] w-[50px] shrink-0 items-center rounded-[var(--r-pill)] p-[3px] ${
-              word.mastered ? "justify-end bg-accent" : "justify-start bg-rule"
-            }`}
-          >
-            <span className="block size-6 rounded-full bg-card" />
-          </span>
-        </button>
-      </div>
+        <MasteredToggle initial={word.mastered ?? false} />
+      </ScreenBody>
     </Screen>
   );
 }

@@ -1,5 +1,8 @@
-import { Screen } from "@/components/screen";
+import { Screen, ScreenBody } from "@/components/layout/screen";
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { BadgeRow } from "@/components/ui/badge-row";
+import { LevelPill } from "@/components/ui/level-pill";
+import { Eyebrow, Meta, Prose } from "@/components/ui/text";
 import { requireUser } from "@/lib/auth/session";
 import { signOutAction } from "@/lib/auth/actions";
 import { STATS, BADGES, PROFILE } from "@/lib/sample-data";
@@ -9,83 +12,57 @@ import { STATS, BADGES, PROFILE } from "@/lib/sample-data";
 
    F1 owns only the identity line and the sign-out control here — they are what
    prove the auth loop closes. Every figure below is still sample data; F9 owns
-   replacing it with real queries. */
+   replacing it with real queries, and [R11] requires it to recompute the streak
+   on read rather than trust the `user_stats` cache. */
 export default async function ProfilePage() {
   const user = await requireUser();
 
   return (
     <Screen tabs>
-      <div
-        className="flex-1 overflow-y-auto px-[var(--gutter)] pb-4"
-        style={{ paddingTop: "var(--pad-top)" }}
-      >
-        <div className="flex flex-col gap-3 pb-5.5">
-          <span className="font-mono text-[10px] tracking-[0.2em] text-ink-3 uppercase">
-            {user.name ?? user.email}
-          </span>
-          <span className="self-start rounded-[var(--r-pill)] border border-accent px-3.5 py-1.5 text-[15px] text-accent">
-            {PROFILE.streakLevel}
-          </span>
-          <span className="font-mono text-[10px] tracking-[0.06em] text-ink-3">
-            Next: {PROFILE.nextLevel}.
-          </span>
+      <ScreenBody scroll className="pb-4">
+        <div className="flex shrink-0 flex-col gap-3 pb-5.5">
+          <Eyebrow>{user.name ?? user.email}</Eyebrow>
+          <LevelPill
+            kind="streak"
+            label={PROFILE.streakLevel}
+            tier={5}
+            tierCount={9}
+            className="self-start"
+          />
+          <Meta>Next: {PROFILE.nextLevel}.</Meta>
         </div>
 
-        <div className="grid grid-cols-2 border-t border-l border-rule">
+        {/* A ruled grid rather than four cards: these are readings off one
+            instrument, not four separate things. */}
+        <div className="grid shrink-0 grid-cols-2 border-t border-l border-rule">
           {STATS.map((stat) => (
             <div
               key={stat.label}
               className="flex flex-col gap-[5px] border-r border-b border-rule px-3.5 py-4"
             >
-              <span className="text-[32px] leading-none tracking-[-0.02em]">
+              <span className="text-[32px] leading-none tracking-display tabular-nums">
                 {stat.n}
               </span>
-              <span className="font-mono text-[9px] tracking-[0.16em] text-ink-3 uppercase">
+              <Eyebrow size="sm" className="tracking-[0.16em]">
                 {stat.label}
-              </span>
+              </Eyebrow>
             </div>
           ))}
         </div>
 
-        <p className="m-0 py-4.5 pb-6 text-[17px] leading-[1.4] text-ink-2">
-          {PROFILE.since}
-        </p>
+        <Prose className="shrink-0 py-4.5 pb-6">{PROFILE.since}</Prose>
 
-        <span className="font-mono text-[9px] tracking-[0.2em] text-ink-3 uppercase">
-          Badges
-        </span>
-        <div className="flex flex-col pt-2">
-          {BADGES.map((badge) => {
-            const earned = badge.count > 0;
-            return (
-              <div
-                key={badge.key}
-                className="flex items-baseline gap-3 border-b border-rule-2 py-3.5"
-              >
-                <span
-                  className={`size-[7px] shrink-0 ${
-                    earned ? "bg-accent" : "bg-rule"
-                  }`}
-                />
-                <span
-                  className={`flex-1 text-[16px] leading-[1.3] text-pretty ${
-                    earned ? "text-ink" : "text-ink-3"
-                  }`}
-                >
-                  {badge.name}
-                </span>
-                <span className="font-mono text-[11px] text-ink-3">
-                  {earned ? `×${badge.count}` : "—"}
-                </span>
-              </div>
-            );
-          })}
+        <Eyebrow size="sm">Badges</Eyebrow>
+        <div className="flex shrink-0 flex-col pt-2">
+          {BADGES.map((badge) => (
+            <BadgeRow key={badge.key} label={badge.name} count={badge.count} />
+          ))}
         </div>
 
-        <form action={signOutAction} className="pt-7">
+        <form action={signOutAction} className="shrink-0 pt-7">
           <SignOutButton />
         </form>
-      </div>
+      </ScreenBody>
     </Screen>
   );
 }

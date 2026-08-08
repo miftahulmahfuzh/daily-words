@@ -13,9 +13,27 @@ import { NextResponse, type NextRequest } from 'next/server'
  */
 const SESSION_COOKIES = ['authjs.session-token', '__Secure-authjs.session-token']
 
+/**
+ * The dev-only component gallery. It renders the UI kit against fixtures and
+ * touches no user data, so it must be reachable without a session — the
+ * Playwright layout spec drives it and there is no session to give it.
+ *
+ * Gated on NODE_ENV here and `notFound()` inside the route itself. Two locks,
+ * because a component gallery reachable in production is how an unfinished
+ * screen ends up indexed.
+ */
+const DEV_ONLY_PREFIX = '/kitchen-sink'
+
 export function middleware(req: NextRequest) {
   const hasCookie = SESSION_COOKIES.some((n) => req.cookies.has(n))
   const { pathname } = req.nextUrl
+
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    pathname.startsWith(DEV_ONLY_PREFIX)
+  ) {
+    return NextResponse.next()
+  }
 
   if (!hasCookie && pathname !== '/signin') {
     return NextResponse.redirect(new URL('/signin', req.url))
