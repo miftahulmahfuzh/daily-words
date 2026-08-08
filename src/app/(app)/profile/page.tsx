@@ -1,5 +1,6 @@
 import { Screen, ScreenBody } from "@/components/layout/screen";
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { EditProfileLink } from "@/components/profile/edit-profile-link";
 import { BadgeRow } from "@/components/ui/badge-row";
 import { LevelPill } from "@/components/ui/level-pill";
 import { Eyebrow, Meta, Prose } from "@/components/ui/text";
@@ -57,6 +58,12 @@ export default async function ProfilePage() {
           {BADGES.map((badge) => (
             <BadgeRow key={badge.key} label={badge.name} count={badge.count} />
           ))}
+        </div>
+
+        {/* F7's entire footprint on this page. F9 owns everything above it and
+            may move this row wherever its own layout wants. */}
+        <div className="shrink-0 pt-7">
+          <EditProfileLink />
         </div>
 
         <form action={signOutAction} className="shrink-0 pt-7">

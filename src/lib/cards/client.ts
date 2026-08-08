@@ -1,5 +1,6 @@
 import { request, type ApiResult } from "@/lib/api/client";
 import type { CalendarResponse, CreateCardResponse } from "@/lib/cards/schemas";
+import { detectTimeZone } from "@/lib/profile/timezone";
 
 /**
  * The browser half of F5's two routes. Types only — the zod schemas stay on the
@@ -30,11 +31,14 @@ export function fetchCalendarMonth(month: string): Promise<ApiResult<CalendarRes
   return request(`/api/cards/calendar?month=${encodeURIComponent(month)}`, "GET");
 }
 
-/** The browser's own guess at its zone. Advisory input to `createCard` only. */
+/**
+ * The browser's own guess at its zone. Advisory input to `createCard` only.
+ *
+ * Delegates to F7's `detectTimeZone()` rather than repeating the try/catch: two
+ * copies of "what does this browser think its zone is" is two answers waiting to
+ * disagree. The `undefined` return is kept because `createCardRequestSchema`
+ * treats the field as optional, not nullable.
+ */
 export function detectTimezone(): string | undefined {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
-  } catch {
-    return undefined;
-  }
+  return detectTimeZone() ?? undefined;
 }

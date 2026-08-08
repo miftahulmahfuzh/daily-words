@@ -34,7 +34,12 @@ npm run llm:check                        # smoke-test z.ai through the shared cl
 npm run vocab:enrich -- "genteell"       # run the F3 prompt, no database writes
 npm run dates:check                      # F5's day-boundary + calendar assertions, offline
 npm run selection:check                  # 300 real draws; seeds and rolls back a fixture
+npm run profile:check                    # F7's prompt-context and timezone assertions, offline
 ```
+
+`scripts/profile-peek.ts` is the F7 verification helper — `show`, `unonboard`,
+`onboard`, `tz <zone> [manual]`, `clear`, `delete`, `context`. Run it with
+`tsx --conditions=react-server --env-file=.env.local`.
 
 ## Authority order for the docs
 
@@ -93,3 +98,10 @@ throwing. Each cost real time.
   refuses with 409 rather than date a card by guesswork.
 - The daily card is created by `POST /api/cards` and by nothing else. No cron, no
   `revalidate`, no creation on page load.
+- `app/(app)/layout.tsx` calls `requireOnboardedUser()`, so **every** route inside
+  that group is gated on `profiles.onboarded_at`. `/onboarding` is a sibling of
+  the group, not a member: putting it inside makes the guard part of its own
+  layout chain and every visit an infinite redirect. API routes are outside every
+  layout, which is what keeps `POST /api/profile/complete` reachable.
+- The user's timezone is detected, never asked. `timezone_source = 'manual'`
+  means a human corrected it and automatic re-detection must leave it alone.

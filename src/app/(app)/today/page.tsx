@@ -99,11 +99,17 @@ export default async function TodayPage() {
         ) : !timezone.ok ? (
           /* Reads fall back to a default zone so the screen is not blank, but
              the button is withheld: a card written under a guessed timezone is
-             a wrong date in a permanent record. */
+             a wrong date in a permanent record.
+
+             F7 made the destination /profile/edit rather than /onboarding. The
+             gate guarantees a profile row by the time this renders, so the only
+             way to be here is a stored zone that is not a valid IANA name — and
+             /onboarding would bounce an onboarded user straight back to /today,
+             which is a dead end. The manual override is the actual fix. */
           <CardEmpty
             title="Set your timezone to start a card."
             actions={
-              <Button variant="filled" size="sm" fullWidth={false} href="/onboarding">
+              <Button variant="filled" size="sm" fullWidth={false} href="/profile/edit">
                 Set timezone
               </Button>
             }

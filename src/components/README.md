@@ -47,6 +47,15 @@ those belong to `Screen`, and duplicating them is how the height budget breaks.
 | `DailyCard` | `@/components/daily/daily-card` | `{ items: DailyCardItemView[], shortCardAction? }` |
 | `NoCardYet` | `@/components/daily/no-card-yet` | `{ action }` |
 | `DayStrip` | `@/components/daily/day-strip` | `{ days: DayStripItem[], label? }` |
+| `Chip`, `ChipSelect` | `@/components/profile/chip-select` | `{ pressed?, onClick? }` / `{ options, selected, onToggle }` |
+| `OptionRows` | `@/components/profile/option-rows` | `{ options: { value, label, gloss? }[], value, onChange }` |
+
+`Chip` is the tappable sibling of `Pill` — same radius and tones, a real
+`<button>` with `aria-pressed` and a 44px floor. `ChipSelect` reports *which*
+chip was tapped and never computes the next selection; the caller applies
+`toggleCapped` / `toggleExclusive` from `@/lib/profile/selection` inside a
+functional `setState`. Deriving it inside the component loses taps that land
+before React re-renders — six rapid taps produced three selections.
 
 Types and utilities live in `@/lib/ui/types`, `@/lib/ui/cn` and `@/lib/ui/layout`.
 
@@ -80,7 +89,10 @@ Obligations F2 placed on the other features still stand:
   grid draw their marks with `CalendarMarkGlyph`.
 - **F6** — the chat pane scrolls, the composer sits outside it and owns the bottom
   inset; the assistant's opening turn is the first `ChatBubble`.
-- **F7** — onboarding screens pass no `tabs`; one question per `Screen`.
+- **F7** — `/onboarding` is one `Screen` with no `tabs` and five React states, not
+  five routes. It lives **outside** the `(app)` route group, whose layout gates on
+  `onboarded_at`. `/profile/edit` is a `Screen` with `BackLink` and a footer that
+  is the last row of the flex column, never `position: fixed`.
 - **F8** — Discover lives behind `Tabs` on `/vocab` via `?tab=`, not a new route
   segment and not a fifth tab. [R17].
 - **F9** — uses the roadmap's exact level and badge strings with `LevelPill` and
