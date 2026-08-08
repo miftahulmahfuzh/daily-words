@@ -26,10 +26,25 @@
   --r-card: 10px;
   --r-pill: 999px;
 
-  /* Safe areas, resolved once so screens never repeat the env() dance. */
-  --pad-top: calc(env(safe-area-inset-top, 0px) + 16px);
-  --pad-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  /* Raw insets (F1 §7.7 contract). Needs viewport-fit=cover to be non-zero. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Safe areas plus the design's gutters, resolved once so screens never repeat
+     the env() dance. */
+  --pad-top: calc(var(--safe-top) + 16px);
+  --pad-bottom: calc(var(--safe-bottom) + 10px);
   --gutter: 22px;
+
+  /* F1 §7.7 also specified --header-height, --tab-bar-height and
+     --card-viewport-height, for a shell with a FIXED header and tab bar whose
+     leftover height the card was to be measured against.
+     ROADMAP [R19] replaced that arithmetic with structure: `.dw-screen` is a
+     fixed-height flex column, the header and day strip are in flow, and the card
+     is `flex: 1` with six `flex: 1 1 0` rows that compress. There is no single
+     header height to publish — each screen's differs — and a stale variable that
+     no longer describes the layout is worse for F5 than its absence.
+     The no-scroll contract now lives in the components, not in a length. */
 }
 
 /* System dark mode. Guarded so an explicit light choice still wins. */

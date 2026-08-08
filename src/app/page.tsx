@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/auth/session";
 
-export default function Home() {
-  // Auth lands here in F1; for now the app opens on the card.
-  redirect("/today");
+export default async function Home() {
+  const user = await getSessionUser();
+  redirect(user ? "/today" : "/signin");
 }

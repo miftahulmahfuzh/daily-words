@@ -1,9 +1,18 @@
 import { Screen } from "@/components/screen";
+import { SignOutButton } from "@/components/auth/sign-out-button";
+import { requireUser } from "@/lib/auth/session";
+import { signOutAction } from "@/lib/auth/actions";
 import { STATS, BADGES, PROFILE } from "@/lib/sample-data";
 
 /* The pride screen. No nagging, no loss-aversion, no unseen-badge dots —
-   the tone is dry and affectionate, matching the level names. */
-export default function ProfilePage() {
+   the tone is dry and affectionate, matching the level names.
+
+   F1 owns only the identity line and the sign-out control here — they are what
+   prove the auth loop closes. Every figure below is still sample data; F9 owns
+   replacing it with real queries. */
+export default async function ProfilePage() {
+  const user = await requireUser();
+
   return (
     <Screen tabs>
       <div
@@ -12,7 +21,7 @@ export default function ProfilePage() {
       >
         <div className="flex flex-col gap-3 pb-5.5">
           <span className="font-mono text-[10px] tracking-[0.2em] text-ink-3 uppercase">
-            {PROFILE.name}
+            {user.name ?? user.email}
           </span>
           <span className="self-start rounded-[var(--r-pill)] border border-accent px-3.5 py-1.5 text-[15px] text-accent">
             {PROFILE.streakLevel}
@@ -72,6 +81,10 @@ export default function ProfilePage() {
             );
           })}
         </div>
+
+        <form action={signOutAction} className="pt-7">
+          <SignOutButton />
+        </form>
       </div>
     </Screen>
   );

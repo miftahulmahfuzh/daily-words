@@ -20,6 +20,9 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Daily Words",
   description: "Six words a day, on one card, in your pocket.",
+  manifest: "/manifest.webmanifest",
+  // The favicon and apple-touch-icon links are emitted from app/icon.png and
+  // app/apple-icon.png by file convention. Do not hand-write them here.
   appleWebApp: {
     capable: true,
     title: "Daily Words",

@@ -18,6 +18,9 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // Vendored verbatim from claude.ai/design as the visual source of truth
+      // (ROADMAP [R18]). Not app code, never bundled — do not lint or edit it.
+      "design/from-claude-design/**",
     ],
   },
 ];

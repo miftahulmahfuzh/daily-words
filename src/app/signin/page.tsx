@@ -1,7 +1,15 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Screen } from "@/components/screen";
+import { getSessionUser } from "@/lib/auth/session";
+import { signInWithGoogle } from "@/lib/auth/actions";
+import { SignInButton } from "./sign-in-button";
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  // A real session read, not a cookie sniff. Middleware cannot make this call:
+  // a stale cookie looks identical to a live one there, and acting on it loops.
+  const user = await getSessionUser();
+  if (user) redirect("/today");
+
   return (
     <Screen>
       <div
@@ -27,13 +35,9 @@ export default function SignInPage() {
         </div>
 
         <div className="flex flex-col gap-[18px]">
-          <Link
-            href="/onboarding"
-            className="flex h-[54px] w-full items-center justify-center gap-2.5 rounded-[var(--r-field)] border border-ink bg-ink text-[17px] text-paper"
-          >
-            <span className="inline-block size-[17px] rounded-full border-[1.5px] border-paper" />
-            Continue with Google
-          </Link>
+          <form action={signInWithGoogle}>
+            <SignInButton />
+          </form>
           <p className="m-0 text-center font-mono text-[10px] leading-[1.7] tracking-[0.04em] text-ink-3">
             The only way in. No password to forget.
           </p>
