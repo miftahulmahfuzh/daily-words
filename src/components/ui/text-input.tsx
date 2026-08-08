@@ -26,6 +26,7 @@ const WRAP: Record<Variant, string> = {
 export function TextInput({
   id,
   name,
+  ref,
   variant = "boxed",
   leading,
   trailing,
@@ -36,6 +37,13 @@ export function TextInput({
   spellCheck = false,
   ...rest
 }: {
+  /**
+   * React 19 passes `ref` to function components as an ordinary prop, so this is
+   * only a type declaration — but without it the compiler rejects the one caller
+   * that needs it. /vocab/new re-focuses the field after "Add another", and iOS
+   * only honours `.focus()` inside the gesture that asked for it.
+   */
+  ref?: React.Ref<HTMLInputElement>;
   variant?: Variant;
   /** Rendered inside the field, before the input. A mark, not a control. */
   leading?: React.ReactNode;
@@ -50,6 +58,7 @@ export function TextInput({
       <input
         id={id}
         name={name}
+        ref={ref}
         autoCapitalize={autoCapitalize}
         autoCorrect={autoCorrect}
         spellCheck={spellCheck}

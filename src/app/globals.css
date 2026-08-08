@@ -130,11 +130,20 @@ button {
   }
 }
 
-/* iOS: anything under 16px zooms the viewport on focus. Never let it. */
-input,
-textarea,
-select {
-  font-size: max(1rem, 16px);
+/* iOS: anything under 16px zooms the viewport on focus. Never let it.
+
+   In `@layer base` on purpose. Unlayered CSS outranks every cascade layer, so
+   written bare this rule beat `text-base` and `text-[30px]` alike and every
+   input in the app rendered at exactly 16px — including the 30px word field on
+   /vocab/new, which is the largest thing that screen is supposed to draw.
+   Inside the base layer it still sets the floor for any input without a
+   font-size utility, and loses to one that has it. */
+@layer base {
+  input,
+  textarea,
+  select {
+    font-size: max(1rem, 16px);
+  }
 }
 
 /* Tap highlight is removed, so every interactive element owes an :active state. */
@@ -148,9 +157,19 @@ a:active {
   opacity: 0.6;
 }
 
-button {
-  font: inherit;
-  color: inherit;
+/* In `@layer base` for the same reason as the input rule above, and it was the
+   more expensive of the two. Unlayered, the `font` shorthand reset every font
+   property — family and size included — and outranked the utility layer, so
+   every `Button` in the app ignored its own `font-mono` and `text-mono-*` and
+   drew in inherited 16px serif; `color: inherit` likewise ate `text-paper`, so
+   the filled variant was ink on ink and its label was invisible. Nothing threw.
+   Inside the base layer it still normalises a bare <button> and loses to a
+   utility, which is the whole point of it. */
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+  }
 }
 
 ::-webkit-scrollbar {

@@ -32,7 +32,7 @@ those belong to `Screen`, and duplicating them is how the height budget breaks.
 | `Button` | `@/components/ui/button` | `{ variant?: filled\|outline\|quiet, size?: sm\|md\|lg, shape?: field\|pill, fullWidth?, href?, type?, loading?, disabled?, onClick? }` |
 | `Pill` | `@/components/ui/pill` | `{ href?, tone?: outline\|accent\|ink, mono? }` |
 | `Field` | `@/components/ui/field` | `{ id, label, hint?, error?, hideLabel? }` |
-| `TextInput` | `@/components/ui/text-input` | `{ variant?: boxed\|underline\|pill, leading?, trailing?, inputClassName? }` + all `<input>` props |
+| `TextInput` | `@/components/ui/text-input` | `{ variant?: boxed\|underline\|pill, leading?, trailing?, ref?, inputClassName? }` + all `<input>` props |
 | `TextArea` | `@/components/ui/text-area` | all `<textarea>` props |
 | `EmptyState` | `@/components/ui/empty-state` | `{ title?, body, action? }` |
 | `Eyebrow`, `Meta`, `Prose` | `@/components/ui/text` | see file |
@@ -112,7 +112,32 @@ At 320×568 (the 2016 SE, below the design target) rows compress to 49px and the
 page still does not scroll. That is the intended degradation, and the spec
 asserts the no-scroll invariant there but not the floor.
 
-## A trap worth knowing about
+## Two traps worth knowing about
+
+### Unlayered CSS in `globals.css` beats every utility class
+
+`@import "tailwindcss"` declares `@layer theme, base, components, utilities`.
+Anything written outside a layer outranks all four — so a bare element rule in
+`globals.css` silently wins against the class a component asked for.
+
+Two rules were written bare and both were load-bearing, found in F3 by measuring
+the DOM rather than by anything failing:
+
+- `input, textarea, select { font-size: max(1rem, 16px) }` — the iOS
+  zoom-on-focus floor. It beat `text-base` and `text-[30px]` alike, so every
+  field in the app rendered at exactly 16px, including the 30px word field that
+  is the largest thing `/vocab/new` draws.
+- `button { font: inherit; color: inherit }` — the worse of the two. The `font`
+  shorthand resets family *and* size, so every `Button` ignored its own
+  `font-mono` and `text-mono-*` and drew in inherited 16px serif; `color:
+  inherit` ate `text-paper`, which made the filled variant ink on ink with an
+  invisible label.
+
+Both now sit in `@layer base`, where they still normalise a bare element and
+lose to a utility. **Put any new element-level rule in `@layer base`.** If you
+mean it to be unbeatable, say so in a comment and expect it to fight the kit.
+
+### `cn()` and the type scale
 
 `cn()` extends `tailwind-merge` with this project's type scale, and it has to.
 tailwind-merge only recognises t-shirt sizes as font sizes; it read

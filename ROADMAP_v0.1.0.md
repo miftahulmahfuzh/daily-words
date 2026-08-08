@@ -701,12 +701,29 @@ The level and badge tables in this roadmap remain authoritative. F9 already veri
 its strings against them; `src/lib/sample-data.ts` follows the roadmap, not the
 prototype, and says so at the top of the file.
 
+### [R21] There is no floating "+" button. The add affordance is the /vocab header.
+
+Decided when F3 was built, against [R3]'s assumption.
+
+The design ([R18], the visual source of truth) contains exactly one way to add a word:
+a `+ Word` pill on the **Collection** header. It has no floating button on any screen,
+and a glyph-only circle also sits badly with [R18]'s "No icons anywhere."
+
+**Ruling:** `/vocab/new` is reached from the `+ Word` pill on `/vocab`, from F4's
+collection empty state, and from F5's short-of-six prompt. **`components/shell/add-word-fab.tsx`
+is not built and the app shell takes no `showAddButton` prop.**
+
+**Overrides:** [R3] in full, and F3 §8.1. F10 is freed by this — the bottom-right
+corner is no longer taken, so the constraint F3 §10 placed on the journal composer is
+void, though F10's own always-present textarea is unchanged and still correct.
+
+---
+
 ### Still open — these need your call, not mine
 
 1. **`ConfirmSheet`.** F2 resolved the roadmap's "sheet" component against its ban on
    modals by allowing a heavily constrained native `<dialog>` for two uses only
    (confirm delete, confirm mastered). Defensible, but it is the thin end of a wedge.
-2. **The "+" button itself.** F3 asked for confirmation that a floating button is
-   acceptable against the "no nested navigation" principle. [R3] assumes yes.
-3. **`x-vercel-ip-timezone`** availability on Vercel's free tier is unverified — it is
+   *(F2 shipped `ToggleRow`'s two-tap arm instead — no modal anywhere. Effectively closed.)*
+2. **`x-vercel-ip-timezone`** availability on Vercel's free tier is unverified — it is
    F7's second-choice timezone fallback. Check on a preview deploy before relying on it.
