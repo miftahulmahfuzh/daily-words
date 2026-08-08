@@ -1,18 +1,20 @@
-'use client'
+"use client";
 
-import { useFormStatus } from 'react-dom'
+import { useFormStatus } from "react-dom";
+import { Button } from "@/components/ui/button";
 
 /** Rendered inside the <form> whose action is signOutAction. */
 export function SignOutButton() {
-  const { pending } = useFormStatus()
+  const { pending } = useFormStatus();
 
   return (
-    <button
+    <Button
       type="submit"
-      disabled={pending}
-      className="flex min-h-[44px] w-full items-center justify-center rounded-[var(--r-field)] border border-rule font-mono text-[11px] tracking-[0.16em] text-ink-3 uppercase disabled:opacity-60"
+      size="sm"
+      loading={pending}
+      className="text-mono-sm tracking-cta text-ink-3"
     >
-      {pending ? 'Signing out…' : 'Sign out'}
-    </button>
-  )
+      {pending ? "Signing out…" : "Sign out"}
+    </Button>
+  );
 }

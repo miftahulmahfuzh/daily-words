@@ -36,6 +36,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   // Without this, every env(safe-area-inset-*) silently resolves to 0.
   viewportFit: "cover",
+  // The only two colour literals in the codebase, and they have to be literals:
+  // this is emitted into a <meta> tag that iOS reads before any stylesheet
+  // loads, so `var(--paper)` would resolve to nothing. They mirror --paper in
+  // src/styles/tokens.css — change both together.
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#F0EDE4" },
     { media: "(prefers-color-scheme: dark)", color: "#131311" },

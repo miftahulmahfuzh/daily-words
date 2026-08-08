@@ -15,11 +15,15 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
-    "llm:check": "tsx --conditions=react-server --env-file=.env.local scripts/check-llm.ts"
+    "llm:check": "tsx --conditions=react-server --env-file=.env.local scripts/check-llm.ts",
+    "test:layout": "playwright test",
+    "design:build": "node scripts/build-previews.mjs",
+    "design:changed": "node scripts/dssync-changed.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.116.0",
     "@auth/drizzle-adapter": "1.11.3",
+    "clsx": "^2.1.1",
     "drizzle-orm": "0.45.2",
     "next": "15.5.23",
     "next-auth": "5.0.0-beta.32",
@@ -27,10 +31,12 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "server-only": "0.0.1",
+    "tailwind-merge": "^3.6.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

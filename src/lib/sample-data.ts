@@ -10,6 +10,9 @@
  * Everything here is replaced by real queries in F3 onward.
  */
 
+import type { DailyCardItemView } from "@/lib/ui/types";
+import type { DayStripItem } from "@/components/daily/day-strip";
+
 export type Word = {
   id: string;
   term: string;
@@ -104,6 +107,14 @@ export const WORDS: Record<string, Word> = {
 
 /** The six on today's card. Repeats across days are intentional. */
 export const TODAY_CARD = ["tacit", "brittle", "hedge", "lull", "quaint", "rue"];
+
+/** Today's six, in the shape `DailyCard` takes. F5 replaces this with a query. */
+export const TODAY_CARD_ITEMS: DailyCardItemView[] = TODAY_CARD.map((id) => ({
+  id,
+  term: WORDS[id].term,
+  definition: WORDS[id].definition,
+  tag: WORDS[id].tag,
+}));
 
 const MASTERED = new Set(["idle", "keen", "candid", "prod"]);
 
@@ -289,15 +300,15 @@ export const PROFILE = {
   since: "Keeping a card since 8 August 2026.",
 };
 
-/** Last seven days, most recent last. */
-export const WEEK_STRIP = [
-  { label: "S", made: true },
-  { label: "M", made: true },
-  { label: "T", made: true },
-  { label: "W", made: false },
-  { label: "T", made: true },
-  { label: "F", made: true },
-  { label: "S", made: true },
+/** Last seven days, most recent last. Shaped for `DayStrip`. */
+export const WEEK_STRIP: DayStripItem[] = [
+  { date: "2026-09-12", day: 12, weekday: "S", mark: "made" },
+  { date: "2026-09-13", day: 13, weekday: "M", mark: "made" },
+  { date: "2026-09-14", day: 14, weekday: "T", mark: "made" },
+  { date: "2026-09-15", day: 15, weekday: "W", mark: "missed" },
+  { date: "2026-09-16", day: 16, weekday: "T", mark: "made" },
+  { date: "2026-09-17", day: 17, weekday: "F", mark: "made" },
+  { date: "2026-09-18", day: 18, weekday: "S", mark: "made", isToday: true },
 ];
 
 /** September 2026 — 16 cards made, per the design's sample month. */

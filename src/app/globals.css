@@ -1,86 +1,14 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
 
-/* ---------------------------------------------------------------------------
-   Design tokens — verbatim from the Claude Design output.
-   Source: design/from-claude-design/Daily Words.dc.html
-   Authority: ROADMAP_v0.1.0.md [R18]. Do not invent colours; add tokens here.
-   --------------------------------------------------------------------------- */
+/* Colour and font tokens are `inline` on purpose: the utility emits
+   `var(--paper)` rather than baking #f0ede4 in at build time, which is what lets
+   the scheme blocks in tokens.css repaint the whole app with no `dark:` variant
+   anywhere in the component layer.
 
-:root {
-  --paper: #f0ede4;
-  --paper-2: #e8e4d9;
-  --card: #fbfaf5;
-  --ink: #20211d;
-  --ink-2: #5d5c52;
-  --ink-3: #8f8d81;
-  --rule: #d8d3c4;
-  --rule-2: #eae6da;
-  --accent: #2f5d50;
-  --accent-soft: #e0e8e2;
-  --miss: #bfb9a9;
-  --red: #8a3324;
-
-  /* Radii — exactly four, per the design's system sheet. */
-  --r-chip: 2px;
-  --r-field: 6px;
-  --r-card: 10px;
-  --r-pill: 999px;
-
-  /* Raw insets (F1 §7.7 contract). Needs viewport-fit=cover to be non-zero. */
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-
-  /* Safe areas plus the design's gutters, resolved once so screens never repeat
-     the env() dance. */
-  --pad-top: calc(var(--safe-top) + 16px);
-  --pad-bottom: calc(var(--safe-bottom) + 10px);
-  --gutter: 22px;
-
-  /* F1 §7.7 also specified --header-height, --tab-bar-height and
-     --card-viewport-height, for a shell with a FIXED header and tab bar whose
-     leftover height the card was to be measured against.
-     ROADMAP [R19] replaced that arithmetic with structure: `.dw-screen` is a
-     fixed-height flex column, the header and day strip are in flow, and the card
-     is `flex: 1` with six `flex: 1 1 0` rows that compress. There is no single
-     header height to publish — each screen's differs — and a stale variable that
-     no longer describes the layout is worse for F5 than its absence.
-     The no-scroll contract now lives in the components, not in a length. */
-}
-
-/* System dark mode. Guarded so an explicit light choice still wins. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #131311;
-    --paper-2: #1a1a17;
-    --card: #1e1e1a;
-    --ink: #eeebe1;
-    --ink-2: #a5a398;
-    --ink-3: #6e6d64;
-    --rule: #2e2e28;
-    --rule-2: #242420;
-    --accent: #86bba6;
-    --accent-soft: #1e2a25;
-    --miss: #4a4a42;
-    --red: #c97a62;
-  }
-}
-
-/* Explicit choice — wins in both directions. */
-:root[data-theme="dark"] {
-  --paper: #131311;
-  --paper-2: #1a1a17;
-  --card: #1e1e1a;
-  --ink: #eeebe1;
-  --ink-2: #a5a398;
-  --ink-3: #6e6d64;
-  --rule: #2e2e28;
-  --rule-2: #242420;
-  --accent: #86bba6;
-  --accent-soft: #1e2a25;
-  --miss: #4a4a42;
-  --red: #c97a62;
-}
-
+   tokens.css is a separate file so the design previews can inline the exact
+   same bytes the app ships — see scripts/build-previews.mjs. Previews that
+   restate their colours drift, and a drifted preview is worse than none. */
 @theme inline {
   --color-paper: var(--paper);
   --color-paper-2: var(--paper-2);
@@ -98,9 +26,67 @@
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
+/* ---------------------------------------------------------------------------
+   Scale. A plain @theme block, NOT inline — these are build-time constants and
+   nothing overrides them per colour scheme.
+
+   Every step below is a size the design actually uses; none was invented to
+   round out a ramp. Display sizes that appear exactly once (19, 21, 26, 28, 30,
+   38, 40) are owned by the single component that draws them and are written as
+   arbitrary values there, deliberately: naming a one-off is how a scale starts
+   pretending to be more general than it is.
+   --------------------------------------------------------------------------- */
+@theme {
+  /* Serif — words, meanings, prose. */
+  --text-meta: 0.875rem; /* 14 — list subtitle, kept-word gloss  */
+  --text-meta--line-height: 1.25;
+  --text-sm: 0.9375rem; /* 15 — chips, part of speech            */
+  --text-sm--line-height: 1.3;
+  --text-body: 1rem; /* 16 — secondary prose, examples       */
+  --text-body--line-height: 1.4;
+  --text-base: 1.0625rem; /* 17 — primary prose, chat, options    */
+  --text-base--line-height: 1.45;
+  --text-lg: 1.125rem; /* 18 — list terms, journal preview     */
+  --text-lg--line-height: 1.35;
+  --text-xl: 1.375rem; /* 22 — the daily-card term             */
+  --text-xl--line-height: 1.15;
+  --text-2xl: 1.6875rem; /* 27 — page titles, journal entry body */
+  --text-2xl--line-height: 1.2;
+
+  /* Mono — labels, counts, dates, anything the machine tallies. */
+  --text-mono-2xs: 0.5625rem; /*  9 */
+  --text-mono-2xs--line-height: 1.2;
+  --text-mono-xs: 0.625rem; /* 10 */
+  --text-mono-xs--line-height: 1.4;
+  --text-mono-sm: 0.6875rem; /* 11 */
+  --text-mono-sm--line-height: 1.2;
+  --text-mono-md: 0.75rem; /* 12 */
+  --text-mono-md--line-height: 1.2;
+  --text-mono-lg: 0.8125rem; /* 13 */
+  --text-mono-lg--line-height: 1.2;
+  --text-mono-xl: 0.875rem; /* 14 */
+  --text-mono-xl--line-height: 1.2;
+
+  /* Tracking. Serif tightens as it grows; mono opens up as it shrinks. */
+  --tracking-display: -0.02em; /* 38–40px headings          */
+  --tracking-title: -0.01em; /* 26–30px headings          */
+  --tracking-tight: -0.005em; /* 18–22px content           */
+  --tracking-meta: 0.06em; /* mono sentences            */
+  --tracking-chip: 0.12em; /* pills, weekday letters    */
+  --tracking-nav: 0.14em; /* tab bar, back link, Skip  */
+  --tracking-cta: 0.16em; /* filled buttons            */
+  --tracking-eyebrow: 0.2em; /* uppercase section labels  */
+}
+
 html,
 body {
   height: 100%;
+}
+
+html {
+  /* Safari inflates text on rotate unless told not to. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -111,6 +97,37 @@ body {
   -webkit-font-smoothing: antialiased;
   /* The page itself never bounces; scroll panes opt in individually. */
   overscroll-behavior: none;
+}
+
+/* Chrome is not selectable; content always is. Never widen this list to `a` —
+   the user long-presses a term on the card to reach iOS Look Up, and blanket
+   `user-select: none` silently removes that. */
+nav,
+button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* An outline, not a box-shadow, so the ring survives forced-colors. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* iOS: anything under 16px zooms the viewport on focus. Never let it. */
@@ -191,11 +208,26 @@ button {
   }
 }
 
-/* The mono voice: labels, counts, dates, anything the machine tallies. */
-.label {
-  font-family: var(--font-plex-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+/* A scrolling pane inside the frame. `contain` stops scroll chaining: reaching
+   the bottom of the vocab list must not start bouncing the shell behind it. */
+.dw-pane-scroll {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+/* A pane that has undertaken not to scroll — /today, and only /today. */
+.dw-pane-fixed {
+  overflow: hidden;
+}
+
+/* The documented escape hatch. Below the design floor (Safari page zoom above
+   100%, landscape on a small phone, a future iOS that shrinks the viewport) the
+   budget cannot hold. Degrade to a scrolling page rather than clip a word off
+   the bottom of the card. The card itself still never scrolls internally.
+   The floor is mirrored in LAYOUT.designFloorDvh — change both. */
+@media (max-height: 545px) {
+  .dw-pane-fixed {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
 }

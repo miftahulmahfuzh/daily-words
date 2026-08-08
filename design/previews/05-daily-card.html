@@ -1,0 +1,717 @@
+<!-- @dsCard group="Daily Card" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Words — Daily Card</title>
+<!-- @dw:tokens:start -->
+<style>
+/* GENERATED — do not edit between the markers.
+   Source: src/styles/tokens.css + design/previews/_shared.css
+   Regenerate with `npm run design:build`. */
+/* ---------------------------------------------------------------------------
+   Design tokens — verbatim from the Claude Design output.
+   Source: design/from-claude-design/Daily Words.dc.html
+   Authority: ROADMAP_v0.1.0.md [R18]. Do not invent colours; add tokens here.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --paper: #f0ede4;
+  --paper-2: #e8e4d9;
+  --card: #fbfaf5;
+  --ink: #20211d;
+  --ink-2: #5d5c52;
+  --ink-3: #8f8d81;
+  --rule: #d8d3c4;
+  --rule-2: #eae6da;
+  --accent: #2f5d50;
+  --accent-soft: #e0e8e2;
+  --miss: #bfb9a9;
+  --red: #8a3324;
+
+  /* Radii — exactly four, per the design's system sheet. */
+  --r-chip: 2px;
+  --r-field: 6px;
+  --r-card: 10px;
+  --r-pill: 999px;
+
+  /* Raw insets (F1 §7.7 contract). Needs viewport-fit=cover to be non-zero. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Safe areas plus the design's gutters, resolved once so screens never repeat
+     the env() dance. */
+  --pad-top: calc(var(--safe-top) + 16px);
+  --pad-bottom: calc(var(--safe-bottom) + 10px);
+  --gutter: 22px;
+
+  /* F1 §7.7 also specified --header-height, --tab-bar-height and
+     --card-viewport-height, for a shell with a FIXED header and tab bar whose
+     leftover height the card was to be measured against.
+     ROADMAP [R19] replaced that arithmetic with structure: `.dw-screen` is a
+     fixed-height flex column, the header and day strip are in flow, and the card
+     is `flex: 1` with six `flex: 1 1 0` rows that compress. There is no single
+     header height to publish — each screen's differs — and a stale variable that
+     no longer describes the layout is worse for F5 than its absence.
+     The no-scroll contract now lives in the components, not in a length. */
+}
+
+/* System dark mode. Guarded so an explicit light choice still wins. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #131311;
+    --paper-2: #1a1a17;
+    --card: #1e1e1a;
+    --ink: #eeebe1;
+    --ink-2: #a5a398;
+    --ink-3: #6e6d64;
+    --rule: #2e2e28;
+    --rule-2: #242420;
+    --accent: #86bba6;
+    --accent-soft: #1e2a25;
+    --miss: #4a4a42;
+    --red: #c97a62;
+  }
+}
+
+/* Explicit choice — wins in both directions. */
+:root[data-theme="dark"] {
+  --paper: #131311;
+  --paper-2: #1a1a17;
+  --card: #1e1e1a;
+  --ink: #eeebe1;
+  --ink-2: #a5a398;
+  --ink-3: #6e6d64;
+  --rule: #2e2e28;
+  --rule-2: #242420;
+  --accent: #86bba6;
+  --accent-soft: #1e2a25;
+  --miss: #4a4a42;
+  --red: #c97a62;
+}
+
+/* Daily Words — plain-CSS restatement of the kit, for standalone previews.
+   There is no Tailwind here: each preview is one file that opens in a browser
+   with an empty Network tab. Injected by scripts/build-previews.mjs together
+   with src/styles/tokens.css, so the colours can never drift from the app.
+
+   The serif and mono are named but not loaded — a preview that fetches a font
+   is no longer self-contained. Georgia and the system mono stand in, which is
+   fine because a preview is about layout and colour. */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px 16px 48px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dw-doc {
+  max-width: 375px;
+  margin: 0 auto;
+}
+
+.dw-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* --- Page furniture ------------------------------------------------------ */
+
+.dw-doc-title {
+  margin: 0 0 4px;
+  font-size: 27px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.dw-doc-note {
+  margin: 0 0 24px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.dw-section {
+  border-top: 1px solid var(--rule);
+  padding: 16px 0 28px;
+}
+
+.dw-section > h2 {
+  margin: 0 0 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.dw-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* --- Type ---------------------------------------------------------------- */
+
+.dw-eyebrow {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.dw-eyebrow--sm {
+  font-size: 9px;
+}
+
+.dw-eyebrow--accent {
+  color: var(--accent);
+}
+
+.dw-meta {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.dw-prose {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+
+.dw-prose--body {
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.dw-prose--sm {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+/* --- Buttons and pills --------------------------------------------------- */
+
+.dw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  padding: 0 24px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-field);
+  background: none;
+  color: var(--ink-2);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.dw-btn--filled {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.dw-btn--quiet {
+  border-color: transparent;
+  color: var(--ink-3);
+}
+
+.dw-btn--sm {
+  height: 44px;
+  padding: 0 16px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.dw-btn--disabled {
+  opacity: 0.6;
+}
+
+.dw-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+.dw-pill--mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 12px;
+  min-height: 32px;
+}
+
+.dw-pill--accent {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dw-pill--ink {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* --- Fields -------------------------------------------------------------- */
+
+.dw-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-field);
+  background: var(--card);
+  padding: 0 14px;
+  height: 46px;
+  color: var(--ink-3);
+  font-size: 17px;
+}
+
+.dw-field--pill {
+  border-radius: var(--r-pill);
+  height: 44px;
+  padding: 0 16px;
+}
+
+.dw-field--underline {
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  border-radius: 0;
+  background: none;
+  height: auto;
+  padding: 0 0 12px;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+}
+
+.dw-field--error {
+  border-color: var(--red);
+}
+
+.dw-field-error {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--red);
+}
+
+/* --- Surfaces ------------------------------------------------------------ */
+
+.dw-card {
+  border: 1px solid var(--rule);
+  border-radius: var(--r-card);
+  background: var(--card);
+  padding: 20px;
+}
+
+.dw-card--outline {
+  background: none;
+}
+
+.dw-card--dashed {
+  background: none;
+  border-style: dashed;
+}
+
+.dw-skeleton {
+  display: block;
+  border-radius: var(--r-chip);
+  background: var(--rule-2);
+  height: 12px;
+  width: 60%;
+}
+
+/* --- Lists --------------------------------------------------------------- */
+
+.dw-list-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 46px;
+  padding: 12px 8px 12px 0;
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.dw-list-row__title {
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.dw-list-row__sub {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dw-list-row--muted .dw-list-row__title {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+.dw-list-row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  padding: 16px 0;
+}
+
+/* --- Daily card ---------------------------------------------------------- */
+
+.dw-daily {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-card);
+  background: var(--card);
+  padding: 4px 16px;
+  overflow: hidden;
+}
+
+.dw-daily__row {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.dw-daily__row:last-child {
+  border-bottom: 0;
+}
+
+.dw-daily__term {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+
+.dw-daily__term > span:first-child {
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dw-daily__tag {
+  flex-shrink: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.dw-daily__def {
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Calendar ------------------------------------------------------------ */
+
+.dw-grid-7 {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.dw-cal-cell {
+  display: flex;
+  aspect-ratio: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dw-cal-num {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.dw-cal-num--today {
+  color: var(--ink);
+}
+
+.dw-tick {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.dw-cross {
+  color: var(--miss);
+  font-size: 11px;
+}
+
+.dw-ring {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+}
+
+.dw-future {
+  display: inline-block;
+  width: 9px;
+  height: 1px;
+  background: var(--rule);
+}
+
+/* --- Chat ---------------------------------------------------------------- */
+
+.dw-bubble {
+  max-width: 86%;
+  border-radius: var(--r-card);
+  padding: 12px 14px;
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.dw-bubble--assistant {
+  background: var(--card);
+  border-bottom-left-radius: var(--r-chip);
+  margin-right: auto;
+}
+
+.dw-bubble--user {
+  background: var(--accent-soft);
+  border-bottom-right-radius: var(--r-chip);
+  margin-left: auto;
+}
+
+/* --- Gamification -------------------------------------------------------- */
+
+.dw-badge {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.dw-badge__dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+}
+
+.dw-badge__dot--unearned {
+  background: var(--rule);
+}
+
+.dw-badge__name {
+  flex: 1;
+  font-size: 16px;
+  line-height: 1.3;
+  text-wrap: pretty;
+}
+
+.dw-badge__count {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+/* --- Navigation ---------------------------------------------------------- */
+
+.dw-tabbar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
+  padding: 0 4px;
+}
+
+.dw-tabbar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 50px;
+  padding: 11px 0 6px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.dw-tabbar__dot {
+  display: block;
+  width: 5px;
+  height: 5px;
+}
+
+.dw-tabbar__item--active {
+  color: var(--ink);
+}
+
+.dw-tabbar__item--active .dw-tabbar__dot {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.dw-tabs {
+  display: flex;
+  gap: 22px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.dw-tabs__item {
+  margin-bottom: -1px;
+  padding: 10px 0;
+  border-bottom: 1px solid transparent;
+  font-size: 17px;
+  color: var(--ink-3);
+}
+
+.dw-tabs__item--active {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+}
+
+/* --- Swatches ------------------------------------------------------------ */
+
+.dw-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.dw-swatch__chip {
+  display: block;
+  height: 40px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-field);
+  margin-bottom: 4px;
+}
+
+.dw-swatch__name {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9px;
+  color: var(--ink-3);
+}
+
+/* --- The scheme pair ----------------------------------------------------- */
+
+/* Previews show both schemes side by side rather than following the viewer's,
+   because the point of a foundations page is to compare them. `.dw-dark`
+   restates the dark values locally; the values themselves still come from the
+   injected token block, so there is exactly one place to change a colour. */
+.dw-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.dw-panel {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-card);
+  padding: 14px;
+}
+</style>
+<!-- @dw:tokens:end -->
+</head>
+<body>
+<div class="dw-doc">
+  <h1 class="dw-doc-title">Daily card</h1>
+  <p class="dw-doc-note">Six words, two lines each, and it never scrolls. The guarantee is structural: the card is flex:1 in a fixed-height column and six flex:1 1 0 rows divide whatever it was given.</p>
+
+  <section class="dw-section">
+    <h2>Six words</h2>
+    <div class="dw-daily" style="height: 360px">
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>tacit</span><span class="dw-daily__tag">adj</span></span><span class="dw-daily__def">understood without being said</span></div>
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>brittle</span><span class="dw-daily__tag">adj</span></span><span class="dw-daily__def">hard but easily broken</span></div>
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>hedge</span><span class="dw-daily__tag">verb</span></span><span class="dw-daily__def">to avoid committing to one answer</span></div>
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>lull</span><span class="dw-daily__tag">noun</span></span><span class="dw-daily__def">a quiet interval in something noisy</span></div>
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>quaint</span><span class="dw-daily__tag">adj</span></span><span class="dw-daily__def">charming in an old-fashioned way</span></div>
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>rue</span><span class="dw-daily__tag">verb</span></span><span class="dw-daily__def">to regret something bitterly</span></div>
+    </div>
+  </section>
+
+  <section class="dw-section">
+    <h2>Worst case</h2>
+    <div class="dw-daily" style="height: 180px">
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>circumlocutionaryness</span><span class="dw-daily__tag">noun</span></span><span class="dw-daily__def">a way of speaking that goes all the way round the point before arriving at it, if it arrives at all</span></div>
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>incomprehensibilities</span><span class="dw-daily__tag">noun</span></span><span class="dw-daily__def">things that cannot be understood however carefully they are explained</span></div>
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>pellucid</span><span class="dw-daily__tag">adj</span></span><span class="dw-skeleton" style="margin-top:2px"></span></div>
+    </div>
+    <p class="dw-prose dw-prose--body" style="padding-top: 14px">Both lines are clamped to exactly one line — the term truncates, the definition truncates — and that is what makes the height predictable rather than hoped for. No term, no definition, no locale and no font substitution can change a row. The third row's meaning has not arrived yet and its placeholder sits inside the same line box, so the row does not resize.</p>
+  </section>
+
+  <section class="dw-section">
+    <h2>Short card</h2>
+    <div class="dw-daily" style="height: 180px">
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>tacit</span><span class="dw-daily__tag">adj</span></span><span class="dw-daily__def">understood without being said</span></div>
+      <div class="dw-daily__row"><span class="dw-daily__term"><span>brittle</span><span class="dw-daily__tag">adj</span></span><span class="dw-daily__def">hard but easily broken</span></div>
+      <div style="display:flex;justify-content:center;padding:12px 0;flex-shrink:0"><button class="dw-btn dw-btn--quiet dw-btn--sm" style="width:auto">Add more words</button></div>
+    </div>
+    <p class="dw-prose dw-prose--body" style="padding-top: 14px">Fewer than six is a real state, not an error. The rows spread out and the card keeps its shape. It is never padded with placeholder rows — six greyed slots would make a small collection feel like a failure.</p>
+  </section>
+
+  <section class="dw-section">
+    <h2>No card yet</h2>
+    <div class="dw-card dw-card--dashed" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;height:260px;padding:28px;text-align:center">
+      <p class="dw-prose" style="max-width:230px;font-size:18px;line-height:1.45">No card yet. Six words are waiting to be written out.</p>
+      <button class="dw-btn dw-btn--filled" style="width:auto;height:50px;min-width:200px">Make today’s card</button>
+      <span class="dw-meta">Nothing is generated until you press it.</span>
+    </div>
+    <p class="dw-prose dw-prose--body" style="padding-top: 14px">The empty card occupies exactly the same slot in the budget as a made one, so pressing the button changes what is on the screen and never how the screen is arranged.</p>
+  </section>
+</div>
+</body>
+</html>
