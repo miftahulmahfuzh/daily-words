@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Design tokens — verbatim from the Claude Design output.
+   Source: design/from-claude-design/Daily Words.dc.html
+   Authority: ROADMAP_v0.1.0.md [R18]. Do not invent colours; add tokens here.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --paper: #f0ede4;
+  --paper-2: #e8e4d9;
+  --card: #fbfaf5;
+  --ink: #20211d;
+  --ink-2: #5d5c52;
+  --ink-3: #8f8d81;
+  --rule: #d8d3c4;
+  --rule-2: #eae6da;
+  --accent: #2f5d50;
+  --accent-soft: #e0e8e2;
+  --miss: #bfb9a9;
+  --red: #8a3324;
+
+  /* Radii — exactly four, per the design's system sheet. */
+  --r-chip: 2px;
+  --r-field: 6px;
+  --r-card: 10px;
+  --r-pill: 999px;
+
+  /* Safe areas, resolved once so screens never repeat the env() dance. */
+  --pad-top: calc(env(safe-area-inset-top, 0px) + 16px);
+  --pad-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  --gutter: 22px;
+}
+
+/* System dark mode. Guarded so an explicit light choice still wins. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #131311;
+    --paper-2: #1a1a17;
+    --card: #1e1e1a;
+    --ink: #eeebe1;
+    --ink-2: #a5a398;
+    --ink-3: #6e6d64;
+    --rule: #2e2e28;
+    --rule-2: #242420;
+    --accent: #86bba6;
+    --accent-soft: #1e2a25;
+    --miss: #4a4a42;
+    --red: #c97a62;
+  }
+}
+
+/* Explicit choice — wins in both directions. */
+:root[data-theme="dark"] {
+  --paper: #131311;
+  --paper-2: #1a1a17;
+  --card: #1e1e1a;
+  --ink: #eeebe1;
+  --ink-2: #a5a398;
+  --ink-3: #6e6d64;
+  --rule: #2e2e28;
+  --rule-2: #242420;
+  --accent: #86bba6;
+  --accent-soft: #1e2a25;
+  --miss: #4a4a42;
+  --red: #c97a62;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-2: var(--rule-2);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-miss: var(--miss);
+  --color-red: var(--red);
+  --font-serif: var(--font-source-serif), Georgia, serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-source-serif), Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+  /* The page itself never bounces; scroll panes opt in individually. */
+  overscroll-behavior: none;
+}
+
+/* iOS: anything under 16px zooms the viewport on focus. Never let it. */
+input,
+textarea,
+select {
+  font-size: max(1rem, 16px);
+}
+
+/* Tap highlight is removed, so every interactive element owes an :active state. */
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active,
+a:active {
+  opacity: 0.6;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@keyframes dw-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes dw-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dw-in {
+  animation: dw-in 0.3s ease;
+}
+
+.dw-fade {
+  animation: dw-fade 0.3s ease;
+}
+
+/* The screen frame. The fallback chain matters: on iOS `100vh` is the LARGE
+   viewport and therefore guarantees clipping. `100dvh` is stable here rather
+   than jittery because screens set `overflow: hidden` — Safari only collapses
+   its toolbar in response to page scroll, so dvh sits at its minimum. */
+.dw-screen {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* The upgrade sits behind @supports on purpose. Written as three consecutive
+   `height` declarations, Lightning CSS collapses them to the last one and the
+   fallback silently disappears from the build — verified, not assumed. */
+@supports (height: 100dvh) {
+  .dw-screen {
+    height: 100dvh;
+  }
+}
+
+/* The mono voice: labels, counts, dates, anything the machine tallies. */
+.label {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}

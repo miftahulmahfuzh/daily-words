@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #26251F; }
+  a { color: #2F5D50; text-decoration: none; }
+  a:hover { color: #20211D; }
+  #dw, #dw * { box-sizing: border-box; }
+  #dw button { font: inherit; }
+  #dw {
+    --paper: #F0EDE4; --paper-2: #E8E4D9; --card: #FBFAF5; --ink: #20211D; --ink-2: #5D5C52;
+    --ink-3: #8F8D81; --rule: #D8D3C4; --rule-2: #EAE6DA; --accent: #2F5D50; --accent-soft: #E0E8E2;
+    --miss: #BFB9A9; --red: #8A3324;
+  }
+  #dw[data-dw="dark"] {
+    --paper: #131311; --paper-2: #1A1A17; --card: #1E1E1A; --ink: #EEEBE1; --ink-2: #A5A398;
+    --ink-3: #6E6D64; --rule: #2E2E28; --rule-2: #242420; --accent: #86BBA6; --accent-soft: #1E2A25;
+    --miss: #4A4A42; --red: #C97A62;
+  }
+  #dw ::-webkit-scrollbar { width: 0; height: 0; }
+  @keyframes dwIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes dwFade { from { opacity: 0; } to { opacity: 1; } }
+</style>
+</helmet>
+
+<div id="dw" data-dw="{{ theme }}" style="width: 1560px; padding: 56px 56px 88px; display: flex; flex-direction: column; gap: 56px; background: #26251F; font-family: 'Source Serif 4', Georgia, serif;">
+
+  <header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; border-bottom: 1px solid #3B3A33; padding-bottom: 24px;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #8C8878;">Mobile web app &middot; Safari, iPhone, one hand</span>
+      <h1 style="margin: 0; font-size: 44px; font-weight: 400; letter-spacing: -0.01em; color: #F0EDE4;">Daily Words</h1>
+      <p style="margin: 0; max-width: 620px; font-size: 16px; line-height: 1.5; color: #A9A493; text-wrap: pretty;">A digital rebuild of a 13&times;8&nbsp;cm paper card: six words, their meanings, one glance. Everything below is an improvement on that one object.</p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;">
+      <button onClick="{{ setLight }}" style="{{ lightBtnStyle }}">Light</button>
+      <button onClick="{{ setDark }}" style="{{ darkBtnStyle }}">Dark</button>
+    </div>
+  </header>
+
+  <div style="display: flex; align-items: flex-start; gap: 56px;">
+
+    <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 16px; align-items: center;">
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ deviceW }}" height="{{ deviceH }}" dark="{{ isDark }}" keyboard="{{ kb }}" hint-size="390px,844px">
+
+        <!-- SIGN IN -->
+        <sc-if value="{{ isSignin }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; padding: 108px 32px 52px; animation: dwFade .3s ease;">
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px;">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-3);">Est. 2026</span>
+              <h1 style="margin: 0; font-size: 40px; font-weight: 400; letter-spacing: -0.015em; line-height: 1.05;">Daily<br>Words</h1>
+              <div style="width: 44px; height: 1px; background: var(--ink);"></div>
+              <p style="margin: 0; font-size: 17px; line-height: 1.45; color: var(--ink-2); max-width: 250px;">Six words a day, on one card, in your pocket.</p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 18px;">
+              <button onClick="{{ signIn }}" style="width: 100%; height: 54px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-family: 'Source Serif 4', serif; font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <span style="width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--paper); display: inline-block;"></span>
+                Continue with Google
+              </button>
+              <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 10px; line-height: 1.7; letter-spacing: 0.04em; color: var(--ink-3); text-align: center;">The only way in. No password to forget.</p>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ONBOARDING -->
+        <sc-if value="{{ isOnboarding }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; padding: 62px 26px 40px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; height: 40px;">
+              <div style="display: flex; gap: 5px;">
+                <sc-for list="{{ obDashes }}" as="d" hint-placeholder-count="5">
+                  <span style="{{ d.style }}"></span>
+                </sc-for>
+              </div>
+              <button onClick="{{ obSkip }}" style="appearance: none; border: 0; background: none; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); padding: 8px 0 8px 16px;">Skip</button>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; padding-top: 44px; gap: 8px;">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">{{ obStepLabel }}</span>
+              <h2 style="margin: 0 0 22px; font-size: 28px; font-weight: 400; line-height: 1.15; letter-spacing: -0.01em; max-width: 280px; text-wrap: pretty;">{{ obQuestion }}</h2>
+              <sc-if value="{{ obHasOptions }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column;">
+                  <sc-for list="{{ obOptions }}" as="o" hint-placeholder-count="3">
+                    <button onClick="{{ o.pick }}" style="appearance: none; background: none; border: 0; border-bottom: 1px solid var(--rule-2); cursor: pointer; text-align: left; padding: 17px 2px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-family: 'Source Serif 4', serif; font-size: 19px; color: var(--ink); min-height: 56px;">
+                      <span style="{{ o.labelStyle }}">{{ o.label }}</span>
+                      <span style="{{ o.markStyle }}">&#10003;</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ obIsText }}" hint-placeholder-val="{{ false }}">
+                <div style="border-bottom: 1px solid var(--ink); padding-bottom: 10px;">
+                  <span style="font-family: 'Source Serif 4', serif; font-size: 26px; color: var(--ink-3);">Barnaby</span>
+                </div>
+              </sc-if>
+            </div>
+            <button onClick="{{ obNext }}" style="width: 100%; height: 52px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;">{{ obCta }}</button>
+          </div>
+        </sc-if>
+
+        <!-- TODAY -->
+        <sc-if value="{{ isToday }}" hint-placeholder-val="{{ true }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 60px 22px 0;">
+
+              <div style="display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px;">
+                <div style="display: flex; flex-direction: column; gap: 3px;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">Friday 18 September</span>
+                  <h1 style="margin: 0; font-size: 27px; font-weight: 400; letter-spacing: -0.01em;">Today&rsquo;s card</h1>
+                </div>
+                <button onClick="{{ goCalendar }}" style="appearance: none; border: 1px solid var(--rule); background: none; border-radius: 999px; cursor: pointer; padding: 7px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); min-height: 32px;">12&#8202;&#8202;day run</button>
+              </div>
+
+              <sc-if value="{{ cardMade }}" hint-placeholder-val="{{ true }}">
+                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 4px 16px; animation: dwIn .3s ease;">
+                  <sc-for list="{{ todayWords }}" as="w" hint-placeholder-count="6">
+                    <button onClick="{{ w.open }}" style="{{ w.rowStyle }}">
+                      <span style="display: flex; align-items: baseline; gap: 9px;">
+                        <span style="font-size: 22px; letter-spacing: -0.005em; line-height: 1.15; color: var(--ink);">{{ w.w }}</span>
+                        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3);">{{ w.tag }}</span>
+                      </span>
+                      <span style="font-size: 15px; line-height: 1.3; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 300px;">{{ w.d }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ noCard }}" hint-placeholder-val="{{ false }}">
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; border: 1px dashed var(--rule); border-radius: 10px; padding: 28px; text-align: center; animation: dwFade .3s ease;">
+                  <p style="margin: 0; font-size: 18px; line-height: 1.45; color: var(--ink-2); max-width: 230px; text-wrap: pretty;">No card yet. Six words are waiting to be written out.</p>
+                  <button onClick="{{ makeCard }}" style="border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; padding: 0 26px; height: 50px; min-width: 200px;">Make today&rsquo;s card</button>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: var(--ink-3);">Nothing is generated until you press it.</span>
+                </div>
+              </sc-if>
+
+              <div style="flex: 0 0 auto; padding: 14px 2px 12px; display: flex; flex-direction: column; gap: 8px;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">Last seven days</span>
+                <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;">
+                  <sc-for list="{{ strip }}" as="s" hint-placeholder-count="7">
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.08em; color: var(--ink-3);">{{ s.l }}</span>
+                      <span style="{{ s.markStyle }}">{{ s.mark }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="flex: 0 0 auto; background: var(--paper); border-top: 1px solid var(--rule); display: grid; grid-template-columns: repeat(4, 1fr); padding: 0 4px 26px;">
+              <button onClick="{{ goToday }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px; display: flex; align-items: center;"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: block;"></span></span>
+                <span style="color: var(--ink);">Today</span>
+              </button>
+              <button onClick="{{ goCollection }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Vocab</span>
+              </button>
+              <button onClick="{{ goJournal }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Journal</span>
+              </button>
+              <button onClick="{{ goProfile }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Profile</span>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- CALENDAR -->
+        <sc-if value="{{ isCalendar }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="flex: 1; overflow: hidden; padding: 60px 22px 0; display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px;">
+                <button onClick="{{ goToday }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 8px 12px 8px 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); min-height: 40px;">&larr;&nbsp; Today</button>
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--ink-3); cursor: pointer;">&#8249;</span>
+                  <span style="font-size: 19px;">September 2026</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--ink-3); cursor: pointer;">&#8250;</span>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding-bottom: 8px;">
+                <sc-for list="{{ dowLabels }}" as="d" hint-placeholder-count="7">
+                  <span style="text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3);">{{ d }}</span>
+                </sc-for>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;">
+                <sc-for list="{{ monthCells }}" as="c" hint-placeholder-count="35">
+                  <div style="{{ c.cellStyle }}">
+                    <span style="{{ c.numStyle }}">{{ c.n }}</span>
+                    <span style="{{ c.markStyle }}">{{ c.mark }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="padding: 20px 0 0; display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; flex-wrap: wrap; gap: 14px 18px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; color: var(--ink-3);">
+                  <span style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--accent); font-size: 12px;">&#10003;</span> card made</span>
+                  <span style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--miss); font-size: 11px;">&#10005;</span> missed</span>
+                  <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--ink); display: inline-block;"></span> today</span>
+                  <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 1px; background: var(--rule); display: inline-block;"></span> not yet</span>
+                </div>
+                <p style="margin: 0; font-size: 16px; line-height: 1.4; color: var(--ink-2);">16 cards in September. 38 since you started.</p>
+              </div>
+            </div>
+
+            <div style="flex: 0 0 auto; background: var(--paper); border-top: 1px solid var(--rule); display: grid; grid-template-columns: repeat(4, 1fr); padding: 0 4px 26px;">
+              <button onClick="{{ goToday }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px; display: flex; align-items: center;"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: block;"></span></span>
+                <span style="color: var(--ink);">Today</span>
+              </button>
+              <button onClick="{{ goCollection }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Vocab</span>
+              </button>
+              <button onClick="{{ goJournal }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Journal</span>
+              </button>
+              <button onClick="{{ goProfile }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Profile</span>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- WORD DETAIL -->
+        <sc-if value="{{ isWord }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="flex: 1; overflow-y: auto; padding: 60px 24px 28px;">
+              <button onClick="{{ back }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 8px 12px 20px 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); min-height: 44px;">&larr;&nbsp; {{ backLabel }}</button>
+              <h1 style="margin: 0; font-size: 38px; font-weight: 400; letter-spacing: -0.02em; line-height: 1;">{{ word.w }}</h1>
+              <div style="display: flex; align-items: baseline; gap: 12px; padding: 12px 0 18px;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink-2);">{{ word.ipa }}</span>
+                <span style="font-size: 15px; font-style: italic; color: var(--ink-3);">{{ word.pos }}</span>
+              </div>
+              <div style="height: 1px; background: var(--rule);"></div>
+              <p style="margin: 0; padding: 18px 0 26px; font-size: 21px; line-height: 1.35; letter-spacing: -0.005em; text-wrap: pretty;">{{ word.d }}</p>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">Usage</span>
+              <div style="display: flex; flex-direction: column; gap: 14px; padding: 12px 0 28px;">
+                <sc-for list="{{ word.examples }}" as="e" hint-placeholder-count="3">
+                  <p style="margin: 0; padding-left: 14px; border-left: 1px solid var(--rule); font-size: 16px; line-height: 1.45; color: var(--ink-2); text-wrap: pretty;">{{ e }}</p>
+                </sc-for>
+              </div>
+              <button onClick="{{ goChat }}" style="width: 100%; height: 52px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;">Practise this word</button>
+              <button onClick="{{ toggleMastered }}" style="width: 100%; margin-top: 16px; appearance: none; background: none; border: 0; border-top: 1px solid var(--rule-2); cursor: pointer; padding: 18px 2px 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; text-align: left; min-height: 56px;">
+                <span style="display: flex; flex-direction: column; gap: 3px;">
+                  <span style="font-size: 17px; color: var(--ink);">Mastered</span>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: var(--ink-3);">Stop putting it on cards</span>
+                </span>
+                <span style="{{ switchTrack }}"><span style="{{ switchKnob }}"></span></span>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ADD A WORD -->
+        <sc-if value="{{ isAdd }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; padding: 60px 24px 0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; height: 44px;">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">Add a word</span>
+              <button onClick="{{ back }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 8px 0 8px 16px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);">Close</button>
+            </div>
+            <div style="padding-top: 26px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="border-bottom: 1px solid var(--ink); padding-bottom: 12px; display: flex; align-items: baseline; gap: 4px;">
+                <span style="font-size: 30px; letter-spacing: -0.01em; color: var(--ink);">{{ addValue }}</span>
+                <span style="{{ caretStyle }}"></span>
+                <span style="{{ addPlaceholderStyle }}">word</span>
+              </div>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: var(--ink-3);">Pronunciation and meaning are fetched for you.</span>
+            </div>
+            <button onClick="{{ addWord }}" style="margin-top: 22px; width: 100%; height: 52px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;">Add</button>
+            <div style="padding-top: 26px; display: flex; flex-direction: column; gap: 10px;">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">Just added</span>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+                  <span style="border: 1px solid var(--rule); border-radius: 999px; padding: 7px 13px; font-size: 15px; color: var(--ink-2);">{{ r }}</span>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- COLLECTION -->
+        <sc-if value="{{ isCollection }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="flex: 0 0 auto; padding: 60px 22px 0; background: var(--paper);">
+              <div style="display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 14px;">
+                <h1 style="margin: 0; font-size: 27px; font-weight: 400; letter-spacing: -0.01em;">Collection</h1>
+                <button onClick="{{ goAdd }}" style="appearance: none; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); border-radius: 999px; cursor: pointer; padding: 0 16px; height: 36px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;">+ Word</button>
+              </div>
+              <div style="display: flex; gap: 22px; border-bottom: 1px solid var(--rule);">
+                <button onClick="{{ tabMine }}" style="{{ tabMineStyle }}">Mine</button>
+                <button onClick="{{ tabDiscover }}" style="{{ tabDiscoverStyle }}">Discover</button>
+              </div>
+            </div>
+
+            <sc-if value="{{ isMine }}" hint-placeholder-val="{{ true }}">
+              <div style="flex: 1; display: flex; overflow: hidden; min-width: 0;">
+                <div style="flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 0 6px 12px 22px;">
+                  <div style="position: sticky; top: 0; background: var(--paper); padding: 12px 0 10px; z-index: 2;">
+                    <div style="display: flex; align-items: center; gap: 8px; border: 1px solid var(--rule); border-radius: 6px; padding: 0 12px; height: 40px; background: var(--card);">
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-3);">/</span>
+                      <span style="font-size: 16px; color: var(--ink-3);">Search 227 words</span>
+                    </div>
+                  </div>
+                  <sc-for list="{{ mineGroups }}" as="g" hint-placeholder-count="6">
+                    <div>
+                      <div style="position: sticky; top: 62px; background: var(--paper); padding: 10px 0 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3); z-index: 1;">{{ g.letter }}</div>
+                      <sc-for list="{{ g.items }}" as="w" hint-placeholder-count="4">
+                        <button onClick="{{ w.open }}" style="width: 100%; appearance: none; background: none; border: 0; border-bottom: 1px solid var(--rule-2); cursor: pointer; text-align: left; padding: 12px 8px 12px 0; display: flex; align-items: baseline; gap: 10px; min-height: 46px;">
+                          <span style="{{ w.nameStyle }}">{{ w.w }}</span>
+                          <span style="flex: 1; font-size: 14px; line-height: 1.25; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ w.d }}</span>
+                          <span style="{{ w.dotStyle }}"></span>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="flex: 0 0 auto; width: 20px; padding: 66px 0 16px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px;">
+                  <sc-for list="{{ alphabet }}" as="a" hint-placeholder-count="26">
+                    <span style="{{ a.style }}">{{ a.l }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isDiscover }}" hint-placeholder-val="{{ false }}">
+              <div style="flex: 1; overflow-y: auto; padding: 26px 22px 16px; display: flex; flex-direction: column; gap: 20px;">
+                <button onClick="{{ pickWord }}" style="width: 100%; height: 56px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;">Pick a new word for me</button>
+                <sc-if value="{{ hasPick }}" hint-placeholder-val="{{ true }}">
+                  <div style="background: var(--card); border: 1px solid var(--rule); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px; animation: dwIn .28s ease;">
+                    <div style="display: flex; align-items: baseline; gap: 10px;">
+                      <span style="font-size: 26px; letter-spacing: -0.01em;">{{ pick.w }}</span>
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-3);">{{ pick.ipa }}</span>
+                    </div>
+                    <p style="margin: 0; font-size: 16px; line-height: 1.4; color: var(--ink-2);">{{ pick.d }}</p>
+                    <div style="display: flex; gap: 10px; padding-top: 4px;">
+                      <button onClick="{{ acceptPick }}" style="flex: 1; height: 44px; border: 1px solid var(--ink); border-radius: 6px; background: var(--ink); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer;">Keep</button>
+                      <button onClick="{{ pickWord }}" style="flex: 1; height: 44px; border: 1px solid var(--rule); border-radius: 6px; background: none; color: var(--ink-2); font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer;">Another</button>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ noPick }}" hint-placeholder-val="{{ false }}">
+                  <p style="margin: 0; font-size: 17px; line-height: 1.45; color: var(--ink-3); max-width: 250px; text-wrap: pretty;">Nothing here until you ask. The app does not choose for you.</p>
+                </sc-if>
+                <div style="padding-top: 6px; display: flex; flex-direction: column; gap: 10px;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">Kept from Discover</span>
+                  <sc-for list="{{ kept }}" as="k" hint-placeholder-count="3">
+                    <div style="display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--rule-2); padding-bottom: 10px;">
+                      <span style="font-size: 18px;">{{ k.w }}</span>
+                      <span style="flex: 1; font-size: 14px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ k.d }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <div style="flex: 0 0 auto; background: var(--paper); border-top: 1px solid var(--rule); display: grid; grid-template-columns: repeat(4, 1fr); padding: 0 4px 26px;">
+              <button onClick="{{ goToday }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Today</span>
+              </button>
+              <button onClick="{{ goCollection }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px; display: flex; align-items: center;"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: block;"></span></span>
+                <span style="color: var(--ink);">Vocab</span>
+              </button>
+              <button onClick="{{ goJournal }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Journal</span>
+              </button>
+              <button onClick="{{ goProfile }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Profile</span>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- PRACTICE CHAT -->
+        <sc-if value="{{ isChat }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="flex: 0 0 auto; padding: 60px 22px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--rule);">
+              <button onClick="{{ back }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 8px 12px 8px 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); min-height: 40px;">&larr;&nbsp; Back</button>
+              <span style="display: flex; align-items: baseline; gap: 8px;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3);">Practising</span>
+                <span style="font-size: 18px;">{{ word.w }}</span>
+              </span>
+            </div>
+            <div style="flex: 1; overflow-y: auto; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;">
+              <sc-for list="{{ chat }}" as="m" hint-placeholder-count="1">
+                <div style="{{ m.rowStyle }}">
+                  <div style="{{ m.bubbleStyle }}">
+                    <sc-if value="{{ m.isBot }}" hint-placeholder-val="{{ true }}">
+                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); display: block; padding-bottom: 8px;">Scenario</span>
+                    </sc-if>
+                    <span style="{{ m.textStyle }}">{{ m.text }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="flex: 0 0 auto; border-top: 1px solid var(--rule); background: var(--paper); padding: 12px 16px 14px; display: flex; align-items: center; gap: 10px;">
+              <div onClick="{{ openKb }}" style="flex: 1; border: 1px solid var(--rule); border-radius: 999px; background: var(--card); height: 44px; display: flex; align-items: center; padding: 0 16px; cursor: text;">
+                <span style="{{ chatDraftStyle }}">{{ chatDraftText }}</span>
+              </div>
+              <button onClick="{{ sendChat }}" style="width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center;">&uarr;</button>
+            </div>
+            <sc-if value="{{ kbClosed }}" hint-placeholder-val="{{ true }}">
+              <div style="flex: 0 0 auto; height: 30px;"></div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- JOURNAL -->
+        <sc-if value="{{ isJournal }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="flex: 0 0 auto; padding: 60px 22px 0;">
+              <h1 style="margin: 0 0 14px; font-size: 27px; font-weight: 400; letter-spacing: -0.01em;">Journal</h1>
+              <div onClick="{{ openKb }}" style="display: flex; align-items: center; gap: 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--card); height: 46px; padding: 0 14px; cursor: text;">
+                <span style="flex: 1; font-size: 16px; color: var(--ink-3);">Paste a line worth keeping</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);">Save</span>
+              </div>
+            </div>
+            <div style="flex: 1; overflow-y: auto; padding: 18px 22px 12px; display: flex; flex-direction: column;">
+              <sc-for list="{{ journal }}" as="j" hint-placeholder-count="4">
+                <button onClick="{{ j.open }}" style="width: 100%; appearance: none; background: none; border: 0; border-bottom: 1px solid var(--rule-2); cursor: pointer; text-align: left; padding: 16px 0; display: flex; flex-direction: column; gap: 7px;">
+                  <span style="font-size: 18px; line-height: 1.35; letter-spacing: -0.005em; color: var(--ink); text-wrap: pretty;">{{ j.text }}</span>
+                  <span style="display: flex; align-items: baseline; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.08em; color: var(--ink-3);">
+                    <span>{{ j.source }}</span><span>&middot;</span><span>{{ j.date }}</span>
+                  </span>
+                </button>
+              </sc-for>
+            </div>
+            <div style="flex: 0 0 auto; background: var(--paper); border-top: 1px solid var(--rule); display: grid; grid-template-columns: repeat(4, 1fr); padding: 0 4px 26px;">
+              <button onClick="{{ goToday }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Today</span>
+              </button>
+              <button onClick="{{ goCollection }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Vocab</span>
+              </button>
+              <button onClick="{{ goJournal }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px; display: flex; align-items: center;"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: block;"></span></span>
+                <span style="color: var(--ink);">Journal</span>
+              </button>
+              <button onClick="{{ goProfile }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Profile</span>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- JOURNAL ENTRY -->
+        <sc-if value="{{ isEntry }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="flex: 1; overflow-y: auto; padding: 60px 24px 28px;">
+              <button onClick="{{ goJournal }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 8px 12px 24px 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); min-height: 44px;">&larr;&nbsp; Journal</button>
+              <p style="margin: 0; font-size: 27px; line-height: 1.25; letter-spacing: -0.015em; text-wrap: pretty;">{{ entry.text }}</p>
+              <div style="display: flex; align-items: baseline; gap: 8px; padding: 18px 0 22px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3);">
+                <span>{{ entry.source }}</span><span>&middot;</span><span>{{ entry.date }}</span>
+              </div>
+              <div style="height: 1px; background: var(--rule);"></div>
+              <sc-if value="{{ noInsight }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ askInsight }}" style="margin-top: 22px; width: 100%; height: 50px; border: 1px solid var(--rule); border-radius: 6px; background: none; color: var(--ink); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer;">Ask for an insight</button>
+              </sc-if>
+              <sc-if value="{{ hasInsight }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top: 22px; padding-left: 14px; border-left: 2px solid var(--accent); display: flex; flex-direction: column; gap: 8px; animation: dwIn .3s ease;">
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent);">Insight</span>
+                  <p style="margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink-2); text-wrap: pretty;">{{ entry.insight }}</p>
+                  <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.08em; color: var(--ink-3);">Written by the machine. Keep or discard.</span>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- PROFILE -->
+        <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 100%; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="flex: 1; overflow-y: auto; padding: 60px 22px 16px;">
+              <div style="display: flex; flex-direction: column; gap: 12px; padding-bottom: 22px;">
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">Barnaby</span>
+                <span style="align-self: flex-start; border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 7px 14px; font-size: 15px;">Keeper of the Pocket</span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em; color: var(--ink-3);">Next: The Uncle&rsquo;s Apprentice, at 50 cards.</span>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule);">
+                <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+                  <div style="border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 16px 14px; display: flex; flex-direction: column; gap: 5px;">
+                    <span style="font-size: 32px; line-height: 1; letter-spacing: -0.02em;">{{ s.n }}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3);">{{ s.l }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <p style="margin: 0; padding: 18px 0 24px; font-size: 17px; line-height: 1.4; color: var(--ink-2);">Keeping a card since 8 August 2026.</p>
+
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);">Badges</span>
+              <div style="display: flex; flex-direction: column; padding-top: 8px;">
+                <sc-for list="{{ badges }}" as="b" hint-placeholder-count="5">
+                  <div style="display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--rule-2); padding: 13px 0;">
+                    <span style="{{ b.dotStyle }}"></span>
+                    <span style="flex: 1; font-size: 16px; line-height: 1.3; color: var(--ink); text-wrap: pretty;">{{ b.name }}</span>
+                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-3);">{{ b.count }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="flex: 0 0 auto; background: var(--paper); border-top: 1px solid var(--rule); display: grid; grid-template-columns: repeat(4, 1fr); padding: 0 4px 26px;">
+              <button onClick="{{ goToday }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Today</span>
+              </button>
+              <button onClick="{{ goCollection }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Vocab</span>
+              </button>
+              <button onClick="{{ goJournal }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px;"></span><span style="color: var(--ink-3);">Journal</span>
+              </button>
+              <button onClick="{{ goProfile }}" style="appearance: none; border: 0; background: none; cursor: pointer; padding: 11px 0 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; min-height: 50px;">
+                <span style="height: 5px; display: flex; align-items: center;"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: block;"></span></span>
+                <span style="color: var(--ink);">Profile</span>
+              </button>
+            </div>
+          </div>
+        </sc-if>
+
+      </x-import>
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #6E6A5C;">390 &times; 844 &middot; live</span>
+    </div>
+
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 28px; padding-top: 4px;">
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #8C8878;">Screens &mdash; tap to jump</span>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <sc-for list="{{ nav }}" as="n" hint-placeholder-count="11">
+            <button onClick="{{ n.go }}" style="{{ n.style }}">
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #6E6A5C;">{{ n.i }}</span>
+              <span>{{ n.label }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px; border-top: 1px solid #3B3A33; padding-top: 24px;">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #8C8878;">Rules the design obeys</span>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px;">
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 17px; color: #F0EDE4;">The card never scrolls</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #A09B8B;">Six rows share the space left after header, day strip and tab bar. Rows compress; the card does not grow.</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 17px; color: #F0EDE4;">One line per definition</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #A09B8B;">Definitions are clipped, not wrapped. Machine text that sprawls visibly loses its tail, so long text looks wrong.</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 17px; color: #F0EDE4;">Nothing happens unasked</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #A09B8B;">The card is pressed into being. Discover proposes only on request. Insights are asked for.</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 17px; color: #F0EDE4;">Type carries the interface</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #A09B8B;">Serif for words and meanings, mono for anything the machine counts. No icons in the tab bar &mdash; four words and a dot.</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 17px; color: #F0EDE4;">Thumb reach</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #A09B8B;">Every target is at least 44&nbsp;px tall. Primary actions sit in the lower third; back sits top-left where a swipe would also work.</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-size: 17px; color: #F0EDE4;">Sample data</span>
+            <span style="font-size: 14px; line-height: 1.5; color: #A09B8B;">The prototype is set to 18 September 2026, six weeks into a habit started on 8 August 2026.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SYSTEM SHEET -->
+  <section style="background: #F0EDE4; border-radius: 4px; padding: 48px 44px 52px; display: flex; flex-direction: column; gap: 44px; color: #20211D;">
+    <div style="display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid #D8D3C4; padding-bottom: 20px;">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #8F8D81;">The system underneath</span>
+      <h2 style="margin: 0; font-size: 30px; font-weight: 400; letter-spacing: -0.01em;">Tokens, scale and parts</h2>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px;">
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #8F8D81;">Colour &mdash; light</span>
+        <sc-for list="{{ lightTokens }}" as="t" hint-placeholder-count="10">
+          <div style="display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #EAE6DA; padding-bottom: 9px;">
+            <span style="{{ t.swatch }}"></span>
+            <span style="flex: 1; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #20211D;">{{ t.name }}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8F8D81;">{{ t.hex }}</span>
+            <span style="width: 150px; font-size: 14px; color: #5D5C52;">{{ t.use }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px; background: #131311; margin: -12px; padding: 12px 16px 16px; border-radius: 4px;">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #6E6D64;">Colour &mdash; dark</span>
+        <sc-for list="{{ darkTokens }}" as="t" hint-placeholder-count="10">
+          <div style="display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #242420; padding-bottom: 9px;">
+            <span style="{{ t.swatch }}"></span>
+            <span style="flex: 1; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #EEEBE1;">{{ t.name }}</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #6E6D64;">{{ t.hex }}</span>
+            <span style="width: 150px; font-size: 14px; color: #A5A398;">{{ t.use }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; border-top: 1px solid #D8D3C4; padding-top: 32px;">
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #8F8D81;">Type scale &mdash; Source Serif 4 &amp; IBM Plex Mono</span>
+        <div style="display: flex; align-items: baseline; gap: 20px; border-bottom: 1px solid #EAE6DA; padding-bottom: 10px;"><span style="width: 150px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #8F8D81;">display / 38 / -2%</span><span style="font-size: 38px; letter-spacing: -0.02em;">tacit</span></div>
+        <div style="display: flex; align-items: baseline; gap: 20px; border-bottom: 1px solid #EAE6DA; padding-bottom: 10px;"><span style="width: 150px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #8F8D81;">title / 27</span><span style="font-size: 27px;">Today&rsquo;s card</span></div>
+        <div style="display: flex; align-items: baseline; gap: 20px; border-bottom: 1px solid #EAE6DA; padding-bottom: 10px;"><span style="width: 150px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #8F8D81;">word / 22</span><span style="font-size: 22px;">brittle</span></div>
+        <div style="display: flex; align-items: baseline; gap: 20px; border-bottom: 1px solid #EAE6DA; padding-bottom: 10px;"><span style="width: 150px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #8F8D81;">read / 17</span><span style="font-size: 17px;">Six words a day, on one card.</span></div>
+        <div style="display: flex; align-items: baseline; gap: 20px; border-bottom: 1px solid #EAE6DA; padding-bottom: 10px;"><span style="width: 150px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #8F8D81;">gloss / 15</span><span style="font-size: 15px; color: #5D5C52;">hard but easily broken</span></div>
+        <div style="display: flex; align-items: baseline; gap: 20px; border-bottom: 1px solid #EAE6DA; padding-bottom: 10px;"><span style="width: 150px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #8F8D81;">label / 11 / mono</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;">Last seven days</span></div>
+        <div style="display: flex; align-items: baseline; gap: 20px;"><span style="width: 150px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: #8F8D81;">micro / 9 / mono</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: #8F8D81;">Scenario</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #8F8D81;">Spacing &mdash; 4 pt base</span>
+          <div style="display: flex; align-items: flex-end; gap: 10px;">
+            <sc-for list="{{ spacing }}" as="s" hint-placeholder-count="7">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                <span style="{{ s.bar }}"></span>
+                <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">{{ s.n }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #8F8D81;">Radius</span>
+          <div style="display: flex; gap: 12px;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span style="width: 52px; height: 52px; background: #FBFAF5; border: 1px solid #D8D3C4; border-radius: 2px; display: block;"></span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">2 chip</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span style="width: 52px; height: 52px; background: #FBFAF5; border: 1px solid #D8D3C4; border-radius: 6px; display: block;"></span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">6 field</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span style="width: 52px; height: 52px; background: #FBFAF5; border: 1px solid #D8D3C4; border-radius: 10px; display: block;"></span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">10 card</span></div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;"><span style="width: 52px; height: 52px; background: #FBFAF5; border: 1px solid #D8D3C4; border-radius: 999px; display: block;"></span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">999 pill</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 20px; border-top: 1px solid #D8D3C4; padding-top: 32px;">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #8F8D81;">Parts</span>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px;">
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">Card surface</span>
+          <div style="background: #FBFAF5; border: 1px solid #D8D3C4; border-radius: 10px; padding: 14px 16px; min-height: 92px; display: flex; flex-direction: column; justify-content: center; gap: 4px;">
+            <span style="font-size: 20px;">quaint</span>
+            <span style="font-size: 15px; color: #5D5C52;">attractively old-fashioned</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">List row</span>
+          <div style="display: flex; flex-direction: column;">
+            <div style="display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #EAE6DA; padding: 12px 0;"><span style="font-size: 18px;">deft</span><span style="flex: 1; font-size: 14px; color: #8F8D81; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">quick and skilful</span></div>
+            <div style="display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #EAE6DA; padding: 12px 0;"><span style="font-size: 18px; color: #8F8D81;">dour</span><span style="flex: 1; font-size: 14px; color: #8F8D81; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">stern and joyless</span><span style="width: 5px; height: 5px; border-radius: 50%; background: #2F5D50; display: block;"></span></div>
+          </div>
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">dot = mastered</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">Tab bar</span>
+          <div style="background: #F0EDE4; border: 1px solid #D8D3C4; border-radius: 6px; display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 2px 10px;">
+            <span style="display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #20211D;"><span style="width: 4px; height: 4px; border-radius: 50%; background: #2F5D50; display: block;"></span>Today</span>
+            <span style="display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;"><span style="height: 4px;"></span>Vocab</span>
+            <span style="display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;"><span style="height: 4px;"></span>Journal</span>
+            <span style="display: flex; flex-direction: column; align-items: center; gap: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;"><span style="height: 4px;"></span>Profile</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">Buttons</span>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <span style="height: 46px; border-radius: 6px; background: #20211D; color: #F0EDE4; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; display: flex; align-items: center; justify-content: center;">Primary</span>
+            <span style="height: 46px; border-radius: 6px; border: 1px solid #D8D3C4; color: #20211D; font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; display: flex; align-items: center; justify-content: center;">Secondary</span>
+            <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #8F8D81;">Quiet / skip</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">Text input</span>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <span style="border-bottom: 1px solid #20211D; padding-bottom: 8px; font-size: 24px; color: #8F8D81; display: block;">word</span>
+            <span style="border: 1px solid #D8D3C4; border-radius: 6px; background: #FBFAF5; height: 42px; display: flex; align-items: center; padding: 0 12px; font-size: 15px; color: #8F8D81;">Search 227 words</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">Empty state</span>
+          <div style="border: 1px dashed #D8D3C4; border-radius: 10px; min-height: 118px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; text-align: center;">
+            <span style="font-size: 15px; line-height: 1.4; color: #5D5C52;">No card yet.</span>
+            <span style="height: 38px; border-radius: 6px; background: #20211D; color: #F0EDE4; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; display: flex; align-items: center; padding: 0 16px;">Make it</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">Chat bubbles</span>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <span style="align-self: flex-start; max-width: 88%; background: #FBFAF5; border: 1px solid #D8D3C4; border-radius: 10px 10px 10px 2px; padding: 10px 13px; font-size: 15px; line-height: 1.4; color: #20211D;">Use it in a sentence.</span>
+            <span style="align-self: flex-end; max-width: 88%; background: #E0E8E2; border-radius: 10px 10px 2px 10px; padding: 10px 13px; font-size: 15px; line-height: 1.4; color: #20211D;">He gave tacit approval.</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">Badge chip &amp; level pill</span>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <span style="display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid #EAE6DA; padding-bottom: 10px;"><span style="width: 7px; height: 7px; background: #2F5D50; display: block;"></span><span style="flex: 1; font-size: 15px;">Ibu Would Be Proud</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #8F8D81;">&times;2</span></span>
+            <span style="align-self: flex-start; border: 1px solid #2F5D50; color: #2F5D50; border-radius: 999px; padding: 6px 13px; font-size: 14px;">Keeper of the Pocket</span>
+          </div>
+        </div>
+
+        <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8F8D81;">Calendar cell &mdash; four states</span>
+          <div style="display: flex; gap: 10px;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <span style="width: 46px; height: 52px; border-radius: 4px; background: #FBFAF5; border: 1px solid #EAE6DA; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #5D5C52;">11</span><span style="color: #2F5D50; font-size: 13px;">&#10003;</span></span>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">made</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <span style="width: 46px; height: 52px; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">12</span><span style="color: #BFB9A9; font-size: 12px;">&#10005;</span></span>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">missed</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <span style="width: 46px; height: 52px; border-radius: 4px; background: #20211D; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #F0EDE4;">18</span><span style="color: #F0EDE4; font-size: 13px;">&#10003;</span></span>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">today</span>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <span style="width: 46px; height: 52px; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #C9C3B3;">24</span><span style="width: 9px; height: 1px; background: #E4DFD1; display: block;"></span></span>
+              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: #8F8D81;">not yet</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1560,&quot;height&quot;:1900},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#2F5D50&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#2F5D50&quot;,&quot;#8A3324&quot;,&quot;#3A4A7A&quot;,&quot;#7A6320&quot;],&quot;section&quot;:&quot;Look&quot;},&quot;wordsPerCard&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:6,&quot;min&quot;:4,&quot;max&quot;:8,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Card&quot;}}">
+const MONO = "'IBM Plex Mono', ui-monospace, monospace";
+
+const WORDS = {
+  brittle:  { w: 'brittle',  ipa: '/ˈbrɪt(ə)l/', pos: 'adjective', d: 'hard but easily broken', tag: 'adj',
+    examples: ['The old tape had gone brittle and snapped.', 'His voice was brittle by the end of the call.', 'Brittle metal fails without bending first.'] },
+  hedge:    { w: 'hedge',    ipa: '/hɛdʒ/', pos: 'verb', d: 'to avoid committing yourself', tag: 'v',
+    examples: ['She hedged when asked for a date.', 'Stop hedging and give a number.', 'He hedged the promise with conditions.'] },
+  quaint:   { w: 'quaint',   ipa: '/kweɪnt/', pos: 'adjective', d: 'attractively old-fashioned', tag: 'adj',
+    examples: ['A quaint shop that still writes receipts by hand.', 'The custom seemed quaint to the visitors.', 'Quaint, but the plumbing was from 1902.'] },
+  lull:     { w: 'lull',     ipa: '/lʌl/', pos: 'noun', d: 'a brief pause in activity', tag: 'n',
+    examples: ['There was a lull in the rain at four.', 'He phoned during a lull between meetings.', 'The lull did not last.'] },
+  rue:      { w: 'rue',      ipa: '/ruː/', pos: 'verb', d: 'to regret bitterly', tag: 'v',
+    examples: ['You will rue signing that.', 'She rued the years spent waiting.', 'He came to rue his silence.'] },
+  tacit:    { w: 'tacit',    ipa: '/ˈtasɪt/', pos: 'adjective', d: 'understood without being said', tag: 'adj',
+    examples: ['There was a tacit agreement that no one would mention the cost.', 'Her silence was taken as tacit approval.', 'They kept a tacit rule about Sundays.'] }
+};
+
+const MINE = [
+  ['abate', 'to become less intense'], ['aloof', 'distant and uninvolved'], ['amble', 'to walk at a slow pace'], ['austere', 'plain and without comfort'],
+  ['banal', 'so ordinary it is dull'], ['brittle', 'hard but easily broken'], ['brusque', 'abrupt to the point of rudeness'],
+  ['candid', 'frank and open'], ['coy', 'pretending to be shy'], ['curt', 'rudely brief'],
+  ['dally', 'to waste time'], ['deft', 'quick and skilful'], ['dour', 'stern and joyless'],
+  ['earnest', 'serious and sincere'], ['elude', 'to escape from'],
+  ['feign', 'to pretend'], ['frugal', 'careful with money'],
+  ['gaunt', 'thin and bony'], ['glib', 'fluent but insincere'],
+  ['hedge', 'to avoid committing yourself'], ['hoard', 'to store away in secret'],
+  ['idle', 'not working or in use'], ['irk', 'to annoy'],
+  ['jaded', 'tired of a thing through overuse'],
+  ['keen', 'sharp, or eager'],
+  ['lull', 'a brief pause in activity'], ['lurch', 'to move unsteadily'],
+  ['meek', 'quiet and submissive'], ['mundane', 'dull and ordinary'],
+  ['nimble', 'quick and light in movement'],
+  ['obtuse', 'slow to understand'], ['opaque', 'not able to be seen through'],
+  ['placate', 'to calm someone down'], ['prod', 'to poke, or to urge'],
+  ['quaint', 'attractively old-fashioned'], ['quell', 'to put an end to'],
+  ['rue', 'to regret bitterly'], ['rife', 'widespread, usually of something bad'],
+  ['scant', 'barely enough'], ['stoic', 'enduring without complaint'],
+  ['tacit', 'understood without being said'], ['terse', 'brief to the point of rudeness'],
+  ['unfazed', 'not disturbed by'], ['vex', 'to trouble or annoy'],
+  ['wane', 'to grow smaller'], ['wry', 'dryly humorous']
+];
+const MASTERED = ['idle', 'keen', 'candid', 'prod'];
+
+const DISCOVER = [
+  { w: 'winnow', ipa: '/ˈwɪnəʊ/', d: 'to sift out what is not wanted' },
+  { w: 'sanguine', ipa: '/ˈsaŋɡwɪn/', d: 'cheerfully confident about the future' },
+  { w: 'laconic', ipa: '/ləˈkɒnɪk/', d: 'using very few words' },
+  { w: 'inure', ipa: '/ɪˈnjʊə/', d: 'to accustom to something unpleasant' }
+];
+
+const JOURNAL = [
+  { text: 'A fall in a pit, a gain in one\u2019s wit.', source: 'Chinese proverb', date: '12 Sep',
+    insight: 'The line prices the mistake rather than excusing it: the pit is not undone, only paid for. It is usually said to someone still standing in the hole, which is what keeps it from sounding smug.' },
+  { text: 'The past is a foreign country: they do things differently there.', source: 'L. P. Hartley', date: '3 Sep',
+    insight: 'Hartley makes distance in time behave like distance in space, so memory becomes travel and the traveller is always a little out of step.' },
+  { text: 'Nothing to be done.', source: 'Waiting for Godot', date: '28 Aug',
+    insight: 'Four words that work as both a complaint and a description of the whole play. Said about a boot first, which is the joke.' },
+  { text: 'We are all in the gutter, but some of us are looking at the stars.', source: 'Oscar Wilde', date: '21 Aug',
+    insight: 'The sentence keeps both halves true at once. Wilde does not lift anyone out of the gutter; he only changes where they are pointed.' }
+];
+
+const OB = [
+  { q: 'How many words on a card?', opts: ['Four', 'Six', 'Eight'] },
+  { q: 'When should the card be ready?', opts: ['Morning', 'Midday', 'Evening'] },
+  { q: 'What do you read in English?', opts: ['Novels', 'News', 'Work email', 'Subtitles'] },
+  { q: 'How hard should the words be?', opts: ['Everyday', 'Formal', 'Rare'] },
+  { q: 'What should we call you?', text: true }
+];
+
+const MISSED_SEP = [1, 2, 5, 6];
+
+class Component extends DCLogic {
+  state = {
+    theme: 'light', screen: 'today', prev: 'today', kb: false,
+    cardMade: true, active: 'tacit', mastered: MASTERED.slice(),
+    tab: 'mine', pick: DISCOVER[0], kept: [DISCOVER[2], DISCOVER[3]],
+    chat: [{ bot: true, text: 'You are at a family dinner. Your uncle says you agreed to lend him money. You never said yes \u2014 you nodded. Explain what happened, using tacit.' }],
+    entry: 0, insight: false, ob: 0, obPicks: {}, addValue: 'wince', recent: ['quell', 'unfazed', 'wry']
+  };
+
+  componentDidMount() {
+    const el = document.getElementById('dw');
+    if (el && this.props.accent) el.style.setProperty('--accent', this.props.accent);
+  }
+  componentDidUpdate() {
+    const el = document.getElementById('dw');
+    if (el && this.props.accent) el.style.setProperty('--accent', this.props.accent);
+  }
+
+  go = (screen, extra) => this.setState(s => Object.assign({ prev: s.screen, screen, kb: false }, extra || {}));
+
+  navBtn(label, key, i, extra, activeWhen) {
+    const on = this.state.screen === key && (activeWhen ? activeWhen(this.state) : true);
+    return {
+      i: String(i).padStart(2, '0'), label, go: () => this.go(key, extra),
+      style: {
+        display: 'flex', alignItems: 'baseline', gap: 10, textAlign: 'left', cursor: 'pointer',
+        border: '1px solid ' + (on ? '#F0EDE4' : '#3B3A33'), borderRadius: 4,
+        background: on ? '#F0EDE4' : 'transparent', color: on ? '#20211D' : '#C6C1B0',
+        padding: '11px 13px', fontFamily: "'Source Serif 4', serif", fontSize: 16, minHeight: 44
+      }
+    };
+  }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const per = Math.max(4, Math.min(8, this.props.wordsPerCard ?? 6));
+    const word = WORDS[st.active] || { w: st.active, ipa: '', pos: '', d: '', examples: [] };
+    const isMastered = st.mastered.indexOf(word.w) > -1;
+
+    const todayKeys = ['brittle', 'hedge', 'quaint', 'lull', 'rue', 'tacit', 'terse', 'wane'].slice(0, per);
+    const todayWords = todayKeys.map((k, i) => {
+      const w = WORDS[k] || { w: k, d: (MINE.find(m => m[0] === k) || [k, ''])[1], tag: '' };
+      return Object.assign({}, w, {
+        open: () => this.go('word', { active: k }),
+        rowStyle: {
+          appearance: 'none', background: 'none', border: 0, cursor: 'pointer', textAlign: 'left',
+          borderBottom: i === todayKeys.length - 1 ? 'none' : '1px solid var(--rule-2)',
+          padding: '11px 2px', display: 'flex', flexDirection: 'column', gap: 3, flex: 1, justifyContent: 'center',
+          fontFamily: "'Source Serif 4', serif", width: '100%', minHeight: 60
+        }
+      });
+    });
+
+    const strip = ['S', 'S', 'M', 'T', 'W', 'T', 'F'].map((l, i) => ({
+      l, mark: '\u2713',
+      markStyle: { fontSize: 13, color: i === 6 ? 'var(--ink)' : 'var(--accent)', fontWeight: i === 6 ? 600 : 400 }
+    }));
+
+    const cells = [];
+    for (let i = 0; i < 1; i++) cells.push({ n: '', cellStyle: { height: 52 }, numStyle: {}, markStyle: {} });
+    for (let d = 1; d <= 30; d++) {
+      const today = d === 18, future = d > 18, miss = MISSED_SEP.indexOf(d) > -1;
+      cells.push({
+        n: d,
+        cellStyle: {
+          height: 52, borderRadius: 4, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 2,
+          background: today ? 'var(--ink)' : (future || miss ? 'transparent' : 'var(--card)'),
+          border: '1px solid ' + (today ? 'var(--ink)' : (!future && !miss ? 'var(--rule-2)' : 'transparent'))
+        },
+        numStyle: { fontFamily: MONO, fontSize: 10, color: today ? 'var(--paper)' : (future ? 'var(--miss)' : (miss ? 'var(--ink-3)' : 'var(--ink-2)')) },
+        mark: future ? '\u2013' : (miss ? '\u2715' : '\u2713'),
+        markStyle: { fontSize: miss ? 11 : 13, color: today ? 'var(--paper)' : (future ? 'var(--rule)' : (miss ? 'var(--miss)' : 'var(--accent)')) }
+      });
+    }
+
+    const groups = [];
+    MINE.forEach(([w, d]) => {
+      const L = w[0].toUpperCase();
+      let g = groups[groups.length - 1];
+      if (!g || g.letter !== L) { g = { letter: L, items: [] }; groups.push(g); }
+      const done = st.mastered.indexOf(w) > -1;
+      g.items.push({
+        w, d, open: () => this.go('word', { active: w }),
+        nameStyle: { fontSize: 18, letterSpacing: '-0.005em', color: done ? 'var(--ink-3)' : 'var(--ink)' },
+        dotStyle: { width: 5, height: 5, borderRadius: '50%', display: 'block', background: done ? 'var(--accent)' : 'transparent' }
+      });
+    });
+    const present = {};
+    groups.forEach(g => { present[g.letter] = true; });
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l => ({
+      l, style: { fontFamily: MONO, fontSize: 8, lineHeight: 1.35, color: present[l] ? 'var(--ink-2)' : 'var(--rule)', cursor: 'pointer' }
+    }));
+
+    const chat = st.chat.map(m => ({
+      isBot: m.bot, text: m.text,
+      rowStyle: { display: 'flex', justifyContent: m.bot ? 'flex-start' : 'flex-end' },
+      bubbleStyle: {
+        maxWidth: '86%', padding: m.bot ? '12px 14px' : '10px 14px',
+        borderRadius: m.bot ? '10px 10px 10px 2px' : '10px 10px 2px 10px',
+        background: m.bot ? 'var(--card)' : 'var(--accent-soft)',
+        border: m.bot ? '1px solid var(--rule)' : '1px solid transparent'
+      },
+      textStyle: { fontSize: 16, lineHeight: 1.42, color: 'var(--ink)', display: 'block' }
+    }));
+
+    const ob = OB[st.ob];
+    const obDashes = OB.map((_, i) => ({
+      style: { width: 18, height: 2, display: 'block', background: i <= st.ob ? 'var(--ink)' : 'var(--rule)' }
+    }));
+    const obOptions = (ob.opts || []).map(label => {
+      const chosen = st.obPicks[st.ob] === label;
+      return {
+        label, pick: () => this.setState(s => ({ obPicks: Object.assign({}, s.obPicks, { [s.ob]: label }) })),
+        labelStyle: { color: chosen ? 'var(--ink)' : 'var(--ink-2)' },
+        markStyle: { fontSize: 13, color: chosen ? 'var(--accent)' : 'transparent' }
+      };
+    });
+
+    const tabStyle = on => ({
+      appearance: 'none', background: 'none', border: 0, cursor: 'pointer', padding: '10px 0 11px',
+      marginBottom: -1, borderBottom: '2px solid ' + (on ? 'var(--ink)' : 'transparent'),
+      fontFamily: MONO, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
+      color: on ? 'var(--ink)' : 'var(--ink-3)', minHeight: 42
+    });
+    const deskTab = on => ({
+      appearance: 'none', cursor: 'pointer', borderRadius: 4, padding: '7px 14px',
+      border: '1px solid ' + (on ? '#F0EDE4' : '#3B3A33'), background: on ? '#F0EDE4' : 'transparent',
+      color: on ? '#20211D' : '#A9A493', fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase'
+    });
+
+    const swatch = (hex, ring) => ({ width: 26, height: 26, borderRadius: 3, background: hex, border: '1px solid ' + ring, display: 'block', flex: '0 0 auto' });
+    const lightTokens = [
+      ['--paper', '#F0EDE4', 'page'], ['--paper-2', '#E8E4D9', 'pressed'], ['--card', '#FBFAF5', 'card surface'],
+      ['--ink', '#20211D', 'words'], ['--ink-2', '#5D5C52', 'meanings'], ['--ink-3', '#8F8D81', 'labels'],
+      ['--rule', '#D8D3C4', 'edges'], ['--rule-2', '#EAE6DA', 'row dividers'],
+      ['--accent', '#2F5D50', 'ticks, mastered'], ['--accent-soft', '#E0E8E2', 'user bubble'], ['--miss', '#BFB9A9', 'crosses']
+    ].map(([name, hex, use]) => ({ name, hex, use, swatch: swatch(hex, '#D8D3C4') }));
+    const darkTokens = [
+      ['--paper', '#131311', 'page'], ['--paper-2', '#1A1A17', 'pressed'], ['--card', '#1E1E1A', 'card surface'],
+      ['--ink', '#EEEBE1', 'words'], ['--ink-2', '#A5A398', 'meanings'], ['--ink-3', '#6E6D64', 'labels'],
+      ['--rule', '#2E2E28', 'edges'], ['--rule-2', '#242420', 'row dividers'],
+      ['--accent', '#86BBA6', 'ticks, mastered'], ['--accent-soft', '#1E2A25', 'user bubble'], ['--miss', '#4A4A42', 'crosses']
+    ].map(([name, hex, use]) => ({ name, hex, use, swatch: swatch(hex, '#2E2E28') }));
+
+    const spacing = [4, 8, 12, 16, 20, 24, 32].map(n => ({
+      n, bar: { width: 14, height: n * 2, background: '#20211D', display: 'block' }
+    }));
+
+    return {
+      theme: st.theme, isDark: dark, kb: st.kb, kbClosed: !st.kb, deviceW: 390, deviceH: 844,
+      setLight: () => this.setState({ theme: 'light' }), setDark: () => this.setState({ theme: 'dark' }),
+      lightBtnStyle: deskTab(!dark), darkBtnStyle: deskTab(dark),
+
+      isSignin: st.screen === 'signin', isOnboarding: st.screen === 'onboarding', isToday: st.screen === 'today',
+      isCalendar: st.screen === 'calendar', isWord: st.screen === 'word', isAdd: st.screen === 'add',
+      isCollection: st.screen === 'collection', isChat: st.screen === 'chat', isJournal: st.screen === 'journal',
+      isEntry: st.screen === 'entry', isProfile: st.screen === 'profile',
+
+      signIn: () => this.go('onboarding', { ob: 0 }),
+      goToday: () => this.go('today'), goCalendar: () => this.go('calendar'),
+      goCollection: () => this.go('collection'), goJournal: () => this.go('journal'),
+      goProfile: () => this.go('profile'), goAdd: () => this.go('add', { kb: true }),
+      goChat: () => this.go('chat'), back: () => this.go(st.prev === st.screen ? 'today' : st.prev),
+      backLabel: st.prev === 'collection' ? 'Collection' : (st.prev === 'chat' ? 'Practice' : 'Today'),
+      openKb: () => this.setState({ kb: true }),
+
+      cardMade: st.cardMade, noCard: !st.cardMade,
+      makeCard: () => this.setState({ cardMade: true }),
+      todayWords, strip, dowLabels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'], monthCells: cells,
+
+      word, switchTrack: {
+        width: 46, height: 28, borderRadius: 999, display: 'flex', alignItems: 'center', flex: '0 0 auto',
+        padding: 3, background: isMastered ? 'var(--accent)' : 'var(--rule)',
+        justifyContent: isMastered ? 'flex-end' : 'flex-start', transition: 'background .18s ease'
+      },
+      switchKnob: { width: 22, height: 22, borderRadius: '50%', background: 'var(--card)', display: 'block' },
+      toggleMastered: () => this.setState(s => ({
+        mastered: s.mastered.indexOf(word.w) > -1 ? s.mastered.filter(m => m !== word.w) : s.mastered.concat([word.w])
+      })),
+
+      addValue: st.addValue, recent: st.recent,
+      addPlaceholderStyle: { fontSize: 30, color: 'var(--ink-3)', display: st.addValue ? 'none' : 'block' },
+      caretStyle: { width: 2, height: 30, background: 'var(--accent)', display: 'block', animation: 'dwFade 1s steps(2) infinite alternate' },
+      addWord: () => this.setState(s => ({
+        recent: [s.addValue].concat(s.recent).slice(0, 4), addValue: '', kb: true
+      })),
+
+      tab: st.tab, isMine: st.tab === 'mine', isDiscover: st.tab === 'discover',
+      tabMine: () => this.setState({ tab: 'mine' }), tabDiscover: () => this.setState({ tab: 'discover' }),
+      tabMineStyle: tabStyle(st.tab === 'mine'), tabDiscoverStyle: tabStyle(st.tab === 'discover'),
+      mineGroups: groups, alphabet,
+      pick: st.pick, hasPick: !!st.pick, noPick: !st.pick, kept: st.kept,
+      pickWord: () => this.setState(s => {
+        const pool = DISCOVER.filter(x => s.kept.indexOf(x) === -1 && (!s.pick || x.w !== s.pick.w));
+        return { pick: pool[Math.floor(Math.random() * pool.length)] || DISCOVER[0] };
+      }),
+      acceptPick: () => this.setState(s => ({ kept: [s.pick].concat(s.kept), pick: null })),
+
+      chat,
+      chatDraftText: st.kb ? 'I never said yes, so his story rests on a tacit' : 'Write your answer',
+      chatDraftStyle: { fontSize: 15, color: st.kb ? 'var(--ink)' : 'var(--ink-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+      sendChat: () => this.setState(s => ({
+        kb: false,
+        chat: s.chat.concat([
+          { bot: false, text: 'I never said yes, so his story rests on a tacit agreement I never made.' },
+          { bot: true, text: 'Good. Note that tacit describes the agreement, not the person. Now try it where the tacit thing is a rule nobody wrote down.' }
+        ])
+      })),
+
+      journal: JOURNAL.map((j, i) => Object.assign({}, j, { open: () => this.go('entry', { entry: i, insight: false }) })),
+      entry: JOURNAL[st.entry], hasInsight: st.insight, noInsight: !st.insight,
+      askInsight: () => this.setState({ insight: true }),
+
+      stats: [{ n: 12, l: 'Current streak' }, { n: 19, l: 'Longest streak' }, { n: 38, l: 'Cards made' }, { n: 227, l: 'Words collected' }],
+      badges: [
+        { name: 'Six Before Noon', count: '\u00d79' },
+        { name: 'No Weekend Without Ration Card', count: '\u00d74' },
+        { name: 'Ibu Would Be Proud', count: '\u00d72' },
+        { name: 'Nothing Skipped in a Fortnight', count: '\u00d71' },
+        { name: 'Pocket Fuzz', count: '\u00d71' }
+      ].map((b, i) => Object.assign({}, b, {
+        dotStyle: { width: 7, height: 7, display: 'block', background: i < 3 ? 'var(--accent)' : 'var(--ink-3)', flex: '0 0 auto' }
+      })),
+
+      obStepLabel: 'Question ' + (st.ob + 1) + ' of 5',
+      obQuestion: ob.q, obHasOptions: !!ob.opts, obIsText: !!ob.text, obOptions, obDashes,
+      obCta: st.ob === 4 ? 'Start' : 'Next',
+      obNext: () => this.setState(s => (s.ob >= 4 ? { screen: 'today', prev: 'onboarding' } : { ob: s.ob + 1 })),
+      obSkip: () => this.setState(s => (s.ob >= 4 ? { screen: 'today', prev: 'onboarding' } : { ob: s.ob + 1 })),
+
+      nav: [
+        this.navBtn('Sign in', 'signin', 1), this.navBtn('Onboarding', 'onboarding', 10),
+        this.navBtn('Today', 'today', 2, { cardMade: true }, s => s.cardMade),
+        this.navBtn('Today \u2014 no card yet', 'today', 2, { cardMade: false }, s => !s.cardMade),
+        this.navBtn('Calendar', 'calendar', 3),
+        this.navBtn('Word detail', 'word', 4), this.navBtn('Add a word', 'add', 5),
+        this.navBtn('Collection', 'collection', 6), this.navBtn('Practice chat', 'chat', 7),
+        this.navBtn('Journal', 'journal', 8), this.navBtn('Journal entry', 'entry', 8),
+        this.navBtn('Profile', 'profile', 9)
+      ],
+      lightTokens, darkTokens, spacing
+    };
+  }
+}
+
+</script>
+</body>
+</html>
