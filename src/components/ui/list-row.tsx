@@ -56,9 +56,16 @@ export function ListRow({
     layout === "inline" ? (
       <>
         {leading}
+        {/* `min-w-0 truncate` is load-bearing, not tidiness. Without it a flex
+            item never shrinks below its text, so a long term ran off the right
+            edge of the row and was clipped by the pane with no ellipsis and no
+            hint that anything was missing — found by screenshotting /vocab at
+            375px with a 36-character word. The design's own rows omit it only
+            because its sample terms are all short; real terms run to
+            MAX_TERM_CHARS. */}
         <span
           className={cn(
-            "text-lg",
+            "min-w-0 truncate text-lg",
             muted ? "text-ink-3" : "text-ink",
             strikethrough && "line-through",
           )}

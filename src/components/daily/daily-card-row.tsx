@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cn } from "@/lib/ui/cn";
 import type { DailyCardItemView } from "@/lib/ui/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { vocabDetailHref } from "@/lib/vocab/links";
 
 /**
  * One word on the card: the term, and a one-line meaning.
@@ -26,7 +27,7 @@ export function DailyCardRow({
 }) {
   return (
     <Link
-      href={`/vocab/${item.id}`}
+      href={vocabDetailHref(item.id)}
       data-testid="daily-card-row"
       className={cn(
         "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-[3px] px-0.5 py-[11px]",

@@ -1,15 +1,16 @@
 import "server-only";
-import { and, count, desc, eq, gte, lt, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { dailyCardItems, vocabEntries } from "@/lib/db/schema";
-import type { VocabEntry, VocabSource } from "@/lib/db/types";
+import type { VocabEntry, VocabSource, VocabStatus } from "@/lib/db/types";
+import type { VocabCursor } from "@/lib/vocab/cursor";
 import type { EnrichmentErrorCode } from "@/lib/vocab/schemas";
 
 /**
- * Every Drizzle statement F3 issues. Route handlers and components do not build
- * queries inline — the convention set in `queries/profiles.ts`, and the reason
- * `userId` is the first parameter of every function here and appears in every
- * WHERE clause. There is no ambient current user at this layer.
+ * Every Drizzle statement F3 and F4 issue. Route handlers and components do not
+ * build queries inline — the convention set in `queries/profiles.ts`, and the
+ * reason `userId` is the first parameter of every function here and appears in
+ * every WHERE clause. There is no ambient current user at this layer.
  */
 
 /** Free-tier quota protection. The retry button stops offering itself here. */
@@ -270,4 +271,212 @@ export async function clearCorrection(
     .where(and(eq(vocabEntries.id, id), eq(vocabEntries.userId, userId)))
     .returning();
   return row ?? null;
+}
+
+/* ------------------------------- F4 collection ------------------------------ */
+
+/**
+ * The five columns a list row draws, plus the sort key.
+ *
+ * `sortKey` is `lower(term)` **as Postgres computed it**, carried out so the
+ * cursor can be byte-exact. Recomputing it in JS with `toLowerCase()` would
+ * agree for ASCII and disagree for the cases that matter (Turkish dotted I,
+ * final sigma), and the failure would be an invisible one-row gap in the middle
+ * of somebody's collection.
+ */
+const listColumns = {
+  id: vocabEntries.id,
+  term: vocabEntries.term,
+  definition: vocabEntries.definition,
+  status: vocabEntries.status,
+  enrichmentStatus: vocabEntries.enrichmentStatus,
+  sortKey: sql<string>`lower(${vocabEntries.term})`,
+};
+
+export type VocabListRow = {
+  id: string;
+  term: string;
+  definition: string | null;
+  status: VocabStatus;
+  enrichmentStatus: VocabEntry["enrichmentStatus"];
+  sortKey: string;
+};
+
+/**
+ * Substring search over the user's own rows, in term and definition.
+ *
+ * `position()` rather than `LIKE '%q%'`: neither is indexable, so they cost the
+ * same scan, but `position` has no metacharacters. `LIKE` would need every `%`,
+ * `_` and `\` escaped and an `ESCAPE` clause to stop a user searching for
+ * "100%" matching their entire collection — a whole class of bug that simply
+ * does not exist here.
+ *
+ * The scan is always bounded by `user_id` first. At the stated scale (hundreds
+ * of words, thousands at the outside) this is sub-millisecond, and a trigram
+ * index would be an extension plus an index for no measurable gain.
+ */
+const matchesQuery = (q: string) => sql`(
+  position(lower(${q}) in lower(${vocabEntries.term})) > 0
+  or position(lower(${q}) in lower(coalesce(${vocabEntries.definition}, ''))) > 0
+)`;
+
+/**
+ * One page of the collection, ordered `lower(term)` then `id`.
+ *
+ * Alphabetical and nothing else. The design ([R18]) draws A–Z groups with no
+ * sort control, and one order means one cursor shape, one index and no way for
+ * a page-2 request to arrive under a different ordering than page 1.
+ *
+ * `UNIQUE (user_id, lower(term))` is a functional index on exactly this key, so
+ * both the ordering and the cursor predicate are an index range scan.
+ *
+ * Ask for `limit + 1` and discard the extra to learn whether another page
+ * exists — a second `count(*)` per scroll would cost more than the row.
+ */
+export async function listVocabEntries(
+  userId: string,
+  opts: { q?: string; cursor?: VocabCursor | null; limit: number },
+): Promise<VocabListRow[]> {
+  const where = [eq(vocabEntries.userId, userId)];
+  if (opts.q) where.push(matchesQuery(opts.q));
+  if (opts.cursor) {
+    where.push(
+      sql`(lower(${vocabEntries.term}), ${vocabEntries.id}) > (${opts.cursor.term}::text, ${opts.cursor.id}::uuid)`,
+    );
+  }
+
+  return db
+    .select(listColumns)
+    .from(vocabEntries)
+    .where(and(...where))
+    .orderBy(sql`lower(${vocabEntries.term}) asc`, asc(vocabEntries.id))
+    .limit(opts.limit);
+}
+
+/** The whole collection's size. Drawn into the search field's placeholder. */
+export async function countVocabEntries(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(vocabEntries)
+    .where(eq(vocabEntries.userId, userId));
+  return row?.n ?? 0;
+}
+
+export type VocabEntryDetail = VocabEntry & {
+  /** True once the word has appeared on any daily card. [R1] refuses deletion. */
+  carded: boolean;
+};
+
+/**
+ * One entry, with the single fact the detail page cannot derive from it.
+ *
+ * Two statements rather than a correlated subquery, deliberately. Written as
+ * one, Drizzle renders a raw `sql` fragment's column references **unqualified**
+ * when it believes a single table is in scope — so
+ * `exists (select 1 from daily_card_items where vocab_entry_id = id)` became
+ * `daily_card_items.vocab_entry_id = daily_card_items.id`, which is false for
+ * every row that has ever existed. It threw nothing, returned a clean `false`,
+ * and would have shipped a Delete button on words with history. Both statements
+ * below are single-table index lookups on a page the user opens a handful of
+ * times a week; the cleverness was not buying anything.
+ *
+ * `limit(1)` rather than `count(*)`: the page asks whether the word has history,
+ * never how much, and the scan stops at the first row of
+ * `daily_card_items_vocab_idx`.
+ */
+export async function getVocabEntryDetail(
+  userId: string,
+  id: string,
+): Promise<VocabEntryDetail | null> {
+  const [entry] = await db
+    .select()
+    .from(vocabEntries)
+    .where(and(eq(vocabEntries.id, id), eq(vocabEntries.userId, userId)))
+    .limit(1);
+
+  if (!entry) return null;
+
+  const [item] = await db
+    .select({ id: dailyCardItems.id })
+    .from(dailyCardItems)
+    .where(eq(dailyCardItems.vocabEntryId, entry.id))
+    .limit(1);
+
+  return { ...entry, carded: Boolean(item) };
+}
+
+/**
+ * Retire a word from future daily cards, or put it back.
+ *
+ * `coalesce(mastered_at, now())` is what makes a double tap harmless: the
+ * timestamp records the *first* master of a contiguous run, so two devices
+ * PATCHing the same target converge instead of racing the clock. Un-mastering
+ * clears it, which is what makes a later re-master start a fresh run.
+ *
+ * `last_shown_on` is deliberately untouched. An un-mastered word rejoins the
+ * rotation at its old priority rather than jumping the queue, and F5 owns that
+ * column outright.
+ *
+ * **This never writes `daily_card_items`.** That is the whole of the roadmap's
+ * "mastering preserves history" requirement, satisfied by not having the code.
+ */
+export async function setVocabStatus(
+  userId: string,
+  id: string,
+  status: VocabStatus,
+): Promise<VocabEntry | null> {
+  const [row] = await db
+    .update(vocabEntries)
+    .set(
+      status === "mastered"
+        ? { status, masteredAt: sql`coalesce(${vocabEntries.masteredAt}, now())` }
+        : { status: "active", masteredAt: null },
+    )
+    .where(and(eq(vocabEntries.id, id), eq(vocabEntries.userId, userId)))
+    .returning();
+  return row ?? null;
+}
+
+export type DeleteOutcome = "deleted" | "in_use" | "not_found";
+
+/**
+ * Hard delete, or a refusal. There is no soft delete in v0.1.0 — [R1].
+ *
+ * A word with zero `daily_card_items` rows is the typo-recovery path and is
+ * removed outright; its `chat_sessions` row goes with it through the FK's
+ * `ON DELETE CASCADE` ([R5]: days are permanent, practice is not). A word that
+ * has ever been carded is refused, and the caller offers "mastered" instead.
+ *
+ * The `FOR UPDATE` is load-bearing. Without it, F5 creating today's card can
+ * insert a `daily_card_items` row between the check and the delete: we would
+ * observe zero references, delete, and F5's insert would fail against a missing
+ * FK target. Holding the entry row makes the two transactions serialise — the
+ * card commits first and the delete then refuses, or the delete commits first
+ * and F5 re-selects.
+ */
+export async function deleteVocabEntry(
+  userId: string,
+  id: string,
+): Promise<DeleteOutcome> {
+  return db.transaction(async (tx) => {
+    const [entry] = await tx
+      .select({ id: vocabEntries.id })
+      .from(vocabEntries)
+      .where(and(eq(vocabEntries.id, id), eq(vocabEntries.userId, userId)))
+      .limit(1)
+      .for("update");
+
+    if (!entry) return "not_found";
+
+    const [carded] = await tx
+      .select({ id: dailyCardItems.id })
+      .from(dailyCardItems)
+      .where(eq(dailyCardItems.vocabEntryId, id))
+      .limit(1);
+
+    if (carded) return "in_use";
+
+    await tx.delete(vocabEntries).where(eq(vocabEntries.id, id));
+    return "deleted";
+  });
 }
