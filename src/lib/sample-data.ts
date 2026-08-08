@@ -311,16 +311,6 @@ export const WEEK_STRIP: DayStripItem[] = [
   { date: "2026-09-18", day: 18, weekday: "S", mark: "made", isToday: true },
 ];
 
-/** September 2026 — 16 cards made, per the design's sample month. */
-export const MONTH = {
-  label: "September 2026",
-  firstWeekday: 2,
-  days: 30,
-  today: 18,
-  made: new Set([1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18]),
-  summary: "16 cards in September. 38 since you started.",
-};
-
 /**
  * Onboarding questions. The design prototype's placeholders asked things the
  * app does not ask ("How many words on a card?" — that is locked at six), so

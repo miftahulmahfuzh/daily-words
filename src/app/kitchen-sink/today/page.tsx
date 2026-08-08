@@ -8,6 +8,7 @@ import { Eyebrow } from "@/components/ui/text";
 import { Pill } from "@/components/ui/pill";
 import type { DailyCardItemView } from "@/lib/ui/types";
 import { WEEK_STRIP } from "@/lib/sample-data";
+import { CardEmpty } from "@/app/(app)/today/card-empty";
 
 /**
  * The /today layout under worst-case content, for the no-scroll spec.
@@ -18,6 +19,8 @@ import { WEEK_STRIP } from "@/lib/sample-data";
  * guarantee being proved is that no string can change a row's height.
  *
  * `?n=` sets the number of words so the spec can exercise 0, 1, 3 and 6.
+ * `?state=empty` swaps the nudge for F5's `CardEmpty` — the widest of /today's
+ * six card-region states, since it is the only one carrying two buttons.
  */
 /**
  * Both strings must OVERFLOW their line box at 375px, not merely fill it — the
@@ -42,13 +45,14 @@ function fixture(n: number): DailyCardItemView[] {
 export default async function KitchenSinkTodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ n?: string }>;
+  searchParams: Promise<{ n?: string; state?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
 
-  const { n } = await searchParams;
+  const { n, state } = await searchParams;
   const count = Math.min(Math.max(Number(n ?? 6), 0), 6);
   const items = fixture(count);
+  const empty = state === "empty";
 
   return (
     <Screen tabs>
@@ -64,7 +68,21 @@ export default async function KitchenSinkTodayPage({
           }
         />
 
-        {count === 0 ? (
+        {empty ? (
+          <CardEmpty
+            title="Every word mastered."
+            actions={
+              <>
+                <Button variant="filled" size="sm" fullWidth={false} href="/vocab/new">
+                  Add a word
+                </Button>
+                <Button variant="outline" size="sm" fullWidth={false} href="/vocab">
+                  Discover
+                </Button>
+              </>
+            }
+          />
+        ) : count === 0 ? (
           <NoCardYet
             action={
               <Button

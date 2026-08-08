@@ -7,6 +7,18 @@ export function ok<T>(data: T, status = 200): Response {
   return Response.json(data as object, { status })
 }
 
+/**
+ * Opt a response out of every cache between here and the phone.
+ *
+ * For anything whose correctness depends on *when* it was asked — what day it
+ * is, whether today's card exists yet. `dynamic = 'force-dynamic'` governs
+ * Next's own cache; this governs the browser's and any proxy in between.
+ */
+export function noStore(res: Response): Response {
+  res.headers.set('cache-control', 'no-store')
+  return res
+}
+
 export function fail(status: number, message: string, code = 'bad_request'): Response {
   return Response.json({ error: { code, message } } satisfies ApiError, { status })
 }

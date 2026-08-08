@@ -70,6 +70,39 @@ export function listGloss(item: VocabListItem): string {
 }
 
 /**
+ * The short part-of-speech tag beside a term on the daily card.
+ *
+ * F3 persists the full word — the LLM is asked for one of a fixed list — and the
+ * detail page prints it in full, which is right for a page with room. The card
+ * row has none: the tag sits on the term's line and every character it takes is
+ * a character the term loses before it ellipsises. `adjective` at 9 mono
+ * characters would cost roughly a fifth of the line on every row.
+ *
+ * `other` returns null rather than a tag: a label that says nothing is worse
+ * than no label, and the row is built to draw no tag at all.
+ */
+const POS_TAGS: Record<string, string> = {
+  noun: "n",
+  verb: "v",
+  adjective: "adj",
+  adverb: "adv",
+  pronoun: "pron",
+  preposition: "prep",
+  conjunction: "conj",
+  interjection: "interj",
+  determiner: "det",
+  phrase: "phr",
+  idiom: "idiom",
+  "phrasal verb": "phr v",
+  abbreviation: "abbr",
+};
+
+export function partOfSpeechTag(partOfSpeech: string | null): string | null {
+  if (!partOfSpeech) return null;
+  return POS_TAGS[partOfSpeech.toLowerCase()] ?? null;
+}
+
+/**
  * The detail page's term size, by length. Pure buckets — no measurement, no
  * layout thrash, and nothing that can disagree between server and client render.
  *
