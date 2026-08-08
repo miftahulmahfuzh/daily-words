@@ -311,38 +311,8 @@ export const WEEK_STRIP: DayStripItem[] = [
   { date: "2026-09-18", day: 18, weekday: "S", mark: "made", isToday: true },
 ];
 
-/**
- * Onboarding questions. The design prototype's placeholders asked things the
- * app does not ask ("How many words on a card?" — that is locked at six), so
- * these follow F7's five profile questions instead. See [R20].
- */
-export const ONBOARDING = [
-  {
-    prompt: "What do you do?",
-    kind: "text" as const,
-    placeholder: "Barnaby",
-  },
-  {
-    prompt: "What are you into?",
-    kind: "options" as const,
-    options: ["Books", "Film", "Music", "Sport", "Code", "Cooking"],
-    multi: true,
-  },
-  {
-    prompt: "What are you reading or watching now?",
-    kind: "text" as const,
-    placeholder: "Barnaby Rudge",
-  },
-  {
-    prompt: "Where do you actually use English?",
-    kind: "options" as const,
-    options: ["Work", "Online", "Travel", "Study", "Nobody really"],
-    multi: true,
-  },
-  {
-    prompt: "How should the chat treat you?",
-    kind: "options" as const,
-    options: ["Patient", "Blunt", "Playful"],
-    multi: false,
-  },
-];
+/* The `ONBOARDING` placeholder questions lived here until F7. They are gone:
+   the real five, their option slugs and their copy are now
+   `lib/profile/constants.ts`, which the UI, the zod schemas and the prompt
+   builder all read. A second list would be a set of chips the server rejects
+   and the client offers. */
