@@ -129,7 +129,13 @@ for (const value of [
   check(`hostile ${shown}`, parseOrigin(value), null)
 }
 
-/** A repeated `?from=` arrives as an array and is discarded, never sampled. */
+/**
+ * An array is discarded, never sampled.
+ *
+ * Note this is no longer the repeated-param case: measured on Next 15.5.23, a
+ * repeated `from` reaches the page as the *first* occurrence, a string, so this
+ * branch is defensive rather than load-bearing. See `parseOrigin`'s comment.
+ */
 check('array ["today"]', parseOrigin(['today']), null)
 check('array ["today","discover"]', parseOrigin(['today', 'discover']), null)
 check('array []', parseOrigin([]), null)
