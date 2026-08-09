@@ -407,6 +407,16 @@ throwing. Each cost real time.
   for the names of user-owned tables; a hit is a bug, not a refactor. Every other
   function there keeps `userId` first and in the WHERE clause, because creating
   and revoking are authenticated acts.
+- **The clipboard gets the bare URL, and the sheet keeps its heading.**
+  `navigator.share` is handed `{ title, url }` and **never a `text`** — iOS
+  concatenates `text` onto `url` for every plain-text target, *Copy* included, so
+  a `text: title` put `"genteel https://…/s/…"` on the clipboard and Safari's
+  address bar searched for it instead of navigating. `shareHandoff` in
+  `lib/share/policy.ts` builds both halves — the sheet object and the one plain
+  string the clipboard and the always-drawn selectable field share — so the
+  property is asserted by `share:check` rather than remembered at three call
+  sites. Only `text` was dropped: the sheet's heading is what a recipient reads
+  above the link, and it was never the thing that got pasted.
 - **The public share route needs two exemptions, and either one missing kills the
   feature invisibly.** `src/app/s/` is a **sibling of the `(app)` group**, like
   `/onboarding` and `/signin` — inside it, `requireOnboardedUser()` sends every

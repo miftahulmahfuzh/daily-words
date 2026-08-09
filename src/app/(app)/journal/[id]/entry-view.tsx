@@ -106,7 +106,7 @@ export function EntryView({
             entityType="journal"
             entityId={entry.id}
             /* An excerpt, never the source note. It is what a native share sheet
-               shows beside the link. */
+               shows above the link. */
             title={excerptFor(entry.text)}
             label={SHARE_JOURNAL_ACTION_LABEL}
             initialSlug={initialShareSlug}

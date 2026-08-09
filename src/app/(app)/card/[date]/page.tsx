@@ -101,7 +101,7 @@ export default async function CardPermalinkPage({
         <ShareButton
           entityType="card"
           entityId={card.id}
-          /* The date, never a name. It is what a share sheet shows beside the
+          /* The date, never a name. It is what a share sheet shows above the
              link, and it is the only honest one-line description of a day. */
           title={formatLocalDateLong(cardDate)}
           label={SHARE_CARD_ACTION_LABEL}
