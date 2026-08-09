@@ -192,7 +192,21 @@ example.
 ## There is exactly one modal in the app
 
 `src/components/gamification/badge-dialog.tsx`, on `/profile`, opened by tapping a
-badge row. A native `<dialog>` + `showModal()`, so the focus trap, Escape, the
+badge row **or a level row**. F22 widened its selection into a discriminated
+union rather than adding a second `<dialog>`: the focus trap, Escape, the
+backdrop and focus restoration are the UA's, and there is nothing to be gained
+from owning two of them. The file name still says "badge"; the component is the
+app's one detail panel.
+
+**One element, not just one component.** The level blocks and the badge shelf
+are two client islands with the stats grid between them, so the single instance
+lives in `profile-panels.tsx` — a provider that takes the server tree as
+`children` and hands the two islands an `open()` through context. Mounting a
+`<BadgeDialog>` inside each island instead put two `<dialog>` elements on the
+page, one of them permanently empty; `npm run test:layout`'s `locator("dialog")`
+resolved to two and that is how it was caught.
+
+A native `<dialog>` + `showModal()`, so the focus trap, Escape, the
 backdrop and focus restoration are the UA's rather than the app's. It is in the
 **top layer** — outside `.dw-screen`'s flex column and its `overflow: hidden` —
 which is what exempts it from [R19]'s height budget, and
@@ -206,8 +220,18 @@ Two things bite here and neither throws:
 - **No React `autoFocus` inside a `<dialog>`.** React focuses on *mount*, one
   commit before the effect calls `showModal()`, so the dialog records a child of
   its own as the element to restore focus to — and that child is unmounted on
-  close, dropping focus to `<body>`. `showModal()` already focuses the first
-  focusable descendant.
+  close, dropping focus to `<body>`. Focusing a child *after* `showModal()` in
+  the same effect is the correct form and is what the dialog now does.
+- **`showModal()` picks the first *focusable area*, not the first tab stop, and
+  Chromium makes a scroll container one.** `.dw-badge-dialog-body` carries
+  `overflow-y: auto`, so it won that race ahead of the Close button: the panel
+  opened with a 2px accent ring drawn across its full width and announced a
+  scrollable region instead of its content. Latent since F13 and only visible
+  once F22's shorter level content changed which element came first. **`tabIndex={-1}`
+  makes it worse, not better** — an explicit tabindex is still a focusable area,
+  so it wins every time. The fix is to name the target: `el.querySelector("button")
+  ?.focus()` after `showModal()`, which is unambiguous because Close is the only
+  control in the panel and nothing focusable may go in the hero band.
 - **A full-bleed child needs `overflow: clip` on the dialog.**
   `.dw-badge-dialog[open]` carries `border-radius: var(--r-card)` and no
   overflow, which was invisible while `p-5` kept every child off the corners.

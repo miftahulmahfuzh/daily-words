@@ -40,7 +40,9 @@ async function pageDoesNotScroll(page: Page) {
     return { scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
   });
   // +1 absorbs sub-pixel rounding at fractional device pixel ratios.
-  expect(scrollHeight, "the page scrolls").toBeLessThanOrEqual(clientHeight + 1);
+  expect(scrollHeight, "the page scrolls").toBeLessThanOrEqual(
+    clientHeight + 1,
+  );
 }
 
 async function tabBarIsOnScreen(page: Page) {
@@ -58,7 +60,9 @@ for (const scheme of SCHEMES) {
     test.use({ colorScheme: scheme });
 
     for (const n of COUNTS) {
-      test(`/today holds with ${n} word${n === 1 ? "" : "s"}`, async ({ page }) => {
+      test(`/today holds with ${n} word${n === 1 ? "" : "s"}`, async ({
+        page,
+      }) => {
         await page.goto(`/kitchen-sink/today?n=${n}`);
 
         await pageDoesNotScroll(page);
@@ -161,7 +165,10 @@ test("both card lines are clamped to exactly one line", async ({ page }) => {
     .getByTestId("daily-card-row")
     .evaluateAll((els) => els.map((el) => (el as HTMLElement).offsetHeight));
   const spread = Math.max(...heights) - Math.min(...heights);
-  expect(spread, `row heights differ too much: ${heights.join(", ")}`).toBeLessThanOrEqual(1);
+  expect(
+    spread,
+    `row heights differ too much: ${heights.join(", ")}`,
+  ).toBeLessThanOrEqual(1);
 });
 
 /**
@@ -174,10 +181,15 @@ test("both card lines are clamped to exactly one line", async ({ page }) => {
  *
  * The fixture at `/kitchen-sink/journal` carries both, in that order.
  */
-test("a long paste is clamped to three lines in the journal list", async ({ page }) => {
+test("a long paste is clamped to three lines in the journal list", async ({
+  page,
+}) => {
   await page.goto("/kitchen-sink/journal");
 
-  const titles = page.locator("a, div").getByText(/It was the best of times/).first();
+  const titles = page
+    .locator("a, div")
+    .getByText(/It was the best of times/)
+    .first();
   await expect(titles).toBeVisible();
 
   const measured = await titles.evaluate((el) => {
@@ -215,59 +227,133 @@ test("a long paste is clamped to three lines in the journal list", async ({ page
  *
  * `?badge=` opens it on load. A Playwright click would work too, but it puts one
  * more moving part between the assertion and the claim.
+ *
+ * **F22 gave the same dialog a second arm** — the level rows open it too, on a
+ * discriminated union rather than a second `<dialog>` — so the five assertions
+ * are driven over both. The level arm is not a smaller case of the badge one:
+ * its eyebrow is longer, it has no dates line, and its worst title is longer
+ * than any badge's.
  */
-for (const scheme of SCHEMES) {
-  test(`the badge dialog stays inside the viewport (${scheme})`, async ({ page }) => {
-    await page.emulateMedia({ colorScheme: scheme });
+const PANELS = [
+  {
     // `tolkien` carries the longest gloss in `badge-meta.ts`. If any badge
     // overruns the panel it is this one.
-    await page.goto("/kitchen-sink/profile?badge=tolkien");
+    name: "badge",
+    url: "/kitchen-sink/profile?badge=tolkien",
+    behind: "Leap Year Lexicographer",
+  },
+  {
+    // "Curator of Forgotten Tongues" is the longest title in either level table,
+    // and `?state=curator` is the fixture that resolves to it.
+    name: "level",
+    url: "/kitchen-sink/profile?state=curator&level=collector",
+    behind: "Curator of Forgotten Tongues",
+  },
+] as const;
 
-    const dialog = page.locator("dialog");
-    await expect(dialog).toBeVisible();
-    expect(
-      await dialog.evaluate((el: HTMLDialogElement) => el.open),
-      "the dialog is not in the modal top layer",
-    ).toBe(true);
+for (const scheme of SCHEMES) {
+  for (const panel of PANELS) {
+    test(`the ${panel.name} dialog stays inside the viewport (${scheme})`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(panel.url);
 
-    // 1 — the top layer costs the document nothing. This is the whole exemption.
-    await pageDoesNotScroll(page);
-
-    // 2 — and it did not push the frame either.
-    await tabBarIsOnScreen(page);
-
-    // 3 — the panel is inside the viewport on all four edges. `toBeInViewport`
-    //     would pass on a partially visible element, and a gloss clipped at the
-    //     bottom is exactly the failure being ruled out.
-    const box = await dialog.evaluate((el) => {
-      const r = el.getBoundingClientRect();
-      return { top: r.top, left: r.left, bottom: r.bottom, right: r.right };
-    });
-    const viewport = page.viewportSize()!;
-    expect(box.top, "the panel is off the top").toBeGreaterThanOrEqual(-1);
-    expect(box.left, "the panel is off the left").toBeGreaterThanOrEqual(-1);
-    expect(box.bottom, "the panel is below the fold").toBeLessThanOrEqual(
-      viewport.height + 1,
-    );
-    expect(box.right, "the panel is off the right").toBeLessThanOrEqual(
-      viewport.width + 1,
-    );
-
-    // 4 — the UA focus trap is doing its job. Nothing in the app implements
-    //     this; if it stops being true, `showModal()` was not called.
-    expect(
-      await page.evaluate(() => document.querySelector("dialog")!.contains(document.activeElement)),
-      "focus escaped the dialog",
+      const dialog = page.locator("dialog");
+      await expect(dialog).toBeVisible();
+      expect(
+        await dialog.evaluate((el: HTMLDialogElement) => el.open),
+        "the dialog is not in the modal top layer",
       ).toBe(true);
 
-    // 5 — Escape closes it, and the shelf is still behind it. `onCancel` is
-    //     what keeps React state and DOM state from diverging here; without it
-    //     the element shuts and the component still believes it is open.
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
-    await expect(page.getByText("Leap Year Lexicographer")).toBeVisible();
-  });
+      // 1 — the top layer costs the document nothing. This is the whole exemption.
+      await pageDoesNotScroll(page);
+
+      // 2 — and it did not push the frame either.
+      await tabBarIsOnScreen(page);
+
+      // 3 — the panel is inside the viewport on all four edges. `toBeInViewport`
+      //     would pass on a partially visible element, and a gloss clipped at the
+      //     bottom is exactly the failure being ruled out.
+      const box = await dialog.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { top: r.top, left: r.left, bottom: r.bottom, right: r.right };
+      });
+      const viewport = page.viewportSize()!;
+      expect(box.top, "the panel is off the top").toBeGreaterThanOrEqual(-1);
+      expect(box.left, "the panel is off the left").toBeGreaterThanOrEqual(-1);
+      expect(box.bottom, "the panel is below the fold").toBeLessThanOrEqual(
+        viewport.height + 1,
+      );
+      expect(box.right, "the panel is off the right").toBeLessThanOrEqual(
+        viewport.width + 1,
+      );
+
+      // 4 — the UA focus trap is doing its job. Nothing in the app implements
+      //     this; if it stops being true, `showModal()` was not called.
+      expect(
+        await page.evaluate(() =>
+          document.querySelector("dialog")!.contains(document.activeElement),
+        ),
+        "focus escaped the dialog",
+      ).toBe(true);
+
+      // 4b — and it landed on Close, not on the scrollable body. `showModal()`
+      //      picks the first FOCUSABLE AREA, which is not the first tab stop,
+      //      and Chromium makes an `overflow-y: auto` container one — so the
+      //      body won, drawing a 2px accent ring across the panel and
+      //      announcing a scrollable region instead of the content. The effect
+      //      now chooses the target explicitly, after `showModal()`.
+      expect(
+        await page.evaluate(() => document.activeElement?.tagName),
+        "initial focus is not the Close button",
+      ).toBe("BUTTON");
+
+      // 5 — Escape closes it, and the page behind it is still there. `onCancel` is
+      //     what keeps React state and DOM state from diverging here; without it
+      //     the element shuts and the component still believes it is open.
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      await expect(page.getByText(panel.behind)).toBeVisible();
+    });
+  }
 }
+
+/**
+ * Focus goes back to the row that was tapped, on both arms of the dialog.
+ *
+ * The UA does this — `showModal()` records the previously focused element — but
+ * it is exactly the property CLAUDE.md's `autoFocus` note says is silently lost
+ * when something inside the dialog takes focus one commit too early. F22's
+ * explicit `.focus()` on the Close button runs *after* `showModal()` for that
+ * reason, and this is the assertion that says so.
+ *
+ * Driven by a real click rather than by `?badge=`/`?level=`, because a panel
+ * opened on load has no row to go back to.
+ */
+test("closing the panel returns focus to the row that opened it", async ({ page }) => {
+  await page.goto("/kitchen-sink/profile?state=full");
+
+  for (const name of [
+    /Margin Scribbler, streak level/,
+    /Bag Man of Nouns, collector level/,
+    /Burning the Midnight Oil/,
+  ]) {
+    const row = page.getByRole("button", { name });
+    const label = await row.getAttribute("aria-label");
+
+    await row.click();
+    await expect(page.locator("dialog")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("dialog")).toBeHidden();
+
+    expect(
+      await page.evaluate(() => document.activeElement?.getAttribute("aria-label")),
+      "focus did not return to the row that was tapped",
+    ).toBe(label);
+  }
+});
 
 /**
  * The panel scrolls its own body rather than clipping, and only when it must.
@@ -275,7 +361,9 @@ for (const scheme of SCHEMES) {
  * degradation takes over. Both halves matter — a panel that always scrolls has
  * hidden the earned-on date from every user on every badge.
  */
-test("the badge panel does not scroll internally at the design target", async ({ page }) => {
+test("the badge panel does not scroll internally at the design target", async ({
+  page,
+}) => {
   await page.goto("/kitchen-sink/profile?badge=tolkien");
   await expect(page.locator("dialog")).toBeVisible();
 
@@ -284,7 +372,10 @@ test("the badge panel does not scroll internally at the design target", async ({
     .evaluate((el) => el.scrollHeight - el.clientHeight);
 
   if (!DESIGN_TARGET_PROJECTS.includes(test.info().project.name)) return;
-  expect(overflow, "the badge panel scrolls at the design target").toBeLessThanOrEqual(1);
+  expect(
+    overflow,
+    "the badge panel scrolls at the design target",
+  ).toBeLessThanOrEqual(1);
 });
 
 /**
@@ -320,15 +411,26 @@ test("the badge hero bleeds to both edges of the panel", async ({ page }) => {
   });
 
   // Flush to the border on both sides — the 1px border is the only gap allowed.
-  expect(hero.l - panel.l, "the hero is inset on the left").toBeLessThanOrEqual(1.5);
-  expect(panel.r - hero.r, "the hero is inset on the right").toBeLessThanOrEqual(1.5);
+  expect(hero.l - panel.l, "the hero is inset on the left").toBeLessThanOrEqual(
+    1.5,
+  );
+  expect(
+    panel.r - hero.r,
+    "the hero is inset on the right",
+  ).toBeLessThanOrEqual(1.5);
 
   // 16 / 9 = 1.7778, and it must not be a dvh clamp in disguise.
   expect(ratio, "the hero is not 16/9").toBeCloseTo(16 / 9, 2);
 
   if (!DESIGN_TARGET_PROJECTS.includes(test.info().project.name)) return;
-  expect(hero.w, "the dialog content box is not 329px at 375").toBeCloseTo(329, 0);
-  expect(hero.h, "the hero is not 185px at the design target").toBeCloseTo(185.06, 0);
+  expect(hero.w, "the dialog content box is not 329px at 375").toBeCloseTo(
+    329,
+    0,
+  );
+  expect(hero.h, "the hero is not 185px at the design target").toBeCloseTo(
+    185.06,
+    0,
+  );
 });
 
 /**
@@ -339,7 +441,9 @@ test("the badge hero bleeds to both edges of the panel", async ({ page }) => {
  * longest level title in either table is the widest thing on the page at 375px,
  * and `min-w-0` on the text column is the only thing keeping it on screen.
  */
-test("the profile level marks do not push the page sideways", async ({ page }) => {
+test("the profile level marks do not push the page sideways", async ({
+  page,
+}) => {
   await page.goto("/kitchen-sink/profile?state=full");
   await tabBarIsOnScreen(page);
 
@@ -370,7 +474,9 @@ test("the collection block draws no mark at zero words", async ({ page }) => {
   await expect(page.locator(".dw-level-mark")).toHaveCount(1);
 });
 
-test("the journal list does not scroll sideways and keeps its tab bar", async ({ page }) => {
+test("the journal list does not scroll sideways and keeps its tab bar", async ({
+  page,
+}) => {
   await page.goto("/kitchen-sink/journal");
 
   await tabBarIsOnScreen(page);
@@ -434,7 +540,10 @@ for (const scheme of SCHEMES) {
       };
     });
 
-    expect(measured.height, "the header wrapped to two lines").toBeLessThanOrEqual(72);
+    expect(
+      measured.height,
+      "the header wrapped to two lines",
+    ).toBeLessThanOrEqual(72);
     expect(
       measured.trailingTop,
       "the trailing block dropped below the title's baseline row",
@@ -512,7 +621,9 @@ for (const scheme of SCHEMES) {
     ).toBeVisible();
     // The line the design specified verbatim, reused rather than rewritten, so a
     // public-page rewrite cannot drop it.
-    await expect(page.getByText("Written by the machine. Keep or discard.")).toBeVisible();
+    await expect(
+      page.getByText("Written by the machine. Keep or discard."),
+    ).toBeVisible();
     await expect(page.locator("nav[aria-label='Primary']")).toHaveCount(0);
   });
 }

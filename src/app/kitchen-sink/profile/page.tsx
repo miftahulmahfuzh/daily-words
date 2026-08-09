@@ -3,7 +3,9 @@ import { Screen, ScreenBody } from "@/components/layout/screen";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Eyebrow, Prose } from "@/components/ui/text";
 import { BadgeShelf } from "@/app/(app)/profile/badge-shelf";
-import { LevelBlock } from "@/app/(app)/profile/level-block";
+import { LevelBlocks } from "@/app/(app)/profile/level-blocks";
+import { badgeSelection, levelSelection } from "@/app/(app)/profile/panel-selection";
+import { ProfilePanels } from "@/app/(app)/profile/profile-panels";
 import { StatsGrid } from "@/app/(app)/profile/stats-grid";
 import { BADGE_CATALOG } from "@/lib/gamification/badges";
 import { resolveCollectorLevel, resolveStreakLevel } from "@/lib/gamification/levels";
@@ -20,7 +22,8 @@ import { formatLocalDateLong } from "@/lib/time/local-date";
  *   ?state=nowords  cards, zero manually added words ([R13]'s null level)
  *   ?state=empty    a brand-new user
  *
- *   ?badge=<key>    opens F13's badge dialog on load
+ *   ?badge=<key>            opens F13's badge dialog on load
+ *   ?level=streak|collector opens F22's level arm of the same dialog
  *
  * `?badge=` is what makes the modal reviewable at 375px in both colour schemes
  * without a session, and it is the target `tests/e2e/no-scroll.spec.ts` drives:
@@ -29,10 +32,14 @@ import { formatLocalDateLong } from "@/lib/time/local-date";
  * `?badge=leap_day` is unearned and `?badge=tolkien` is earned twice, which is
  * both of the dialog's two states.
  *
+ * `?level=` is the same trick for the same reason. `?level=collector` at
+ * `?state=curator` selects "Curator of Forgotten Tongues", the longest title in
+ * either table, which is the level arm's worst case.
+ *
  * Gated off in production, like the rest of /kitchen-sink.
  */
 
-type State = "full" | "lapsed" | "nowords" | "empty";
+type State = "full" | "lapsed" | "nowords" | "empty" | "curator";
 
 function fixture(state: State): ProfileStats {
   const base = {
@@ -77,7 +84,10 @@ function fixture(state: State): ProfileStats {
     lastAwardedOn: last,
   }));
 
-  const words = state === "nowords" ? 0 : 86;
+  // 500 gives "Curator of Forgotten Tongues", the longest title in either level
+  // table and therefore the widest thing the level row and the level panel ever
+  // have to hold. F22 added it for exactly that.
+  const words = state === "nowords" ? 0 : state === "curator" ? 500 : 86;
 
   return {
     ...base,
@@ -97,39 +107,54 @@ function fixture(state: State): ProfileStats {
 export default async function KitchenSinkProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; badge?: string }>;
+  searchParams: Promise<{ state?: string; badge?: string; level?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
 
-  const { state, badge } = await searchParams;
+  const { state, badge, level } = await searchParams;
   const stats = fixture((state as State) ?? "full");
+
+  // Resolved HERE, on the server, and not inside either island: the builders
+  // live in `panel-selection.ts`, which carries no `"use client"` for exactly
+  // this reason — every export of a client module is a client reference and
+  // calling one on the server throws.
+  const initialSelection =
+    level === "streak" || level === "collector"
+      ? levelSelection(level, level === "streak" ? stats.streakLevel : stats.collectorLevel)
+      : badge
+        ? badgeSelection(stats.badges, badge)
+        : null;
 
   return (
     <Screen tabs>
       <ScreenBody scroll className="pb-4">
-        <div className="flex shrink-0 flex-col gap-5 pb-5.5">
-          <Eyebrow>{stats.user.name}</Eyebrow>
-          <LevelBlock kind="streak" label="Streak" level={stats.streakLevel} />
-          <LevelBlock kind="collector" label="Collection" level={stats.collectorLevel} />
-        </div>
+        <ProfilePanels initialSelection={initialSelection}>
+          <div className="flex shrink-0 flex-col gap-5 pb-5.5">
+            <Eyebrow>{stats.user.name}</Eyebrow>
+            <LevelBlocks
+              streakLevel={stats.streakLevel}
+              collectorLevel={stats.collectorLevel}
+            />
+          </div>
 
-        {stats.sinceDate === null ? (
-          <EmptyState
-            className="flex-none py-6"
-            title="The pocket is empty"
-            body="It starts with one card."
-            action={{ label: "Make today’s card", href: "/today" }}
-          />
-        ) : (
-          <>
-            <StatsGrid stats={stats} />
-            <Prose className="shrink-0 py-4.5 pb-6">
-              Keeping a card since {formatLocalDateLong(stats.sinceDate)}.
-            </Prose>
-          </>
-        )}
+          {stats.sinceDate === null ? (
+            <EmptyState
+              className="flex-none py-6"
+              title="The pocket is empty"
+              body="It starts with one card."
+              action={{ label: "Make today’s card", href: "/today" }}
+            />
+          ) : (
+            <>
+              <StatsGrid stats={stats} />
+              <Prose className="shrink-0 py-4.5 pb-6">
+                Keeping a card since {formatLocalDateLong(stats.sinceDate)}.
+              </Prose>
+            </>
+          )}
 
-        <BadgeShelf badges={stats.badges} initialBadgeKey={badge} />
+          <BadgeShelf badges={stats.badges} />
+        </ProfilePanels>
       </ScreenBody>
     </Screen>
   );

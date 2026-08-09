@@ -8,7 +8,8 @@ import { signOutAction } from "@/lib/auth/actions";
 import { getProfileStats } from "@/lib/gamification/profile-stats";
 import { formatLocalDateLong } from "@/lib/time/local-date";
 import { BadgeShelf } from "./badge-shelf";
-import { LevelBlock } from "./level-block";
+import { LevelBlocks } from "./level-blocks";
+import { ProfilePanels } from "./profile-panels";
 import { StatsGrid } from "./stats-grid";
 
 /**
@@ -26,10 +27,11 @@ import { StatsGrid } from "./stats-grid";
  * done — which is why the counters vanish at zero cards rather than reading
  * "0 · 0", and why the badge shelf still shows all fourteen names.
  *
- * F13 made those rows tappable. This page is unchanged by it — still a server
- * component, still `force-dynamic`, still passing the same plain-JSON
- * `EarnedBadge[]`. The dialog, its state and its client boundary all live inside
- * `BadgeShelf`.
+ * F13 made those rows tappable and F22 made the level blocks tappable too. This
+ * page is unchanged by either — still a server component, still `force-dynamic`,
+ * still passing the same plain-JSON payloads. The dialog and its state live in
+ * `ProfilePanels`, which takes this tree as `children`; the two islands that can
+ * open it are `LevelBlocks` and `BadgeShelf`.
  */
 export const dynamic = "force-dynamic";
 
@@ -40,38 +42,43 @@ export default async function ProfilePage() {
   return (
     <Screen tabs>
       <ScreenBody scroll className="pb-4">
-        <div className="flex shrink-0 flex-col gap-5 pb-5.5">
-          <Eyebrow>{stats.user.name ?? stats.user.email}</Eyebrow>
-          {/* Both tables, always. The streak level is keyed on the *longest*
-              streak, so a lapse never takes a title away. */}
-          <LevelBlock kind="streak" label="Streak" level={stats.streakLevel} />
-          <LevelBlock
-            kind="collector"
-            label="Collection"
-            level={stats.collectorLevel}
-          />
-        </div>
+        {/* F22: one `<dialog>` for the whole page, and the only thing that may
+            open it. The level blocks and the badge shelf are two client islands
+            with the stats grid between them, so the selection state cannot be
+            lifted into a component that renders both — it is a context, and the
+            tree below stays server-rendered because it arrives as `children`. */}
+        <ProfilePanels>
+          <div className="flex shrink-0 flex-col gap-5 pb-5.5">
+            <Eyebrow>{stats.user.name ?? stats.user.email}</Eyebrow>
+            {/* Both tables, always. The streak level is keyed on the *longest*
+                streak, so a lapse never takes a title away. */}
+            <LevelBlocks
+              streakLevel={stats.streakLevel}
+              collectorLevel={stats.collectorLevel}
+            />
+          </div>
 
-        {/* Branching on `sinceDate` rather than on `isEmpty`, which is the same
-            question — both are "has this user ever made a card" — but this one
-            also narrows the date for the line below it. */}
-        {stats.sinceDate === null ? (
-          <EmptyState
-            className="flex-none py-6"
-            title="The pocket is empty"
-            body="It starts with one card."
-            action={{ label: "Make today’s card", href: "/today" }}
-          />
-        ) : (
-          <>
-            <StatsGrid stats={stats} />
-            <Prose className="shrink-0 py-4.5 pb-6">
-              Keeping a card since {formatLocalDateLong(stats.sinceDate)}.
-            </Prose>
-          </>
-        )}
+          {/* Branching on `sinceDate` rather than on `isEmpty`, which is the same
+              question — both are "has this user ever made a card" — but this one
+              also narrows the date for the line below it. */}
+          {stats.sinceDate === null ? (
+            <EmptyState
+              className="flex-none py-6"
+              title="The pocket is empty"
+              body="It starts with one card."
+              action={{ label: "Make today’s card", href: "/today" }}
+            />
+          ) : (
+            <>
+              <StatsGrid stats={stats} />
+              <Prose className="shrink-0 py-4.5 pb-6">
+                Keeping a card since {formatLocalDateLong(stats.sinceDate)}.
+              </Prose>
+            </>
+          )}
 
-        <BadgeShelf badges={stats.badges} />
+          <BadgeShelf badges={stats.badges} />
+        </ProfilePanels>
 
         {/* F7's row and F1's sign-out, kept at the foot where the page turns
             from a record into settings. */}
