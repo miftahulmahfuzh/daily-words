@@ -17,6 +17,8 @@
  * server at all. `autoCorrect="off"` is what makes the whole correction path
  * reachable, and only a real iPhone can confirm it. F14 §7 lists it.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { normalizeForDedup } from '../src/lib/vocab/dedup'
 import {
   ENRICHMENT_COPY,
@@ -33,6 +35,13 @@ import {
   createVocabResponseSchema,
 } from '../src/lib/vocab/schemas'
 import type { VocabStatus } from '../src/lib/vocab/schemas'
+import {
+  VOCAB_CLIENT_INDEX_MAX,
+  canIndexLocally,
+  filterBySearch,
+  matchesSearch,
+  searchNeedle,
+} from '../src/lib/vocab/search'
 
 let failures = 0
 
@@ -258,6 +267,156 @@ check(
   ENRICHMENT_COPY.unverified_spelling.message.startsWith('Kept as typed.'),
   true,
 )
+
+/* ------------------- §5 the collection search rule (F19) -------------------- */
+
+section('§5 the search filter is a transcription of the SQL, not of dedup.ts')
+
+/**
+ * The oracle: `matchesQuery` in `lib/db/queries/vocab.ts`, re-read in JS.
+ *
+ *   position(lower($q) in lower(term)) > 0
+ *   or position(lower($q) in lower(coalesce(definition, ''))) > 0
+ *
+ * `position(x in y) > 0` is `y.indexOf(x) !== -1`. Written out longhand rather
+ * than by calling `matchesSearch`, because a check that calls the thing it is
+ * checking asserts nothing.
+ */
+function sqlOracle(item: { term: string; definition: string | null }, q: string): boolean {
+  const needle = q.trim().slice(0, 64).toLowerCase()
+  if (needle === '') return true
+  return (
+    item.term.toLowerCase().indexOf(needle) !== -1 ||
+    (item.definition ?? '').toLowerCase().indexOf(needle) !== -1
+  )
+}
+
+const ROWS: { term: string; definition: string | null }[] = [
+  { term: 'genteel', definition: 'Polite, refined, or respectable.' },
+  { term: 'Café', definition: 'A small restaurant selling light meals.' },
+  { term: 'naïve', definition: null },
+  { term: 'sober', definition: 'Not affected by alcohol.' },
+  { term: 'sob', definition: 'To weep with convulsive gasps.' },
+  { term: 'i.e.', definition: 'That is; in other words.' },
+  { term: 'margin', definition: 'A 100% increase in the edge of a page.' },
+  { term: 'winnow', definition: 'To blow a current of air through grain.' },
+]
+
+const QUERIES = [
+  'gen', 'GEN', 'Gen', 'cafe', 'café', 'CAFÉ', 'naive', 'naïve',
+  'sob', 'sober', '100%', '_', '\\', 'i.e.', 'i.e', '', '   ',
+  'polite', 'POLITE', 'grain', 'zzz', 'e',
+]
+
+for (const q of QUERIES) {
+  const needle = searchNeedle(q)
+  check(
+    `matchesSearch agrees with the SQL for ${JSON.stringify(q)}`,
+    ROWS.map((row) => matchesSearch(row, needle)),
+    ROWS.map((row) => sqlOracle(row, q)),
+  )
+}
+
+// The three that would silently change meaning if someone reached for the wrong
+// module, spelled out so a regression names itself.
+check('diacritics are NOT folded — cafe does not find Café', matchesSearch(ROWS[1], searchNeedle('cafe')), false)
+check('…and café does', matchesSearch(ROWS[1], searchNeedle('café')), true)
+check('% is a literal, not a wildcard', ROWS.filter((r) => matchesSearch(r, searchNeedle('100%'))).length, 1)
+check('a lone _ matches nothing', ROWS.filter((r) => matchesSearch(r, searchNeedle('_'))).length, 0)
+check('a lone backslash matches nothing', ROWS.filter((r) => matchesSearch(r, searchNeedle('\\'))).length, 0)
+check('the trailing full stop is NOT stripped — i.e. is searched as typed', matchesSearch(ROWS[5], searchNeedle('i.e.')), true)
+check('a null definition never throws', matchesSearch(ROWS[2], searchNeedle('weep')), false)
+check('an empty needle matches every row', ROWS.every((r) => matchesSearch(r, searchNeedle('  '))), true)
+
+// searchNeedle: trim, then slice, then lowercase — in that order.
+check('searchNeedle trims', searchNeedle('  gen  '), 'gen')
+check('searchNeedle lowercases', searchNeedle('GEN'), 'gen')
+check('searchNeedle caps at MAX_SEARCH_CHARS', searchNeedle('x'.repeat(200)).length, 64)
+check('searchNeedle trims before slicing', searchNeedle(' ' + 'x'.repeat(64) + ' ').length, 64)
+
+// Order is the database's and must survive the filter untouched.
+const ordered = filterBySearch([...ROWS], searchNeedle('e'))
+check(
+  'filterBySearch preserves the database order',
+  ordered.map((r) => r.term),
+  ROWS.filter((r) => matchesSearch(r, searchNeedle('e'))).map((r) => r.term),
+)
+check('an empty needle returns the same array reference', filterBySearch(ROWS, '') === ROWS, true)
+
+section('§5b the client-index ceiling is a number somebody checked')
+
+check('at the ceiling, local', canIndexLocally(VOCAB_CLIENT_INDEX_MAX), true)
+check('one over, server', canIndexLocally(VOCAB_CLIENT_INDEX_MAX + 1), false)
+check('an empty collection is local', canIndexLocally(0), true)
+
+/**
+ * The arithmetic behind the constant. A worst-case row, serialised, times the
+ * ceiling, against a raw-payload budget of 400 kB (~70 kB brotli). Raising
+ * VOCAB_CLIENT_INDEX_MAX without raising the budget fails here rather than on a
+ * user's phone.
+ */
+const WORST_ROW = JSON.stringify({
+  id: '3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+  term: 'intellectualisation',
+  definition: 'x'.repeat(110),
+  status: 'active',
+  enrichmentStatus: 'ready',
+})
+const budget = VOCAB_CLIENT_INDEX_MAX * WORST_ROW.length
+console.log(`  note worst-case payload at the ceiling: ${Math.round(budget / 1024)} kB raw`)
+check('the whole-collection payload stays under 400 kB raw', budget < 400_000, true)
+
+/* -------------- §6 the four things a future edit would break --------------- */
+
+section('§6 structural properties of the collection search')
+
+const root = join(import.meta.dirname, '..')
+const read = (rel: string) => readFileSync(join(root, rel), 'utf8')
+
+const searchModule = read('src/lib/vocab/search.ts')
+const mineTab = read('src/components/vocab/mine-tab.tsx')
+const mineClient = read('src/components/vocab/mine-client.tsx')
+const vocabSearch = read('src/components/vocab/vocab-search.tsx')
+
+// 1. The rule must not become dedup's or normalize's. Either import would change
+//    what the search means and make the browser disagree with the SQL.
+//    Anchored to `^import` on purpose: search.ts's own docblock names both files
+//    in prose, and it should keep being allowed to.
+check(
+  'search.ts imports neither dedup.ts nor normalize.ts',
+  /^import[^\n]*vocab\/(dedup|normalize)/m.test(searchModule),
+  false,
+)
+
+// 2. toLocaleLowerCase would make the search depend on the phone's language.
+//    Matched as a *call* — the docblock says the word, and must keep saying it.
+check('search.ts uses no locale-sensitive case mapping', searchModule.includes('.toLocaleLowerCase('), false)
+
+// 3. The local branch must not filter on the server. If it does,
+//    history.replaceState starts pointing a history entry at a tree that was
+//    rendered for a different query — silently, and only on back.
+check(
+  'mine-tab.tsx passes q to exactly one query (the server-mode branch)',
+  (mineTab.match(/q: q \|\| undefined/g) ?? []).length,
+  1,
+)
+
+// 4. The trap CLAUDE.md documents: one value import of a zod schema put all of
+//    zod in /vocab/new, 73 kB -> 4.6 kB once it was type-only. Both client
+//    islands import VocabListItem and both must import it as a type.
+for (const [name, source] of [
+  ['mine-client.tsx', mineClient],
+  ['vocab-search.tsx', vocabSearch],
+  ['vocab-list.tsx', read('src/components/vocab/vocab-list.tsx')],
+] as const) {
+  const valueImport = /^import \{[^}]*\} from ["']@\/lib\/vocab\/schemas["']/m.test(source)
+  check(`${name} imports schemas.ts as a type only`, valueImport, false)
+}
+
+// 5. The field must not grow a router again. Everything URL-shaped lives in
+//    mine-client.tsx, which is the only file that knows which mode it is in.
+check('vocab-search.tsx imports nothing from next/navigation', vocabSearch.includes('next/navigation'), false)
+check('vocab-search.tsx holds no state', vocabSearch.includes('useState'), false)
 
 /* ---------------------------------- Result ---------------------------------- */
 

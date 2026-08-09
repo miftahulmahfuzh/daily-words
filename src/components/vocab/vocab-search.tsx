@@ -1,66 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { TextInput } from "@/components/ui/text-input";
 import { MAX_SEARCH_CHARS } from "@/lib/vocab/format";
-import { vocabListHref } from "@/lib/vocab/links";
 
 /**
- * The collection's one control.
+ * The collection's one control. A controlled input, and nothing else.
  *
- * The search term lives in the **URL**, not in local state, and that is the
- * load-bearing decision for the whole screen: the user searches "gen", taps a
- * word, presses back, and Next.js restores the same filtered list at the same
- * scroll offset because the URL never changed. `useState` in a parent loses
- * that on every navigation.
+ * It holds no state, reads no router and writes no URL. All three used to live
+ * here, and the combination is what made a typed character visibly disappear:
+ * the component kept one `urlQ` slot that meant both "what we asked the URL to
+ * become" and "what the server says the URL is", and a render-phase sync read
+ * the disagreement between the two — which lasts for the whole of a round trip —
+ * as "the URL moved underneath us", and reverted the field to the stale server
+ * value. See `mine-client.tsx`, which now owns all of it and keeps the two facts
+ * apart.
  *
- * `replace`, not `push` — otherwise the back button walks the user backwards
- * through "g", "ge", "gen" instead of leaving the screen.
- *
- * No clear button of its own: `type="search"` gives iOS Safari a native one,
- * and the no-matches empty state carries a "Clear search" action for everyone
- * else. A third affordance inside a 40px field is chrome, not help.
+ * No clear button of its own: `type="search"` gives iOS Safari a native one, and
+ * the no-matches empty state carries a "Clear search" action for everyone else.
+ * A third affordance inside a 40px field is chrome, not help.
  */
 export function VocabSearch({
-  initialQ,
+  value,
+  onChange,
   total,
 }: {
-  /** What the URL currently holds. The source of truth. */
-  initialQ: string;
+  value: string;
+  /** Called with the raw field value. Normalisation is the parent's business. */
+  onChange: (next: string) => void;
+  /** Size of the whole collection, ignoring the search. Placeholder only. */
   total: number;
 }) {
-  const router = useRouter();
-  const [value, setValue] = useState(initialQ);
-  /**
-   * What we believe the URL holds. Without it, "Clear search" navigates to
-   * `/vocab`, the debounce below sees `value` still reading "gen", and pushes
-   * the query straight back — the button would visibly undo itself.
-   */
-  const [urlQ, setUrlQ] = useState(initialQ);
-
-  if (initialQ !== urlQ) {
-    // The URL moved underneath us: back button, or a link elsewhere on the page.
-    setUrlQ(initialQ);
-    setValue(initialQ);
-  }
-
-  useEffect(() => {
-    const next = value.trim();
-    if (next === urlQ) return;
-    const timer = setTimeout(() => {
-      setUrlQ(next);
-      router.replace(vocabListHref({ q: next || undefined }), { scroll: false });
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [value, urlQ, router]);
-
   return (
     <TextInput
       type="search"
       name="q"
       value={value}
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => onChange(e.target.value)}
       maxLength={MAX_SEARCH_CHARS}
       inputMode="search"
       enterKeyHint="search"
