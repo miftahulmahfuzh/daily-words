@@ -402,7 +402,7 @@ Hard rules, asserted by `stats:check` (§8):
 | `world_book_day` | The Bard’s Regard | A card made on 23 April, World Book and Copyright Day. | UNESCO chose 23 April because Shakespeare and Cervantes are both recorded as dying on it in 1616 — on two different calendars, ten days apart, which is a small lesson in how records work. |
 | `fathers_day` | For the Old Man | A card made on the third Sunday of June. | Always a Sunday, so it always arrives with the Sunday badge attached. |
 | `indonesia_independence` | National Speaker | A card made on 17 August, Indonesian Independence Day. | Proclaimed in 1945 in a borrowed house on a Friday morning. A day for speeches, and this is a shop that sells the words for them. |
-| `ibu` | Ibu Would Be Proud | A card made on 22 December, Hari Ibu. | Indonesian Mother’s Day, dated to the first Indonesian Women’s Congress in 1928 rather than to a greetings-card season. |
+| `ibu` | Mama Would Be Proud | A card made on 22 December, Hari Ibu. | Indonesian Mother’s Day, dated to the first Indonesian Women’s Congress in 1928 rather than to a greetings-card season. |
 | `christmas` | Ghost of Christmas Vocab | A card made on 25 December. | Dickens sent three ghosts and each of them had a speech. This one shows six words and leaves. |
 | `year_end` | Last Word of the Year | A card made on 31 December. | The final entry before the book is closed. Whatever the sixth word turned out to be, it stands. |
 | `leap_day` | Leap Year Lexicographer | A card made on 29 February. | Available on about one day in every one thousand four hundred and sixty-one. The rarest thing on this shelf, and nothing about it is difficult. |

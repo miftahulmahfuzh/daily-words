@@ -44,3 +44,13 @@ next-env.d.ts
 # Playwright
 /test-results/
 /playwright-report/
+
+# Badge art candidates — every attempt plus its prompt sidecar and its crops.
+# Source art (assets/badges/<key>.png) IS committed; attempts are not.
+assets/badges/_candidates/
+
+# Crops written by check_badge_art.py beside whatever it measured. Derived from
+# a committed control, so committing them is noise.
+assets/badges/_controls/*.themes.png
+assets/badges/_controls/*.ring.png
+assets/badges/_controls/*.centre.png

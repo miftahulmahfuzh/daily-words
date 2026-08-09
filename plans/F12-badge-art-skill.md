@@ -1,5 +1,70 @@
 # F12 — `/generate-badge-art`: the badge medal skill, its style contract, its tooling, and the deck of thirteen
 
+> ## AS BUILT — 2026-08-09
+>
+> Shipped. All thirteen badges generated, promoted and serving. The brief's rule
+> is that a plan's text is corrected in the session that executes it, so: below
+> is every place reality disagreed with what is written further down. **Where
+> this block contradicts the body, this block wins.**
+>
+> **`gpt-image-2` exists and works** (D4, §12's open question), ~110 s per
+> 1024² image. Twenty-four images bought thirteen badges: eight badges took one
+> attempt, four took two, and `ibu` took five.
+>
+> **§12's biggest predicted risk did not materialise.** "The no-text failure rate
+> on ring-shaped art is the largest cost risk in this plan and is unquantified" —
+> it was **zero**. Not one of the twenty-four candidates put a letter anywhere,
+> so the hexagonal-seal escalation was never needed. What actually cost the
+> attempts was **paper tone**: the `/v1/images/edits` path systematically prints
+> the plate ~5 points darker than `/v1/images/generations` does, which is a
+> parchment drift and needs a correction note on every reference-path run. The
+> note that works is recorded in `assets/badges/_controls/README.md`.
+>
+> **D2's 160 px small derivative shipped at 192 px**, taking §12's own insurance
+> note rather than D2's number.
+>
+> **D7's lossless fallback is not needed, and this is now measured** rather than
+> guessed: at 220 css px the `quality=90` encode differs from the reference by a
+> maximum of 6/255 and a mean of 0.8/255. Lossless costs 5.4× (7.94 MB against
+> 1.48 MB for the deck). Sizes are 96–154 kB per 768² badge, not the ~45 kB §D7
+> estimated — engraved hatch is high-frequency and does not compress.
+>
+> **§6's bands were re-derived after the deck existed**, as §6 requires. Four
+> moved, each annotated `(observed, 13 badges, style v1)` in
+> `check_badge_art.py` with the range behind it: check 5's `c_light` **floor was
+> deleted** (it contradicted D3's own "nearly flush with `--paper`" and rejected
+> five badges on the third decimal place), check 6's vermilion floor 0.15 → 0.02,
+> check 9a's radius drift ±2.5 → ±4.0, check 9b's plate delta ±3.0 → ±4.0.
+>
+> **§6.8 changed what it measures, twice.** It was written as an *ink* centroid;
+> ink centroid is a property of the subject, not the seal, and it false-failed
+> the anchor at 5.49% with a dead-centre ring. An annulus centroid then
+> false-failed `ibu`, whose scene line sends the jasmine strand "off the lower
+> rule" by design. It now fits the outer rule's first harmonic over 360 rays with
+> a median filter — reads 0.00% on a mathematically centred control and
+> 0.21–1.41% on twelve of thirteen badges.
+>
+> **Three things the plan did not have, added because they were load-bearing:**
+> a **third synthetic control** (`synthetic_seal.png`) so the instrument has a
+> known *pass* and not only two known failures; a **`--no-anchor` flag**, because
+> once an anchor exists the controls fail check 9 by construction and a control
+> whose failure you ignore has stopped being a control; and **sidecar promotion**
+> — the plan promoted only the `.png`, which stranded the style version and made
+> §11's "every entry carries the same `styleVersion`" unenforceable.
+>
+> **One badge ships against its own check.** `ibu` is promoted at **8a = 4.03%**
+> against a 3.5% band, after five attempts in which the scene oscillated between
+> a pale plate (89.6%, 90.4%), a dark one (76.1%), a lost vermilion mark and a
+> strand spilling into the margin. Its ring really is slightly off centre. This
+> is a deliberate, recorded override of a passing measurement by a human
+> judgement, which is what §6's own "the exit code is not the verdict" licenses —
+> but it is the one badge to regenerate first if the deck is ever revisited.
+>
+> **`src/middleware.ts` gained `badges`** in its matcher exclusions — not in this
+> plan's file table. Measured: before the change, `curl -I /badges/<file>.webp`
+> answered **307 to /signin**. Badge art is committed art, not user data, and
+> F16–F18 serve public share pages to strangers with no session.
+
 Badges are currently thirteen strings in `src/lib/gamification/badges.ts` and a
 7px square dot in `src/components/ui/badge-row.tsx`. F13 turns each row into a
 tappable thing that opens a panel showing "a picture of the medal and an

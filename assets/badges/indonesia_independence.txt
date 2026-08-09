@@ -1,0 +1,71 @@
+badge:          indonesia_independence
+model:          gpt-image-2
+style version:  v1
+reference:      assets/badges/_anchor.png
+size / quality: 1024x1024 / high
+image sha256:   37bf05fc55cb612c0f240ccc56291dce2a5452e74c1129b97b7b78c220c7c091
+
+--- prompt as sent ---
+A single printed keepsake ticket, square, in the manner of a nineteenth-century
+letterpress ration coupon.
+
+FULL BLEED — THIS IS THE MOST IMPORTANT RULE. The ticket's own paper fills the
+entire image, edge to edge and corner to corner. Do not render a photograph of a
+ticket. No table, no desk, no background surface, no mat, no border of empty
+space, no drop shadow, no rounded corners, no torn or deckled edge, no curl, no
+white or black margin on any side. The image IS the paper.
+
+NO TEXT ANYWHERE. No title, no motto, no date, no year, no numeral, no initial,
+no monogram, no signature, no watermark, no ring of lettering around the seal,
+no glyph or mark that could be read as writing in any alphabet. The application
+prints the title beneath the picture. Any text is an automatic rejection.
+
+PAPER: flat, evenly toned cream stock, warm and very slightly grey — the colour
+of a clean index card, about 92 percent luminance, a touch of yellow in it,
+never bleached to pure white. A very fine paper tooth and nothing else: no
+stain, no foxing, no ring marks, no sepia, no tea-brown ageing, no scorched
+edge. This is fresh stock, printed this morning.
+
+THE SEAL: one circular impression, centred, occupying about 76 percent of the
+image width, with a quiet margin of bare paper all around it. Its edge is a
+double rule — one heavier line and one hair line — enclosing a narrow band. That
+band carries a repeating engraved chain of small lozenges and dots and nothing
+else; it never carries words. Inside the band sits this badge's own subject,
+alone, with generous space around it.
+
+INK: exactly two inks, the way a small press runs them.
+The first ink is a deep pine green, desaturated and quiet, near #2F5D50. It
+draws everything — the rules, the band, the subject, all of it.
+The second ink is a dull brick vermilion, near #8A3324, and it appears once and
+once only: a single small mark sitting very slightly off register from the
+green, the fingerprint of a second pass through the press. It never colours the
+subject and it never outlines anything.
+No third colour appears anywhere. Green ink, one vermilion mark, cream paper.
+
+RENDERING: line engraving. Every tone is built from engraved line — contour,
+cross-hatch, stipple — the way a dictionary plate or a banknote vignette is
+built, the ink sitting on the paper and biting very slightly into it. Even
+weight throughout, nothing darker than a firm mid-tone. No painting, no wash, no
+soft gradient, no airbrush, no glow, no bevel, no embossing, no metallic sheen,
+no three-dimensional rendering, no photographic realism, and no shadow anywhere
+inside the seal.
+
+TONE: quiet, dry, matter-of-fact, fond without sentiment. A clerk's object and a
+working desk, not an award. The vocabulary of this set is engraved line, plain
+rules, and ordinary things that have been used. It contains no ribbons, no
+rosettes, no laurel wreaths, no stars, no trophies, no cups, no crowns and no
+ticks.
+
+READ AT FORTY PIXELS. The application draws this forty pixels wide in a list and
+about two hundred and twenty in a panel. One clear silhouette, generous internal
+spacing, heavy enough line to survive the reduction, and no detail that exists
+only at full resolution.
+
+ONE SUBJECT, ITS OWN SUBJECT. The paper, the ring and the two inks belong to the
+whole set; what sits inside the ring belongs to this badge alone. Do not fall
+back on an open book, a quill, a wreath or a star as a default centre. Thirteen
+badges built from the same object is the way this set fails.
+
+SUBJECT FOR THIS BADGE: An upright ribbon microphone on a plain stand, seen a little from below, with a tall bamboo pole rising behind it and a halyard falling from the pole's top; a small pennant is bent to the halyard, its upper half printed solid and its lower half left as bare paper. VERMILION: that pennant's upper half.
+
+CORRECTION FOR THIS ATTEMPT: The stock is a cool clean cream, the colour of a fresh index card, close to #F0EDE4 — lighter and greyer than parchment or a manila card, and a clear step lighter than the reference image's paper. It is inked evenly from edge to edge: the paper in every corner is the same tone as the paper at the centre, flat and open, with only a fine tooth in it. The single vermilion mark is printed in the same dull brick vermilion as the second pass, a definite mark rather than a pale pink one. The paper is uniform across the whole square: the tone at the top edge, the bottom edge and both side edges is identical, with no vignette, no gradient and no darkening toward any corner.

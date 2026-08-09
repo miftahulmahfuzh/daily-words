@@ -1,0 +1,119 @@
+/**
+ * GENERATED FILE — do not edit by hand.
+ *
+ *   python3 tools/make_badge_assets.py
+ *
+ * Source art is `assets/badges/<key>.png`; these are its derivatives.
+ * Every entry here is generated against style v1.
+ *
+ * This is a TOTAL `Record<BadgeKey, BadgeArt>` on purpose (F12 D9). A badge
+ * key added to BADGE_CATALOG with no art fails `npm run typecheck`
+ * immediately, in the same session, before anything ships — which is a far
+ * stronger guarantee than a check script nobody runs, and it costs one
+ * keyword. The fix for that failure is to generate the art, not to reach
+ * for `Partial<>`.
+ *
+ * Filenames carry the first 8 hex of the master's SHA-256. Regenerating a
+ * badge changes its bytes, its hash and its filename, so every cache misses
+ * correctly and `next.config.ts` may serve /badges/* as `immutable`.
+ *
+ * Plain data. No `import "server-only"` — F13's badge modal is a client
+ * component and imports this — and it holds no secret.
+ */
+import type { BadgeKey } from "./badges";
+
+export type BadgeArt = {
+  /** 768×768 WebP for the badge modal. */
+  src: string;
+  /** 192×192 WebP for the shelf mark. */
+  small: string;
+  /** SHA-256 of `assets/badges/<key>.png`, the approved master. */
+  sha256: string;
+  /** The `style.md` version this image was generated against. */
+  styleVersion: string;
+};
+
+/** Intrinsic pixel sizes, so a consumer never has to restate them. */
+export const BADGE_ART_SIZE = 768;
+export const BADGE_ART_SMALL_SIZE = 192;
+
+export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
+  first_card: {
+    src: "/badges/first_card.dd1b0291.webp",
+    small: "/badges/first_card.dd1b0291.sm.webp",
+    sha256: "dd1b02911bb3d91538f344c2ef6dcbf001f112e3882479957ee77aa799c1bcb7",
+    styleVersion: "v1",
+  },
+  full_week: {
+    src: "/badges/full_week.a5d4a9ad.webp",
+    small: "/badges/full_week.a5d4a9ad.sm.webp",
+    sha256: "a5d4a9adfc92f044ec76cb83741dc147470e78f94cc9e1a6c1b8d11bee9cdd02",
+    styleVersion: "v1",
+  },
+  sunday: {
+    src: "/badges/sunday.54e694d5.webp",
+    small: "/badges/sunday.54e694d5.sm.webp",
+    sha256: "54e694d5e784c4a86fdda89ed86869821324f40d7ffd37e92a6e5ff117e3befc",
+    styleVersion: "v1",
+  },
+  midnight_oil: {
+    src: "/badges/midnight_oil.1b42236c.webp",
+    small: "/badges/midnight_oil.1b42236c.sm.webp",
+    sha256: "1b42236c97f252755002fbbcd39c4b505d35146c9f92585770cd5ecd4bcb545f",
+    styleVersion: "v1",
+  },
+  new_year: {
+    src: "/badges/new_year.6a384f75.webp",
+    small: "/badges/new_year.6a384f75.sm.webp",
+    sha256: "6a384f75d30e188cdcd67571560558c12ce3c520552a3895e8c18432c893fffc",
+    styleVersion: "v1",
+  },
+  womens_day: {
+    src: "/badges/womens_day.45b30120.webp",
+    small: "/badges/womens_day.45b30120.sm.webp",
+    sha256: "45b301201ec2ee646635885b49d28c1b4925d97b91b1e78a9d0b1d5f46fb923b",
+    styleVersion: "v1",
+  },
+  world_book_day: {
+    src: "/badges/world_book_day.fad59f74.webp",
+    small: "/badges/world_book_day.fad59f74.sm.webp",
+    sha256: "fad59f7442c338ea0ba3cfd726a5892263eec857422b0901d7fb3bec9ab545f3",
+    styleVersion: "v1",
+  },
+  fathers_day: {
+    src: "/badges/fathers_day.8b1c1651.webp",
+    small: "/badges/fathers_day.8b1c1651.sm.webp",
+    sha256: "8b1c1651d9debdcbaedb9348b930bac4468d1886f179a3a38bc55bf80b2708b1",
+    styleVersion: "v1",
+  },
+  indonesia_independence: {
+    src: "/badges/indonesia_independence.37bf05fc.webp",
+    small: "/badges/indonesia_independence.37bf05fc.sm.webp",
+    sha256: "37bf05fc55cb612c0f240ccc56291dce2a5452e74c1129b97b7b78c220c7c091",
+    styleVersion: "v1",
+  },
+  ibu: {
+    src: "/badges/ibu.6bff7bcb.webp",
+    small: "/badges/ibu.6bff7bcb.sm.webp",
+    sha256: "6bff7bcbe595648e21d0530fd45c13ac8302743580ac8b9c322bf75f2bf22082",
+    styleVersion: "v1",
+  },
+  christmas: {
+    src: "/badges/christmas.05f5f397.webp",
+    small: "/badges/christmas.05f5f397.sm.webp",
+    sha256: "05f5f3979d3c9c4637b60b8c728c3064d6add275df629e89acb8109855196cff",
+    styleVersion: "v1",
+  },
+  year_end: {
+    src: "/badges/year_end.e8becf15.webp",
+    small: "/badges/year_end.e8becf15.sm.webp",
+    sha256: "e8becf15831012ae7fc6bd36a8fca90db49d227e4754100de292be4f83e35e1e",
+    styleVersion: "v1",
+  },
+  leap_day: {
+    src: "/badges/leap_day.34b45475.webp",
+    small: "/badges/leap_day.34b45475.sm.webp",
+    sha256: "34b454753a91efeb40ba82f49351229d006e828808499336fe463cfa2bc29645",
+    styleVersion: "v1",
+  },
+};

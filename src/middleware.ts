@@ -60,7 +60,16 @@ export const config = {
      * All of `/api` is excluded, not just `/api/auth` as F1 §6 step 11 wrote it:
      * an unauthenticated fetch to a route handler must get the 401 JSON that
      * `requireApiUser()` produces, not a 307 to an HTML sign-in page.
+     *
+     * `badges` joined the list with F12. Badge art is generated, content-hashed,
+     * committed art — it is not user data, and a signed-out request for one
+     * should get the picture rather than a 307 to /signin. Measured, not
+     * assumed: before this was added, `curl -I /badges/<key>.<hash>.webp`
+     * answered 307. It matters beyond the wasted middleware invocation, because
+     * F16–F18 serve public share pages to strangers with no session at all, and
+     * a medal that redirects to a sign-in page is the same mistake as putting a
+     * public route inside the `(app)` group, one layer down.
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|icons|manifest.webmanifest|apple-icon|icon).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|badges|icons|manifest.webmanifest|apple-icon|icon).*)',
   ],
 }

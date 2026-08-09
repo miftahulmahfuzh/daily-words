@@ -23,7 +23,12 @@ export const BADGE_CATALOG = [
   { key: "world_book_day", title: "The Bard’s Regard" },
   { key: "fathers_day", title: "For the Old Man" },
   { key: "indonesia_independence", title: "National Speaker" },
-  { key: "ibu", title: "Ibu Would Be Proud" },
+  // Title reads "Mama", key stays `ibu`. The key is identity — it is the value
+  // in `badges_awarded.badge_key`, in the art filename and in `style.md`'s scene
+  // list — and renaming it would orphan every award already made under it
+  // (`badgeTitle` returns null for an unknown key, the shelf drops the row, and
+  // `--prune` deletes it). The title is display and costs nothing to change.
+  { key: "ibu", title: "Mama Would Be Proud" },
   { key: "christmas", title: "Ghost of Christmas Vocab" },
   { key: "year_end", title: "Last Word of the Year" },
   { key: "leap_day", title: "Leap Year Lexicographer" },
