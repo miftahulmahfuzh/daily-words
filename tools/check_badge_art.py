@@ -591,8 +591,8 @@ def measure(path: Path, rep: Report, anchor_stats=None):
 
     if anchor_stats is None:
         rep.note("9 anchor agreement",
-                 "no assets/badges/_anchor.png — this is an ANCHOR RUN, or the "
-                 "anchor has not been promoted yet")
+                 "no anchor on disk at the path --anchor names — this is an "
+                 "ANCHOR RUN, or the anchor has not been promoted yet")
     else:
         a_rad, a_lum, a_small = anchor_stats
         # (observed, 13 badges, style v1): seal radius 39.8–42.2% of image
@@ -745,10 +745,10 @@ NOT_MEASURED = """\
   Read the .ring.png. Any lettering at all is an instant reject."""
 
 
-def anchor_statistics():
-    if not ANCHOR.exists():
+def anchor_statistics(anchor=ANCHOR):
+    if not anchor.exists():
         return None
-    a = Image.open(ANCHOR).convert("RGB")
+    a = Image.open(anchor).convert("RGB")
     ap = a.load()
     _, a_lum = plate_rgb_and_luminance(ap, a.width, a.height)
     a_rad = seal_radius(inkiness_map(a, a_lum))
@@ -765,6 +765,21 @@ def main():
     parser.add_argument("--no-anchor", action="store_true",
                         help="skip check 9; for the synthetic controls, which are "
                              "not deck members")
+    # F22's second deck has its own anchor, and check 9 compares a candidate
+    # against the deck it belongs to. The default is unchanged, so every badge
+    # invocation in the skill and in CLAUDE.md keeps working untouched.
+    #
+    # NOTHING ELSE IN THIS FILE CHANGES FOR THE LEVEL DECK, and that is
+    # deliberate. The nine bands were derived from the badge deck's observed
+    # distribution; the standing rule at the top of this file is to re-derive
+    # only from at least six approved images, and the level deck has zero. A
+    # band that fires on a rectangle gets its number written down (F22 task 6),
+    # not edited. The ring crop still frames the region where lettering hides —
+    # the panel's rules sit at roughly the radius the seal's band did — so it
+    # keeps its job under a name that no longer describes the shape.
+    parser.add_argument("--anchor", type=Path, default=ANCHOR,
+                        help="the deck anchor check 9 compares against "
+                             "(assets/levels/_anchor.png for the level deck)")
     args = parser.parse_args()
 
     if not args.image.exists():
@@ -778,7 +793,7 @@ def main():
     # check 9 by construction and that failure means nothing. Running them with
     # --no-anchor is what keeps "the controls still pass" a signal rather than a
     # thing you learn to ignore.
-    stats = None if args.no_anchor else anchor_statistics()
+    stats = None if args.no_anchor else anchor_statistics(args.anchor)
     img, _, plate_lum, radius = measure(args.image, rep, stats)
 
     if not args.no_crops:
