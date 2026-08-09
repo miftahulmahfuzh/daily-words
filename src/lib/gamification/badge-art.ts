@@ -29,6 +29,16 @@ export type BadgeArt = {
   small: string;
   /** SHA-256 of `assets/badges/<key>.png`, the approved master. */
   sha256: string;
+  /**
+   * The art's own paper, `#rrggbb`, as the mean of the master's outer 5%
+   * frame. F21's hero paints its band with this so the square art can sit
+   * `object-fit: contain` on a wider region with no seam and no crop —
+   * the deck cannot be cropped (F21 §1.2: ibu's tassel reaches 95.7% of
+   * the image height). Sampled, never chosen: regenerating a badge can
+   * shift its paper, and `npm run badges:check` recomputes this from the
+   * master exactly as it recomputes `sha256`.
+   */
+  plate: string;
   /** The `style.md` version this image was generated against. */
   styleVersion: string;
 };
@@ -42,84 +52,98 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     src: "/badges/first_card.dd1b0291.webp",
     small: "/badges/first_card.dd1b0291.sm.webp",
     sha256: "dd1b02911bb3d91538f344c2ef6dcbf001f112e3882479957ee77aa799c1bcb7",
+    plate: "#ede9d8",
     styleVersion: "v1",
   },
   full_week: {
     src: "/badges/full_week.a5d4a9ad.webp",
     small: "/badges/full_week.a5d4a9ad.sm.webp",
     sha256: "a5d4a9adfc92f044ec76cb83741dc147470e78f94cc9e1a6c1b8d11bee9cdd02",
+    plate: "#f1ede1",
     styleVersion: "v1",
   },
   sunday: {
     src: "/badges/sunday.54e694d5.webp",
     small: "/badges/sunday.54e694d5.sm.webp",
     sha256: "54e694d5e784c4a86fdda89ed86869821324f40d7ffd37e92a6e5ff117e3befc",
+    plate: "#ece8dd",
     styleVersion: "v1",
   },
   midnight_oil: {
     src: "/badges/midnight_oil.1b42236c.webp",
     small: "/badges/midnight_oil.1b42236c.sm.webp",
     sha256: "1b42236c97f252755002fbbcd39c4b505d35146c9f92585770cd5ecd4bcb545f",
+    plate: "#ece8db",
     styleVersion: "v1",
   },
   new_year: {
     src: "/badges/new_year.6a384f75.webp",
     small: "/badges/new_year.6a384f75.sm.webp",
     sha256: "6a384f75d30e188cdcd67571560558c12ce3c520552a3895e8c18432c893fffc",
+    plate: "#f0ebdf",
     styleVersion: "v1",
   },
   womens_day: {
     src: "/badges/womens_day.45b30120.webp",
     small: "/badges/womens_day.45b30120.sm.webp",
     sha256: "45b301201ec2ee646635885b49d28c1b4925d97b91b1e78a9d0b1d5f46fb923b",
+    plate: "#efebe1",
     styleVersion: "v1",
   },
   world_book_day: {
     src: "/badges/world_book_day.fad59f74.webp",
     small: "/badges/world_book_day.fad59f74.sm.webp",
     sha256: "fad59f7442c338ea0ba3cfd726a5892263eec857422b0901d7fb3bec9ab545f3",
+    plate: "#efeadd",
     styleVersion: "v1",
   },
   fathers_day: {
     src: "/badges/fathers_day.8b1c1651.webp",
     small: "/badges/fathers_day.8b1c1651.sm.webp",
     sha256: "8b1c1651d9debdcbaedb9348b930bac4468d1886f179a3a38bc55bf80b2708b1",
+    plate: "#edeadc",
     styleVersion: "v1",
   },
   indonesia_independence: {
     src: "/badges/indonesia_independence.37bf05fc.webp",
     small: "/badges/indonesia_independence.37bf05fc.sm.webp",
     sha256: "37bf05fc55cb612c0f240ccc56291dce2a5452e74c1129b97b7b78c220c7c091",
+    plate: "#ede9da",
     styleVersion: "v1",
   },
   ibu: {
     src: "/badges/ibu.6bff7bcb.webp",
     small: "/badges/ibu.6bff7bcb.sm.webp",
     sha256: "6bff7bcbe595648e21d0530fd45c13ac8302743580ac8b9c322bf75f2bf22082",
+    plate: "#eae6d7",
     styleVersion: "v1",
   },
   christmas: {
     src: "/badges/christmas.05f5f397.webp",
     small: "/badges/christmas.05f5f397.sm.webp",
     sha256: "05f5f3979d3c9c4637b60b8c728c3064d6add275df629e89acb8109855196cff",
+    plate: "#ede8dc",
     styleVersion: "v1",
   },
   year_end: {
     src: "/badges/year_end.e8becf15.webp",
     small: "/badges/year_end.e8becf15.sm.webp",
     sha256: "e8becf15831012ae7fc6bd36a8fca90db49d227e4754100de292be4f83e35e1e",
+    plate: "#eeebdd",
     styleVersion: "v1",
   },
   leap_day: {
     src: "/badges/leap_day.34b45475.webp",
     small: "/badges/leap_day.34b45475.sm.webp",
     sha256: "34b454753a91efeb40ba82f49351229d006e828808499336fe463cfa2bc29645",
+    plate: "#eeeade",
     styleVersion: "v1",
   },
   tolkien: {
     src: "/badges/tolkien.6f5d9027.webp",
     small: "/badges/tolkien.6f5d9027.sm.webp",
     sha256: "6f5d9027ffedc48d07f1cae9b38de49a5f68efad23d6359f38af3975665f920a",
+    plate: "#ebe7da",
     styleVersion: "v1",
   },
 };
