@@ -144,7 +144,7 @@ numerals, and numerals are text. Turn the face away.
 - tolkien: A plain heavy iron ring set down on a bare table beside a briar pipe gone cold, the ring's band entirely smooth and unmarked, a thin coil of smoke still rising from the bowl. VERMILION: a wax seal on the table beside the ring.
 - three_in_a_week: A wooden tally stick lying across a bare rule with three fresh notches cut into its upper edge and clean wood showing in each, a few curled shavings fallen beside it, and a clasp knife laid flat with its blade folded away. VERMILION: a short mark struck across the stick's near end.
 - thirty_day_streak: A plain helmet of beaten metal standing upright and alone on a bare rule, turned firmly three quarters away so that the face is seen at an angle and strongly foreshortened, one narrow eye slot running the width of the face and a short narrow opening dropping a little below the middle of it, the whole surface smooth and unadorned and built entirely from engraved contour and cross-hatch. VERMILION: one small dent above the brow, struck a little off register from the green.
-- dumbledore: A pair of half-moon spectacles folded shut and set down on the flat coping stone of a high parapet, the coping's blocks drawn in firm contour and running out of frame on both sides, with nothing below them but bare paper. VERMILION: a single short curled feather lying on the stone beside them.
+- dumbledore: A single slender wand of elder wood lying at a slight angle across the flat coping stone of a high parapet, the wand's shaft tapering from a knobbled grip and interrupted along its length by three knobbed swellings where the wood once budded, the coping's blocks drawn in firm contour and running out of frame on both sides, with nothing below them but bare paper. VERMILION: a single short curled feather lying on the stone beside it.
 - dobby: A single knitted woollen sock, alone, laid out flat on a bare rule with its ribbed cuff turned back once, the knit drawn stitch by stitch in engraved line, the wool gone thin and open at the heel. VERMILION: a darn worked across that thin place in a coarser stitch.
 - five_shares: A squat earthenware flask, unstoppered, its stopper lying where it was set down, standing beside a folded travelling blanket on a bare road rule. VERMILION: a small spill running from the flask's lip onto the rule.
 - ten_journal_lines: A short length of heavy chain lying in a loose curve on a bare rule, its links interlocked and overlapping one another in one continuous unbroken run, each link a slightly different section from its neighbour — one round, one square, one flat and drawn out long — and the run ending in a last link lying free at the near end. VERMILION: a small bright mark on that last link.
@@ -160,7 +160,7 @@ hand-and-pocket / fanned coupons / columns-and-mug / oil lamp /
 hourglass-and-ink-pot / mimosa-and-envelope / stage-and-stool / coiled wristwatch
 / microphone-and-pole / cupped hands / door knocker / stack of leaves /
 hare-and-wall / ring-and-pipe / tally-stick-and-knife / helmet /
-spectacles-on-parapet / sock / flask-and-blanket / open chain.
+wand-on-parapet / sock / flask-and-blanket / open chain.
 
 **Two known adjacencies to watch:** `first_card` and `ibu` are both hands
 (different framings — a back of a hand vs a cupped pair), and `full_week` and
@@ -183,6 +183,22 @@ seven wooden tally sticks bound with twine is the prepared alternative.
 - `ten_journal_lines`' chain is the only other closed curve in the set besides
   `tolkien`'s ring, and it is drawn as *unlike* links so that it cannot be
   mistaken for one at forty pixels.
+
+**A fourth, added when `dumbledore` was retitled `Avada Kedavra` and its scene
+went from spectacles to the Elder Wand.** The wand is now the second slender
+wooden object in the deck lying flat across a horizontal line, after
+`three_in_a_week`'s tally stick, and at forty pixels "one stroke on a band" is a
+fair description of both. Three things separate them and all three are in the
+lines: the tally stick lies on a thin bare rule with a knife and shavings beside
+it, so it reads as a cluster; the wand is alone on a thick course of masonry
+blocks; and the wand lies **at a slight angle** where the stick lies flat. That
+angle is doing double duty — it is also the only reason the wand does not merge
+into the coping's own horizontal contours, which was the failure mode this scene
+was rewritten to avoid. If the two converge anyway, `dumbledore` is the one to
+change, and the prepared alternative is the wand laid on the coping *with the
+half-moon spectacles folded shut beside it*: the spectacles are unmistakable,
+nothing else in the deck has them, and they were the scene here until v1's
+retitle.
 
 **`ten_journal_lines` says `interlocked and overlapping` because separated links
 are letters.** The first draft asked for a loose open S of unlike links "with the

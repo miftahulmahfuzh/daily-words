@@ -54,7 +54,12 @@ export const BADGE_CATALOG = [
   // `daily_cards`; see the note above `crossedMultipleOf` for what that costs.
   { key: "three_in_a_week", title: "Three Times the Charm" },
   { key: "thirty_day_streak", title: "This Is the Way" },
-  { key: "dumbledore", title: "The Headmaster’s Last Word" },
+  // Title names the incantation; the key still names the man, and stays that
+  // way for `ibu`'s reason above — it is the value in `badges_awarded`, in the
+  // art filename and in `style.md`'s scene list. The title carries no meaning
+  // for the reader who has not read the books, so `condition` names the day and
+  // the man instead of leaning on it.
+  { key: "dumbledore", title: "Avada Kedavra" },
   { key: "dobby", title: "Master Has Given a Sock" },
   { key: "five_shares", title: "The Good Samaritan" },
   // Retitled. The key stays `ten_journal_lines` for `ibu`'s reason above — it is

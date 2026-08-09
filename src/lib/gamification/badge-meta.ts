@@ -135,7 +135,7 @@ export const BADGE_META: Record<BadgeKey, BadgeMeta> = {
   dumbledore: {
     condition: "A card made on 30 June, the day Albus Dumbledore died.",
     gloss:
-      "Killed on the Astronomy Tower shortly after midnight on 30 June 1997, by two words, spoken by the man he had asked to speak them. The date is fixed by arithmetic rather than by a calendar: the bequests arrived on 31 July, thirty-one days later.",
+      "Rowling took the incantation from an Aramaic phrase meaning let the thing be destroyed, and said abracadabra descends from the same root — a conjurer’s nonsense word with a killing curse for an ancestor. Spoken on the Astronomy Tower shortly after midnight on 30 June 1997, by the man who had been asked to speak it.",
   },
   dobby: {
     condition: "A card made on 30 March, the day Dobby died.",

@@ -161,10 +161,10 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     styleVersion: "v1",
   },
   dumbledore: {
-    src: "/badges/dumbledore.48c1d74d.webp",
-    small: "/badges/dumbledore.48c1d74d.sm.webp",
-    sha256: "48c1d74d502085562f349b317eba514ad52b7e166f96d0c2c0cf522bedfbe620",
-    plate: "#eee8d3",
+    src: "/badges/dumbledore.5b8d0a0f.webp",
+    small: "/badges/dumbledore.5b8d0a0f.sm.webp",
+    sha256: "5b8d0a0f917419cf11cbc78c74c6a2df2b57b1ba7aaf304921577444ad21b830",
+    plate: "#ece7d1",
     styleVersion: "v1",
   },
   dobby: {

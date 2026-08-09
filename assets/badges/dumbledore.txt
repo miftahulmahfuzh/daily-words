@@ -3,7 +3,7 @@ model:          gpt-image-2
 style version:  v1
 reference:      assets/badges/_anchor.png
 size / quality: 1024x1024 / high
-image sha256:   48c1d74d502085562f349b317eba514ad52b7e166f96d0c2c0cf522bedfbe620
+image sha256:   5b8d0a0f917419cf11cbc78c74c6a2df2b57b1ba7aaf304921577444ad21b830
 
 --- prompt as sent ---
 A single printed keepsake ticket, square, in the manner of a nineteenth-century
@@ -66,6 +66,6 @@ whole set; what sits inside the ring belongs to this badge alone. Do not fall
 back on an open book, a quill, a wreath or a star as a default centre. Thirteen
 badges built from the same object is the way this set fails.
 
-SUBJECT FOR THIS BADGE: A pair of half-moon spectacles folded shut and set down on the flat coping stone of a high parapet, the coping's blocks drawn in firm contour and running out of frame on both sides, with nothing below them but bare paper. VERMILION: a single short curled feather lying on the stone beside them.
+SUBJECT FOR THIS BADGE: A single slender wand of elder wood lying at a slight angle across the flat coping stone of a high parapet, the wand's shaft tapering from a knobbled grip and interrupted along its length by three knobbed swellings where the wood once budded, the coping's blocks drawn in firm contour and running out of frame on both sides, with nothing below them but bare paper. VERMILION: a single short curled feather lying on the stone beside it.
 
-CORRECTION FOR THIS ATTEMPT: The stock is clean fresh cream index-card paper, clearly the palest tone in the image, with a fine tooth and no toning and no age in it. Build every tone from engraved line — contour, cross-hatch, stipple — the way a dictionary plate is cut, with the lit faces of the coping stones left as bare paper. Set the spectacles large and near the centre so their two half-moon lenses and the bridge between them make the shape that identifies this at small size, and let the parapet run as a single strong horizontal band beneath them.
+CORRECTION FOR THIS ATTEMPT: The paper is a light warm cream, evenly toned, a little lighter than aged stock. The wand lies on a clear slant, its knobbled grip low at the left and its tip high at the right, so that the wand's direction and the coping's courses plainly disagree. The feather lies flat on the stone beside it, curled at the tip, its barbs drawn as fine separate lines.
