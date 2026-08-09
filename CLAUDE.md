@@ -45,6 +45,7 @@ npm run discover:dry-run                 # the suggestion prompt against the liv
 npm run journal:check                    # F10's schemas, cursor, grouping and prompt, offline
 npm run journal:db                       # F10's insight claim, edit rules and paging; seeds fixture users
 npm run journal:dry-run -- --all         # the insight prompt against the live model, no writes
+npm run badges:check                     # F12's badge-art manifest, files, hashes and key scan, offline
 npm run stats:check                      # F9's streaks, levels, badges and reveal queue, offline
 npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
 npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay badges
@@ -71,6 +72,50 @@ literary line, a bleak one, and an injection attempt). One model call per line.
 Read the output against F10 §7's register rubric — no flattery, no second
 person, no exclamation, concrete situations — rather than trusting the exit
 code, which only reports transport.
+
+## Badge art and `OPENAI_API_KEY`
+
+Badge medals are raster art generated offline by the `/generate-badge-art` skill
+(`.claude/skills/generate-badge-art/`). The style contract and the thirteen scene
+lines live in that skill's `style.md`, which `tools/gen_badge_art.py` **parses** —
+the `<!-- STYLE BLOCK vN -->` and `<!-- SCENES -->` markers are an interface, and
+a marker only counts when it is alone on its own line.
+
+```bash
+python3 tools/gen_badge_art.py --dry-run --all      # assemble every prompt; no key, no network, no file
+python3 tools/gen_badge_art.py <key> --reference assets/badges/_anchor.png
+python3 tools/check_badge_art.py <candidate.png>    # 9 measurements + the 3 crops to look at
+python3 tools/make_badge_assets.py                  # promote masters → public/badges/** + the manifest
+```
+
+**`OPENAI_API_KEY` is a different key from `LLM_API_KEY`.** The app's model access
+is GLM via z.ai; this is OpenAI's image API, a different provider and a different
+bill. It lives in `.env.local` and is read by `tools/gen_badge_art.py` **and by
+nothing else** — `src/lib/env.ts` has no entry, and `grep OPENAI_API_KEY src/`
+must stay empty. `npm run badges:check` asserts that emptiness, so the rule is
+checked rather than remembered.
+
+Three things drift-proof the deck, each by a different mechanism:
+
+| Drift | Caught by |
+|---|---|
+| A badge key with no art | `npm run typecheck` — `BADGE_ART` is a total `Record<BadgeKey, BadgeArt>`, never `Partial<>` |
+| Art with no badge key, a stale hash, a lost style version | `npm run badges:check` |
+| A scene line with no key, or a key with no scene line | `gen_badge_art.py` refuses to start |
+
+`public/badges/*` filenames carry the first 8 hex of the master's SHA-256. That is
+the **only** reason `next.config.ts` may serve them `immutable` for a year:
+regenerating a badge changes the bytes, the hash and the filename, so every cache
+misses correctly. Do not extend that header to a path whose names are not
+content-hashed. `src/middleware.ts` excludes `badges` from the auth matcher —
+badge art is committed art, not user data, and F16–F18 serve it to strangers.
+
+Adding badge #14: add the key to `BADGE_CATALOG`, add one `- <key>: <scene>` line
+inside `<!-- SCENES -->` in `style.md`, run `/generate-badge-art <key>`, promote
+**both** the `.png` and its `.txt` sidecar (the sidecar carries the style version,
+and losing it makes a mixed deck undetectable), then
+`python3 tools/make_badge_assets.py`. Never edit `src/lib/gamification/badge-art.ts`
+by hand.
 
 `scripts/profile-peek.ts` is the F7 verification helper — `show`, `unonboard`,
 `onboard`, `tz <zone> [manual]`, `clear`, `delete`, `context`. Run it with

@@ -215,10 +215,50 @@ nothing failing anywhere.
 **If you add a `--text-*` token whose name is not a t-shirt size, add it to the
 `font-size` group in `src/lib/ui/cn.ts`.** Same for `--tracking-*`.
 
+## The badge asset contract (F12)
+
+Badges are the one place this kit draws a raster. Everything else on screen is a
+rule, a dot or a word ([R18]), and badge medals are the deliberate exception:
+thirteen engraved letterpress seals, generated offline by `/generate-badge-art`.
+
+**Two sizes ship, and a component must draw at or below them:**
+
+| Field | Intrinsic | Draw at | Where |
+|---|---|---|---|
+| `BADGE_ART[key].src` | 768×768 | **~220 css px** | the badge modal (F13) |
+| `BADGE_ART[key].small` | 192×192 | **~40 css px** | the shelf mark on `/profile` |
+
+Import them from `src/lib/gamification/badge-art.ts` — a **generated** file, never
+edited by hand — together with `BADGE_ART_SIZE` and `BADGE_ART_SMALL_SIZE` so a
+component never restates the numbers. It is plain data with no `import
+"server-only"`, so a client component may import it.
+
+Four properties the art already guarantees, so no component should re-implement
+them:
+
+- **No transparency.** Each file carries its own cream paper plate, edge to edge.
+  There is no alpha channel, so there is no halo and no "what colour is behind
+  the antialiased edge" question. Do not put a background behind a badge
+  expecting it to show through.
+- **One asset serves both colour schemes.** Paper does not invert. In light theme
+  the plate sits nearly flush with `--paper`; in dark theme it reads as a
+  specimen laid on a dark table. **Do not add a `dark:` variant, a CSS filter or
+  a second asset** — the plate's contrast against both `--paper` values is a
+  checked property of the art (`tools/check_badge_art.py` check 5).
+- **The art has its own quiet margin** of bare paper around the seal. It does not
+  need padding, and a `--r-card` radius clips only that margin.
+- **Filenames are content-hashed** and served `immutable` for a year. Never add a
+  cache-busting query string; regenerating a badge changes the filename.
+
+Titles are drawn by the app, never by the picture — the style contract forbids
+lettering inside the seal, which is why a badge needs its title beside it to name
+the occasion.
+
 ## Checking your work
 
 ```
 npm run dev        # then open /kitchen-sink at 375px, in both colour schemes
 npm run test:layout  # the no-scroll spec — see tests/e2e/no-scroll.spec.ts
+npm run badges:check # the badge-art manifest, files, hashes and key scan
 npm run design:build && npm run design:changed
 ```
