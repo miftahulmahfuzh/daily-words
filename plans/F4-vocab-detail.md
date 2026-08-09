@@ -3,6 +3,7 @@
 > - **[R1]** §5 and §9.4 are void. No `deleted_at`, no soft delete, no resurrection amendment to F3. Hard delete only when the word has never been carded; otherwise deletion is refused and the user is offered "mastered".
 > - **[R2]** Normalise `z.string().uuid()` to `z.uuid()` (zod 4).
 > - **[R17]** Your Vocab tab shell contract stands — F8 conforms to it.
+> - **F14** supersedes §7.3: the detail page gains a `suggested_correction` banner above the term. It renders only when the column is non-null, so the §7.3 height budget is unchanged for every correctly spelled word. See `plans/F14-vocab-duplicates.md`.
 >
 > These plans were written in parallel by agents that could not see each other.
 > The Reconciliation section wins over anything below.

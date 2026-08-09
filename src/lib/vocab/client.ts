@@ -23,8 +23,17 @@ import type {
 
 export type { ApiResult, ApiSuccess, ApiFailure } from "@/lib/api/client";
 
-export function createEntry(term: string): Promise<ApiResult<CreateVocabResponse>> {
-  return request("/api/vocab", "POST", { term });
+/**
+ * `allowNearDuplicate` is only ever sent by the "Add … anyway" button on the
+ * near-duplicate notice — never by the first attempt, and never as a default.
+ * F14 D5: the warning must be something the user overrules, which means it has
+ * to have been shown.
+ */
+export function createEntry(
+  term: string,
+  allowNearDuplicate = false,
+): Promise<ApiResult<CreateVocabResponse>> {
+  return request("/api/vocab", "POST", { term, allowNearDuplicate });
 }
 
 export function enrichEntry(id: string): Promise<ApiResult<EnrichResponse>> {

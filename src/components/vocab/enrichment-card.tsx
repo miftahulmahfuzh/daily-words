@@ -6,10 +6,28 @@ import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Meta, Prose } from "@/components/ui/text";
 import { RetryEnrichmentButton } from "@/components/vocab/retry-enrichment-button";
+import { ExistingWordNotice } from "@/components/vocab/existing-word-notice";
+import { enrichmentCopy, practiceLostNote } from "@/lib/vocab/display";
 import { acceptCorrection, dismissCorrection } from "@/lib/vocab/client";
-import { enrichmentCopy } from "@/lib/vocab/display";
-import type { EnrichResponse } from "@/lib/vocab/schemas";
+import type { AcceptCorrectionResponse, EnrichResponse } from "@/lib/vocab/schemas";
 import { vocabDetailHref } from "@/lib/vocab/links";
+
+/**
+ * The two correction outcomes that end with a word other than this one.
+ *
+ * `merged` — the typo row is gone, so the card is replaced.
+ * `kept_both` — [R1] refused the delete, so both rows exist and the notice sits
+ * *above* the card rather than instead of it. Replacing the card there would
+ * assert the word had disappeared, which is precisely the opposite of what
+ * happened (F14 D2).
+ */
+type Resolved = {
+  situation: "merged" | "kept_both";
+  id: string;
+  term: string;
+  status: AcceptCorrectionResponse["status"];
+  note: string | null;
+};
 
 /**
  * One entry, in whatever state it is in.
@@ -28,13 +46,14 @@ export function EnrichmentCard({
   entry: EnrichResponse;
   onChange: (entry: EnrichResponse) => void;
 }) {
-  /* Both "Open it" buttons below hardcode the `"new"` origin, which is true
-     because this card has exactly one mount point: `AddWordForm` on
-     `/vocab/new`. F14 reworks this component — if it mounts it anywhere else,
-     the origin becomes a prop rather than staying a literal (F11 §7). */
+  /* The `"new"` origin below is still a literal, and still true: this card has
+     exactly one mount point, `AddWordForm` on `/vocab/new`. F14's detail-page
+     suggestion is `CorrectionBanner`, a separate component with its own origin,
+     rather than a second mount of this one — so the note F11 §7 left here still
+     holds. Mount this anywhere else and the origin becomes a prop. */
 
-  /** Set when accepting the correction found the word already in the collection. */
-  const [merged, setMerged] = useState<{ id: string; term: string } | null>(null);
+  /** Set when accepting the correction landed on a word already in the collection. */
+  const [resolved, setResolved] = useState<Resolved | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -47,26 +66,32 @@ export function EnrichmentCard({
     setBusy(false);
 
     if (!result.ok) {
-      // [R1] refuses to delete a word that has been carded, so the merge is
-      // declined and both spellings stay. Nothing is lost; say so in one line.
-      if (result.code === "in_use") {
-        setNote(result.message);
-        onChange({ ...entry, suggestedCorrection: null });
-        return;
-      }
       setNote(result.message);
       return;
     }
 
-    if (result.data.outcome === "merged") {
-      setMerged({ id: result.data.id, term: result.data.term });
+    const { outcome, id, term, status, practiceLost } = result.data;
+
+    // `kept_both` is a 200 now, not a 409 (F14 D2): nothing failed, [R1] simply
+    // refuses to delete a word that has been carded, so both spellings stay and
+    // the survivor's id comes back with the answer.
+    if (outcome === "merged" || outcome === "kept_both") {
+      setResolved({
+        situation: outcome,
+        id,
+        term,
+        status,
+        // The transcript was about the misspelling, so the sentence names it.
+        note: practiceLost ? practiceLostNote(entry.term) : null,
+      });
+      if (outcome === "kept_both") onChange({ ...entry, suggestedCorrection: null });
       return;
     }
 
     // `renamed` and `noop` both end with no suggestion outstanding. The
     // enrichment already describes the corrected word (D3), so nothing else
     // changes and no second model call happens.
-    onChange({ ...entry, term: result.data.term, suggestedCorrection: null });
+    onChange({ ...entry, term, suggestedCorrection: null });
   }
 
   async function dismiss() {
@@ -92,21 +117,35 @@ export function EnrichmentCard({
     });
   }
 
-  if (merged) {
+  // The typo row is gone, so the card that drew it goes with it.
+  if (resolved?.situation === "merged") {
     return (
-      <Card variant="outline" className="dw-in flex flex-col items-start gap-3.5">
-        <Prose size="body" tone="ink">
-          You already had {merged.term}.
-        </Prose>
-        <Button size="sm" fullWidth={false} href={vocabDetailHref(merged.id, "new")}>
-          Open it
-        </Button>
-      </Card>
+      <ExistingWordNotice
+        id={resolved.id}
+        term={resolved.term}
+        status={resolved.status}
+        situation="merged"
+        origin="new"
+        note={resolved.note}
+      />
     );
   }
 
   return (
     <div className="dw-in flex flex-col gap-3">
+      {/* Both rows survive, so this sits above the word rather than replacing
+          it. The user's spelling is still here and still theirs. */}
+      {resolved?.situation === "kept_both" && (
+        <ExistingWordNotice
+          id={resolved.id}
+          term={resolved.term}
+          status={resolved.status}
+          situation="kept_both"
+          origin="new"
+          note={resolved.note}
+        />
+      )}
+
       {entry.suggestedCorrection && (
         <Card variant="outline" padding="sm" className="flex flex-col gap-3">
           <Prose size="body" tone="ink">

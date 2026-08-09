@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, count, desc, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { dailyCardItems, vocabEntries } from "@/lib/db/schema";
+import { chatSessions, dailyCardItems, vocabEntries } from "@/lib/db/schema";
 import type { VocabEntry, VocabSource, VocabStatus } from "@/lib/db/types";
 import type { VocabCursor } from "@/lib/vocab/cursor";
 import type { EnrichmentErrorCode } from "@/lib/vocab/schemas";
@@ -48,6 +48,45 @@ export async function findEntryByNormalizedTerm(
     .where(and(eq(vocabEntries.userId, userId), sameTerm(term)))
     .limit(1);
   return row ?? null;
+}
+
+/** The four columns the add path's duplicate layer needs from every row. */
+export type DedupRow = {
+  id: string;
+  term: string;
+  status: VocabStatus;
+  enrichmentStatus: VocabEntry["enrichmentStatus"];
+};
+
+/**
+ * Every term the user holds, for F14's add-path duplicate layer — **NO status
+ * filter**, and this is the one line in the function that matters.
+ *
+ * A `where status = 'active'` here would compile, pass every offline check, and
+ * then let somebody re-add `studying` a month after they mastered `study`. It is
+ * the same mistake `listAllUserTerms` warns about at length, for the same
+ * reason: mastered means retired from daily cards, not forgotten. The two
+ * functions stay separate because Discovery needs only the strings and this
+ * needs the id and the status to draw a notice with a link in it.
+ *
+ * One indexed read on `user_id`. At the stated scale — hundreds of short
+ * strings, low thousands at the outside — this is a scan of a few tens of
+ * kilobytes on a page the user opens a handful of times a day. F14 §4 rejects a
+ * stored `dedup_key` column: the fold is application logic that `discover:check`
+ * keeps tuning, and a stored key turns every future tweak into a backfill that
+ * silently disagrees with `dedup.ts` until it runs.
+ */
+export async function listTermsForDedup(userId: string): Promise<DedupRow[]> {
+  return db
+    .select({
+      id: vocabEntries.id,
+      term: vocabEntries.term,
+      status: vocabEntries.status,
+      enrichmentStatus: vocabEntries.enrichmentStatus,
+    })
+    .from(vocabEntries)
+    .where(eq(vocabEntries.userId, userId))
+    .orderBy(desc(vocabEntries.createdAt));
 }
 
 export async function getEntryForUser(
@@ -163,16 +202,36 @@ export async function writeEnrichmentFailure(
 }
 
 export type CorrectionOutcome =
-  | { outcome: "renamed" | "noop"; entry: VocabEntry }
-  /** The typo is gone; `entry` is the spelling that survived. */
-  | { outcome: "merged"; entry: VocabEntry }
-  /** The typo has been carded, so [R1] forbids deleting it. Both survive. */
-  | { outcome: "in_use"; entry: VocabEntry }
-  | { outcome: "not_found"; entry: null };
+  | {
+      /**
+       * `renamed` / `noop` — `entry` is the row that was posted.
+       * `merged` — the typo is gone; `entry` is the spelling that survived.
+       * `kept_both` — the typo has been carded, so [R1] forbids deleting it.
+       *   Both rows survive and `entry` is still the survivor, never the typo.
+       *   Renamed from `in_use` by F14 D2: nothing failed, so it stopped being
+       *   an error envelope, and the moment it did it could carry an id.
+       */
+      outcome: "renamed" | "merged" | "kept_both" | "noop";
+      entry: VocabEntry;
+      /**
+       * A practice transcript went with the merge. F14 D4 — only ever true for
+       * `merged`, because that is the only branch that deletes a row.
+       */
+      practiceLost: boolean;
+    }
+  | { outcome: "not_found"; entry: null; practiceLost: false };
 
 /**
  * Accept the stored suggestion. The corrected word is never sent by the client,
  * so a stale tab cannot rename an entry to something arbitrary.
+ *
+ * **Can throw `23505`, and the route must catch it.** The "does the corrected
+ * spelling already exist" SELECT below takes no lock on that term — there is no
+ * row to lock when the collision is an *insert* — so a concurrent
+ * `POST /api/vocab` landing between it and the `UPDATE … SET term` raises a
+ * unique violation inside the transaction. F14 D3 answers that with one retry
+ * in the route, exactly as `POST /api/vocab` already does: the second run finds
+ * the row that raced in and takes the merge branch. One retry, never a loop.
  */
 export async function applyCorrection(
   userId: string,
@@ -186,11 +245,11 @@ export async function applyCorrection(
       .limit(1)
       .for("update");
 
-    if (!entry) return { outcome: "not_found", entry: null };
+    if (!entry) return { outcome: "not_found", entry: null, practiceLost: false };
 
     const correction = entry.suggestedCorrection;
     // Already accepted, already dismissed, or a double tap.
-    if (!correction) return { outcome: "noop", entry };
+    if (!correction) return { outcome: "noop", entry, practiceLost: false };
 
     const [existing] = await tx
       .select()
@@ -220,13 +279,30 @@ export async function applyCorrection(
           .update(vocabEntries)
           .set({ suggestedCorrection: null })
           .where(eq(vocabEntries.id, entry.id));
-        return { outcome: "in_use", entry: existing };
+        return { outcome: "kept_both", entry: existing, practiceLost: false };
       }
+
+      /**
+       * F14 D4. The typo row is reachable for practice — the chat needs only
+       * `enrichment_status = 'ready'` and a definition, both of which it has,
+       * because the enrichment describes the *corrected* word — so a user can
+       * spend eight turns on `genteell` and lose the transcript to this delete.
+       *
+       * Refusing the merge instead was rejected: it would contradict [R5] and
+       * `deleteVocabEntry`'s documented cascade, both locked. The loss is
+       * roadmap policy. Being silent about it is not, and one indexed lookup on
+       * `chat_sessions_user_entry_uniq` buys the sentence.
+       */
+      const [practised] = await tx
+        .select({ id: chatSessions.id })
+        .from(chatSessions)
+        .where(eq(chatSessions.vocabEntryId, entry.id))
+        .limit(1);
 
       // Cascades the typo's chat session with it. [R5]: days are permanent,
       // practice is not.
       await tx.delete(vocabEntries).where(eq(vocabEntries.id, entry.id));
-      return { outcome: "merged", entry: existing };
+      return { outcome: "merged", entry: existing, practiceLost: Boolean(practised) };
     }
 
     const [renamed] = await tx
@@ -234,7 +310,7 @@ export async function applyCorrection(
       .set({ term: correction, suggestedCorrection: null })
       .where(eq(vocabEntries.id, entry.id))
       .returning();
-    return { outcome: "renamed", entry: renamed };
+    return { outcome: "renamed", entry: renamed, practiceLost: false };
   });
 }
 

@@ -5,6 +5,7 @@ import { BackLink } from "@/components/layout/back-link";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Eyebrow, Meta, Prose } from "@/components/ui/text";
+import { CorrectionBanner } from "@/components/vocab/correction-banner";
 import { DeleteWordButton } from "@/components/vocab/delete-word-button";
 import { RetryEnrichmentButton } from "@/components/vocab/retry-enrichment-button";
 import { requireUser } from "@/lib/auth/session";
@@ -72,6 +73,20 @@ export default async function WordPage({
     <Screen>
       <ScreenBody scroll padded={false} className="px-6 pb-7">
         <BackLink href={back.href} label={back.label} />
+
+        {/* F14 D1. Rendered only when the column is non-null, which is the case
+            for no correctly spelled word — so F4 §7.3's height budget is
+            unchanged by default. Above the term deliberately: the question is
+            about which word this row *is*, and everything below it describes
+            the corrected spelling rather than the one in the heading. */}
+        {entry.suggestedCorrection && (
+          <CorrectionBanner
+            id={entry.id}
+            term={entry.term}
+            suggestion={entry.suggestedCorrection}
+            origin={origin}
+          />
+        )}
 
         {/* `break-words` matters at the smallest bucket: `line-clamp-2` gives a
             long term two lines, but a single unbreakable word has no break

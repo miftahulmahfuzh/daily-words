@@ -4,6 +4,7 @@
 > - **[R1]** Your create path needs **no** resurrection logic — F4's soft delete was rejected.
 > - **[R2]** Normalise `z.string().uuid()` to `z.uuid()` (zod 4).
 > - **[R9]** `suggested_correction`, `enrichment_error`, `enrichment_attempts` are approved and now in the roadmap schema.
+> - **F14** supersedes §6.1's response table (`duplicate: boolean` is now a three-valued `outcome`), §6.3's `409 in_use` row (now a `200 kept_both`), §8.3's refusal of a "make it active again" button, and §11 rows E12, E14, E15, E16. See `plans/F14-vocab-duplicates.md`.
 >
 > These plans were written in parallel by agents that could not see each other.
 > The Reconciliation section wins over anything below.

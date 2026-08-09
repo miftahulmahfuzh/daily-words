@@ -32,6 +32,8 @@ npm run test:layout      # the no-scroll spec; boots its own dev server on 3200
 npm run db:generate && npm run db:migrate
 npm run llm:check                        # smoke-test z.ai through the shared client
 npm run vocab:enrich -- "genteell"       # run the F3 prompt, no database writes
+npm run vocab:check                      # F14's add-path outcome table and notice copy, offline
+npm run vocab:db                         # F14's correction matrix and near-duplicate layer; seeds a fixture user
 npm run dates:check                      # F5's day-boundary + calendar assertions, offline
 npm run nav:check                        # F11's back-origin whitelist and href round trip, offline
 npm run selection:check                  # 300 real draws; seeds and rolls back a fixture
@@ -219,11 +221,34 @@ throwing. Each cost real time.
 - The user's timezone is detected, never asked. `timezone_source = 'manual'`
   means a human corrected it and automatic re-detection must leave it alone.
 - Discovery's `listAllUserTerms` carries **no status filter** — a mastered word
-  must still block a suggestion. `lib/vocab/dedup.ts` answers "are these the same
-  word?" and is not `lib/vocab/normalize.ts`, which answers "what did the user
-  type?"; the two disagree about case, diacritics and punctuation on purpose.
-  Under-folding is the correct failure mode: a near-duplicate costs one tap, a
-  false collision hides a good word forever.
+  must still block a suggestion, and neither does F14's `listTermsForDedup`, for
+  the same reason. `lib/vocab/dedup.ts` answers "are these the same word?" and is
+  not `lib/vocab/normalize.ts`, which answers "what did the user type?"; the two
+  disagree about case, diacritics and punctuation on purpose.
+- **The add path folds and the accept path does not, deliberately.** `POST
+  /api/vocab` runs `findNearDuplicate` (`lib/vocab/near-duplicate.ts`, a wrapper
+  — `dedup.ts` itself is never edited, `discover:check` calibrates it) and answers
+  `outcome: 'near_duplicate'` with the word it collided with; the user overrules
+  it with `allowNearDuplicate: true`. `POST /api/vocab/suggestions/accept` keeps
+  an **exact-only** re-check: by the time a suggestion reaches the tap the fold
+  has already run against the whole collection in `lib/vocab/suggest.ts`, so a
+  collision there can only be a race, which is an exact match. Adding a second
+  fold to the accept path asks the same question twice and can only produce false
+  positives (F14 D7). Do not "fix" the asymmetry.
+  Under-folding is the correct failure mode **for suggestions**, where the filter
+  is invisible: a near-duplicate costs one tap, a false collision hides a good
+  word forever. On the add path both halves invert — the collision is named on
+  screen and refusable in one tap, while an accepted near-duplicate is a durable
+  row that can be carded and then never deleted — so that side over-folds, made
+  harmless by refusability (F14 D5).
+- `suggested_correction` is drawn **wherever the entry is**, not only where it
+  was created: `/vocab/new`'s `EnrichmentCard` and `/vocab/[id]`'s
+  `CorrectionBanner`. Before F14 only the first existed, and a suggestion whose
+  reply arrived after "Add another" — or after a reload — was stranded forever on
+  a row that `selectCardCandidates` would happily put on tomorrow's card. Once
+  carded it can be neither deleted nor merged ([R1]). Accepting is a `200` for
+  every outcome including `kept_both`; that used to be a `409 in_use`, which had
+  nowhere to put the survivor's id (F14 D2).
 - The word-detail back link names where the user came from, carried as
   `?from=<token>` and resolved server-side against a **closed whitelist** in
   `lib/vocab/links.ts` — `parseOrigin` narrows to a four-member union or `null`,

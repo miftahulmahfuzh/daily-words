@@ -582,11 +582,14 @@ directly.
   thousands of short strings on a `user_id`-covered scan. If `/vocab/new` ever
   feels slower after step 4, measure before optimising — and re-read §4's
   rejection of a stored `dedup_key` before reaching for one.
-- **How many stranded suggestions exist in the live database is unknown.** A
-  one-off `select count(*) from vocab_entries where suggested_correction is not
-  null` before shipping D1 would say. If any of them are already carded, those
-  rows are permanent by [R1] and D1 will correctly offer `kept_both` rather than
-  a merge.
+- ~~**How many stranded suggestions exist in the live database is unknown.**~~
+  **Measured 2026-08-09, during implementation: zero.** `select count(*) from
+  vocab_entries where suggested_correction is not null` returns 0 across the
+  whole table, so there is no backfill and nothing to clean up — D1 is purely
+  forward-looking. Consistent with the app having one real user and a handful of
+  cards. Re-run it before assuming the same on any other database; if a stranded
+  row is already carded, it is permanent by [R1] and D1 correctly offers
+  `kept_both` rather than a merge.
 - **Definition-less rows can still be carded** (D9). Verified: nothing between
   `selectCardCandidates` and the card render filters on `enrichment_status`.
   This is F5's territory and is deliberately untouched; if it becomes a real
