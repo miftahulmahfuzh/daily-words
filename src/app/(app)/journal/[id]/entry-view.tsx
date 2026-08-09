@@ -7,6 +7,8 @@ import { TextArea } from "@/components/ui/text-area";
 import { TextInput } from "@/components/ui/text-input";
 import { Eyebrow, Meta } from "@/components/ui/text";
 import { InsightPanel } from "@/components/journal/insight-panel";
+import { ShareButton } from "@/components/share/share-button";
+import { SHARE_JOURNAL_ACTION_LABEL } from "@/lib/share/policy";
 import { cn } from "@/lib/ui/cn";
 import {
   deleteEntry as deleteEntryRequest,
@@ -14,7 +16,7 @@ import {
   patchEntry,
   requestInsight,
 } from "@/lib/journal/client";
-import { counterFor, entryMeta } from "@/lib/journal/format";
+import { counterFor, entryMeta, excerptFor } from "@/lib/journal/format";
 import {
   JOURNAL_SOURCE_NOTE_MAX,
   JOURNAL_TEXT_MAX,
@@ -31,7 +33,16 @@ import type { JournalEntryDto } from "@/lib/journal/schemas";
  * insight arriving replaces a button with a paragraph *in place* — no
  * navigation, no scroll jump, no re-render of the line the user is reading.
  */
-export function EntryView({ initial }: { initial: JournalEntryDto }) {
+export function EntryView({
+  initial,
+  initialShareSlug,
+  initialShareUrl,
+}: {
+  initial: JournalEntryDto;
+  /** F18 D18: the share, if there is one, so revocation has somewhere to live. */
+  initialShareSlug: string | null;
+  initialShareUrl: string | null;
+}) {
   const router = useRouter();
   const [entry, setEntry] = useState(initial);
   const [editing, setEditing] = useState(false);
@@ -72,6 +83,35 @@ export function EntryView({ initial }: { initial: JournalEntryDto }) {
             </button>
             <DeleteButton id={entry.id} onDeleted={() => router.replace("/journal")} />
           </div>
+
+          {/* F18 D18. Below the row rather than in it, because once shared this
+              control grows a selectable URL field and two more actions — and
+              because Share is not one of the three things this screen was built
+              around, it is the fourth.
+
+              **The share is a snapshot of the text as it was when it was
+              shared**, so editing the line revokes it: `PATCH /api/journal/[id]`
+              deletes the share row whenever the text actually changed. That is
+              why nothing here tries to "update the shared copy" — publishing an
+              edit means sharing again, which mints a new slug and kills the old
+              link, and the person you sent the old text to keeps seeing what you
+              actually sent them until you do. A source-note edit revokes
+              nothing, mirroring the insight rule exactly.
+
+              `key` on the entry's `updatedAt` so that an edit which revoked the
+              share resets this control to its un-shared state rather than
+              leaving a dead URL on screen. */}
+          <ShareButton
+            key={entry.updatedAt}
+            entityType="journal"
+            entityId={entry.id}
+            /* An excerpt, never the source note. It is what a native share sheet
+               shows beside the link. */
+            title={excerptFor(entry.text)}
+            label={SHARE_JOURNAL_ACTION_LABEL}
+            initialSlug={initialShareSlug}
+            initialUrl={initialShareUrl}
+          />
         </>
       )}
     </>

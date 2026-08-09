@@ -51,12 +51,20 @@ function fixture(n: number): DailyCardItemView[] {
 export default async function KitchenSinkTodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ n?: string; state?: string; toast?: string }>;
+  searchParams: Promise<{ n?: string; state?: string; toast?: string; streak?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
 
-  const { n, state, toast } = await searchParams;
+  const { n, state, toast, streak: rawStreak } = await searchParams;
   const count = Math.min(Math.max(Number(n ?? 6), 0), 6);
+  /**
+   * `?streak=` exists for one assertion: the header must stay **one row** at
+   * 375px with a three-digit streak. The existing eighteen could not catch a
+   * wrap — a two-line header leaves rows at ~60.8px, still above the 52px floor,
+   * so everything would pass while the screen degraded. It is also what measured
+   * F18 D3's Share pill out of this header.
+   */
+  const streak = Math.min(Math.max(Number(rawStreak ?? 12), 0), 999);
   const items = fixture(count);
   const empty = state === "empty";
 
@@ -67,9 +75,15 @@ export default async function KitchenSinkTodayPage({
           className="pb-3"
           eyebrow={<Eyebrow>Friday 18 September</Eyebrow>}
           title="Today’s card"
+          /* One trailing control, which is what /today ships. F18 tried to put a
+             Share pill beside this one and the header wrapped at 375px — see
+             `app/(app)/today/page.tsx` for the measurement and the fallback that
+             was taken instead. `?streak=` survives that attempt, because a
+             three-digit streak is still the widest this row can be and the
+             single-row assertion is worth keeping pointed at it. */
           trailing={
             <Pill href="/calendar" mono className="min-h-[32px] text-mono-xs">
-              12 day run
+              {streak} day run
             </Pill>
           }
         />

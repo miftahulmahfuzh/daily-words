@@ -104,6 +104,19 @@ export type CompleteOnboardingResponse = {
   /** ISO instant. Preserved across a double-submit, never moved. */
   onboardedAt: string;
   alreadyOnboarded: boolean;
+  /**
+   * Where the flow should land — **always one of a closed set of literals the
+   * server chose**, never a path the client or a cookie supplied (F18 D13).
+   *
+   * `/today` unless the user arrived from a shared journal entry and tapped
+   * "Start your own journal", in which case `/journal`. The `dw_next` cookie
+   * that carries that fact holds one symbol, is signed, and is mapped through a
+   * literal `switch` in `nextDestinationHref`; nothing here is concatenated and
+   * no path is ever read out of it. That is the whole difference between this
+   * and the `?next=` parameter F17 D2 rejected as an open redirect in a
+   * feature's clothing.
+   */
+  next: string;
 };
 
 /* ------------------------------ PATCH /api/profile -------------------------- */

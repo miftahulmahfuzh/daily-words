@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { requireApiUser } from "@/lib/api/guards";
 import { fail, noStore, ok, readJson } from "@/lib/api/respond";
 import { completeOnboarding, getProfile } from "@/lib/db/queries/profiles";
@@ -7,6 +8,13 @@ import {
   type CompleteOnboardingResponse,
 } from "@/lib/profile/schemas";
 import { TIMEZONE_HEADER, resolveRequestTimezone } from "@/lib/profile/timezone";
+import { env } from "@/lib/env";
+import { decodeNextDestination } from "@/lib/share/intent";
+import {
+  nextDestinationHref,
+  ONBOARDING_DEFAULT_HREF,
+  SHARE_NEXT_COOKIE,
+} from "@/lib/share/policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,10 +72,38 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const result = await completeOnboarding(userId, answers, timezone);
+
+    /**
+     * **F18 D13 step 2, and it is the whole of the onboarding change.**
+     *
+     * `app/(app)/layout.tsx` sends anyone with a null `onboarded_at` to
+     * `/onboarding`, so a stranger who tapped "Start your own journal" on a
+     * shared entry would otherwise finish five screens and land on `/today` —
+     * the home screen of an app they came to for journalling, showing "No words
+     * yet."
+     *
+     * Read and cleared here rather than in the flow component, because the
+     * cookie is `HttpOnly` (no script may read it) and this is the one request
+     * that ends onboarding. `decodeNextDestination` returns a symbol or null, and
+     * `nextDestinationHref` maps that symbol through a literal `switch` — so
+     * this route hands back a destination it chose, not one it was handed.
+     *
+     * Cleared unconditionally, including when it did not decode: a cookie that
+     * survived this request would redirect the *next* onboarding on the same
+     * browser.
+     */
+    const jar = await cookies();
+    const destination = decodeNextDestination(
+      jar.get(SHARE_NEXT_COOKIE)?.value,
+      env.AUTH_SECRET,
+    );
+    jar.delete(SHARE_NEXT_COOKIE);
+
     return noStore(
       ok<CompleteOnboardingResponse>({
         onboardedAt: result.onboardedAt.toISOString(),
         alreadyOnboarded: result.alreadyOnboarded,
+        next: destination ? nextDestinationHref(destination) : ONBOARDING_DEFAULT_HREF,
       }),
     );
   } catch (err) {

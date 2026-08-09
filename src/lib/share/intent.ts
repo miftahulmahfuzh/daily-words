@@ -1,9 +1,12 @@
 import 'server-only'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import {
+  isShareNextDestination,
   isShareSlug,
   isShareWordIndex,
   SHARE_CLAIM_TTL_SECONDS,
+  SHARE_NEXT_TTL_SECONDS,
+  type ShareNextDestination,
 } from '@/lib/share/policy'
 import { MAX_TIMEZONE_LEN } from '@/lib/profile/constants'
 import { isValidTimeZone } from '@/lib/time/local-date'
@@ -158,6 +161,68 @@ export function decodeClaimIntent(
   // A zone that no longer resolves degrades to "no zone", which F17 turns into
   // the honest `/onboarding` fallback. It is never a reason to drop the claim.
   return { slug, w, tz: usableZone(rawTz), exp }
+}
+
+/* ------------------------ F18's `dw_next` destination ----------------------- */
+
+/**
+ * The same signing, for a payload that is one symbol wide.
+ *
+ * `v1.<base64url(destination|exp)>.<hmac>` — the same version prefix, the same
+ * `exp`-inside-the-signature discipline, the same injectable clock. It shares
+ * this module rather than starting a second cookie codec next door, because two
+ * cookie disciplines in one feature is how one of them ends up unsigned.
+ *
+ * What it is **not**: a claim. Nothing is written when it is consumed; it only
+ * decides which of two hard-coded screens onboarding ends on. See
+ * `SHARE_NEXT_COOKIE` in `policy.ts` for why that distinction is load-bearing,
+ * and `nextDestinationHref` for the literal `switch` that is the whole point.
+ */
+export function encodeNextDestination(
+  destination: ShareNextDestination,
+  secret: string,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): string {
+  const exp = nowSeconds + SHARE_NEXT_TTL_SECONDS
+  const payload = b64url(Buffer.from(`${destination}|${exp}`, 'utf8'))
+  return `${VERSION}.${payload}.${b64url(sign(payload, secret))}`
+}
+
+/**
+ * Total, like `decodeClaimIntent`, and in the same order: structure, then the
+ * HMAC, then the fields. A value that is not one of ours never reaches the
+ * `switch` that turns a symbol into an href.
+ */
+export function decodeNextDestination(
+  raw: unknown,
+  secret: string,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): ShareNextDestination | null {
+  if (typeof raw !== 'string') return null
+  if (raw.length === 0 || raw.length > MAX_COOKIE_CHARS) return null
+
+  const parts = raw.split('.')
+  if (parts.length !== 3) return null
+  const [version, payload, signature] = parts
+  if (version !== VERSION) return null
+
+  let actual: Buffer
+  try {
+    actual = Buffer.from(signature, 'base64url')
+  } catch {
+    return null
+  }
+  if (!signatureMatches(sign(payload, secret), actual)) return null
+
+  const fields = Buffer.from(payload, 'base64url').toString('utf8').split('|')
+  if (fields.length !== 2) return null
+  const [destination, rawExp] = fields
+
+  const exp = Number(rawExp)
+  if (!/^\d+$/.test(rawExp) || !Number.isSafeInteger(exp)) return null
+  if (exp <= nowSeconds) return null
+
+  return isShareNextDestination(destination) ? destination : null
 }
 
 /** Length-capped before `Intl` sees it, so a pasted essay is cheap to reject. */

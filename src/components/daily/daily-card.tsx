@@ -20,11 +20,22 @@ import { DailyCardRow } from "./daily-card-row";
  */
 export function DailyCard({
   items,
+  hrefFor,
   shortCardAction,
   className,
 }: {
   /** 0..6. More than six is a programming error and is sliced, loudly. */
   items: DailyCardItemView[];
+  /**
+   * Where each row goes. Omitted, the rows link to `/vocab/[id]` carrying the
+   * `today` origin, which is what every caller but one wants.
+   *
+   * F18's public shared card is the exception: its rows point at
+   * `/s/<slug>/<position>`, because a public page's rows must not link into the
+   * `(app)` group — an anonymous visitor would be bounced to /signin, and the
+   * author testing it is signed in, so it would look perfect while being broken.
+   */
+  hrefFor?: (item: DailyCardItemView, index: number) => string;
   /** Shown beneath the rows when the card is short. F5 supplies it. */
   shortCardAction?: React.ReactNode;
   className?: string;
@@ -54,6 +65,7 @@ export function DailyCard({
         <DailyCardRow
           key={item.id}
           item={item}
+          href={hrefFor?.(item, i)}
           last={i === rows.length - 1 && !shortCardAction}
         />
       ))}

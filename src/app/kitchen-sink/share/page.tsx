@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
+import { SharedCard } from "@/components/share/shared-card";
+import { SharedJournal } from "@/components/share/shared-journal";
 import { SharedWord } from "@/components/share/shared-word";
 import { shareClaimHref } from "@/lib/share/policy";
-import type { SharedWordPayload } from "@/lib/share/schemas";
+import type {
+  SharedCardPayload,
+  SharedJournalPayload,
+  SharedWordPayload,
+} from "@/lib/share/schemas";
 
 /**
  * The public share page under worst-case content, for review at 375px and for
@@ -18,6 +24,16 @@ import type { SharedWordPayload } from "@/lib/share/schemas";
  * because the assertion is that **no string can make the page scroll**;
  * `noexamples` is the pending-ish shape where the heading must be absent rather
  * than standing over nothing.
+ *
+ * **F18 added `?kind=`.** `word` (the default) keeps every existing state and
+ * every existing assertion; `card` draws the shared daily card, which is the one
+ * public page with a row floor to clear and the one that must not grow a tab
+ * bar; `journal` draws the shared line, its insight and the sign-up CTA.
+ *
+ * `?n=` sets the card's word count so the spec can drive a short card, and the
+ * sixth word is deliberately left un-enriched at `n=6` so the skeleton state is
+ * reviewable — a card is at its most shareable on the day it was made, which is
+ * exactly when a word added minutes earlier is still being looked up.
  *
  * The claim href points at a fixture slug and goes nowhere. This page mints no
  * share and writes nothing.
@@ -76,14 +92,84 @@ const STATES: Record<string, SharedWordPayload> = {
   noexamples: NO_EXAMPLES,
 };
 
+/**
+ * A card whose sixth word is still enriching — `definition: null`, which draws
+ * F5's skeleton rather than an empty line or the string "null".
+ *
+ * The terms are the same hostile lengths `/kitchen-sink/today` uses, because the
+ * rows are the same component and the claim being tested is the same one: no
+ * string can change a row's height.
+ */
+const CARD_TERMS = [
+  "antidisestablishmentarianism",
+  "circumlocutionariness",
+  "genteel",
+  "truculent",
+  "perspicacious",
+  "sesquipedalian",
+];
+
+const CARD_DEFINITION =
+  "a way of speaking that goes all the way round the point before arriving at it, if it arrives at all";
+
+function cardFixture(n: number): SharedCardPayload {
+  return {
+    kind: "card",
+    cardDate: "2026-08-09",
+    dateLabel: "9 August 2026",
+    words: Array.from({ length: n }, (_, i) => ({
+      position: i + 1,
+      term: CARD_TERMS[i],
+      pronunciation: "/dʒɛnˈtiːl/",
+      partOfSpeech: "adjective",
+      // The last row of a full card is left pending on purpose. See above.
+      definition: i === 5 ? null : CARD_DEFINITION,
+      examples: [],
+    })),
+  };
+}
+
+const JOURNAL: SharedJournalPayload = {
+  kind: "journal",
+  text: "Ibu used to say that a house with no rice smells of nothing at all, and I did not understand her until the year I lived alone.",
+  dateLabel: "3 Aug 2026",
+  insight: {
+    meaning:
+      "An absence is quieter than a presence, and it is usually only noticed by somebody who once had the thing and then did not.",
+    whenItApplies: [
+      "Moving out of a family home for the first time.",
+      "Realising a habit mattered only after it stopped.",
+      "Explaining to someone why a small routine is not small.",
+    ],
+  },
+};
+
 export default async function KitchenSinkSharePage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string }>;
+  searchParams: Promise<{ state?: string; kind?: string; n?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
 
-  const { state } = await searchParams;
+  const { state, kind, n } = await searchParams;
+
+  if (kind === "card") {
+    const count = Math.min(Math.max(Number(n ?? 6), 1), 6);
+    return (
+      <SharedCard
+        payload={cardFixture(count)}
+        slug={FIXTURE_SLUG}
+        /* Pinned, not `localDateNow()`: a fixture whose freshness line changed
+           with the wall clock would make the spec flaky and the review
+           unrepeatable. Two days after the card, so the label is the `older`
+           arm rather than either special case. */
+        today="2026-08-11"
+      />
+    );
+  }
+
+  if (kind === "journal") return <SharedJournal payload={JOURNAL} />;
+
   const payload = STATES[state ?? "short"] ?? SHORT;
 
   // Through the policy module, never a template literal: share URLs have exactly

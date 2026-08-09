@@ -109,6 +109,35 @@ export function parseLocalDate(date: LocalDate): {
   return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) }
 }
 
+/**
+ * Is this a real day, and not merely a string shaped like one?
+ *
+ * The distinction is the whole point, and F18 learned it the expensive way:
+ * `/card/[date]` shipped with a `/^\d{4}-\d{2}-\d{2}$/` test, which `2026-13-99`
+ * passes — and the string then reached a `date` column as a comparison, where
+ * Postgres raised a cast error and the route answered **500** for a typo whose
+ * honest answer is 404. The shape guard was written precisely to stop that and
+ * did not, because a shape is not a date.
+ *
+ * The round trip through `Date.UTC` is what makes it real: February 30th and
+ * month 13 both normalise to something else and fail to come back. Anchored in
+ * UTC like every other function here, because a `LocalDate` has no time and no
+ * offset, so no zone can change whether it exists.
+ *
+ * `isLocalMonth` is its sibling and predates it; both live here because this is
+ * the only file allowed to do date arithmetic.
+ */
+export function isLocalDate(value: unknown): value is LocalDate {
+  if (typeof value !== 'string') return false
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!m) return false
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  const d = new Date(Date.UTC(year, month - 1, day))
+  return (
+    d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day
+  )
+}
+
 /** Day of week for a LocalDate: 0 = Sunday … 6 = Saturday. Locale-independent. */
 export function localDayOfWeek(date: LocalDate): number {
   const { year, month, day } = parseLocalDate(date)

@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { SHARE_EXAMPLES_MAX } from '@/lib/share/policy'
+import { insightSchema } from '@/lib/journal/schemas'
+import {
+  SHARE_EXAMPLES_MAX,
+  SHARE_WORD_INDEX_MAX,
+  SHARE_WORD_INDEX_MIN,
+} from '@/lib/share/policy'
 
 /**
  * Request and response shapes for F16's two routes, plus the shape of what is
@@ -24,6 +29,14 @@ import { SHARE_EXAMPLES_MAX } from '@/lib/share/policy'
  */
 export const createShareSchema = z.discriminatedUnion('entityType', [
   z.object({ entityType: z.literal('vocab'), id: z.uuid() }),
+  /**
+   * F18's two arms. `id` is the **owner's own** `daily_cards.id` or
+   * `journal_entries.id`, sent from the owner's own screen and re-verified
+   * against the session in the route — it never appears in a public URL and
+   * never crosses into a payload.
+   */
+  z.object({ entityType: z.literal('card'), id: z.uuid() }),
+  z.object({ entityType: z.literal('journal'), id: z.uuid() }),
 ])
 
 export type CreateShareRequest = z.infer<typeof createShareSchema>
@@ -52,12 +65,92 @@ export const sharedWordPayloadSchema = z.object({
 
 export type SharedWordPayload = z.infer<typeof sharedWordPayloadSchema>
 
+/* ------------------------------ The card payload ---------------------------- */
+
 /**
- * What `getShareBySlug` hands the renderer, after parsing.
+ * One word of a shared card, addressed by **position** and by nothing else.
  *
- * **F18 adds its two arms to this array** — `sharedCardPayloadSchema` and
- * `sharedJournalPayloadSchema` — and adds the matching branches to
- * `components/share/shared-word.tsx`'s caller. Nowhere else.
+ * There is no `id` field and there must never be one (F18 D1, D8). The slug
+ * authorises *this card's* six words; a uuid in here would turn that into a
+ * capability to name a word, and `SharedCard` keys its rows on `position` so
+ * nothing in the renderer wants one either.
+ *
+ * The enrichment fields are the same five `sharedWordPayloadSchema` carries,
+ * because `/s/<slug>/<n>` is the same page as `/s/<slug>` for a vocab share and
+ * must not have to read anything live to draw it. `definition` is null while the
+ * sharer's word was still being looked up — the row draws F5's skeleton, which
+ * is what makes a card shareable on the day it was made.
+ */
+export const sharedCardWordSchema = z.object({
+  position: z.number().int().min(SHARE_WORD_INDEX_MIN).max(SHARE_WORD_INDEX_MAX),
+  term: z.string(),
+  pronunciation: z.string().nullable(),
+  partOfSpeech: z.string().nullable(),
+  definition: z.string().nullable(),
+  examples: z.array(z.string()).max(SHARE_EXAMPLES_MAX),
+})
+
+export type SharedCardWord = z.infer<typeof sharedCardWordSchema>
+
+/**
+ * A day, as a stranger sees it.
+ *
+ * `cardDate` is a `LocalDate` — `'YYYY-MM-DD'`, computed in the sharer's zone at
+ * creation, with no offset and no instant behind it. `dateLabel` is that same
+ * date already formatted, so the public page does no date work at all and the
+ * viewer's own machine cannot shift it (F18 D7).
+ *
+ * **The sharer's timezone is deliberately absent.** D8's allowlist excludes it —
+ * it is a location signal about a person a stranger is not owed — and nothing on
+ * the page needs it: the date needs no zone, and the freshness line is a read,
+ * which may fall back where a write may not.
+ */
+export const sharedCardPayloadSchema = z.object({
+  kind: z.literal('card'),
+  cardDate: z.string(),
+  dateLabel: z.string(),
+  words: z.array(sharedCardWordSchema).max(SHARE_WORD_INDEX_MAX),
+})
+
+export type SharedCardPayload = z.infer<typeof sharedCardPayloadSchema>
+
+/* ----------------------------- The journal payload -------------------------- */
+
+/**
+ * A line, and what the machine made of it.
+ *
+ * Three fields, and the two absences are the design (F18 D8, D10):
+ *
+ *   - **No `sourceNote`.** It is a note about the *user's life* — "in Ibu's
+ *     kitchen", "the letter from R." — not about the line, and it is the field
+ *     most likely to name a third party. F10's own edit rule already draws this
+ *     split: changing the text clears the insight, changing only the note does
+ *     not, "because the note is not part of what was explained". If it is not
+ *     part of what was explained, it is not part of what is shared.
+ *   - **No `id`, no `createdAt`, no `updatedAt`, no `edited`, no
+ *     `insightStatus`.** A stranger gets a line and a paragraph, not an entry.
+ *
+ * `insight` is present and that is a decision the user asked for in as many
+ * words — "sharing journal detailed page, **the one which shows insight**". The
+ * attribution problem it raises was solved before this feature existed:
+ * `InsightPanel` ends with "Written by the machine. Keep or discard.", and
+ * `SharedJournal` reuses that component unchanged precisely so a public-page
+ * rewrite cannot drop the line.
+ */
+export const sharedJournalPayloadSchema = z.object({
+  kind: z.literal('journal'),
+  text: z.string(),
+  dateLabel: z.string(),
+  /** Null unless the entry's wire status was `ready` when it was shared. */
+  insight: insightSchema.nullable(),
+})
+
+export type SharedJournalPayload = z.infer<typeof sharedJournalPayloadSchema>
+
+/**
+ * What `getShareBySlug` hands the renderer, after parsing. **All three arms, as
+ * of F18** — the dispatch lives in `app/s/[slug]/page.tsx` and nowhere else,
+ * which is what keeps `/s/[slug]` carrying no entity type in its path.
  *
  * The stored column is `jsonb` and the database guarantees it nothing, so the
  * read side parses rather than casts. zod's default object behaviour **strips
@@ -67,6 +160,8 @@ export type SharedWordPayload = z.infer<typeof sharedWordPayloadSchema>
  */
 export const sharedPayloadSchema = z.discriminatedUnion('kind', [
   sharedWordPayloadSchema,
+  sharedCardPayloadSchema,
+  sharedJournalPayloadSchema,
 ])
 
 export type SharedPayload = z.infer<typeof sharedPayloadSchema>

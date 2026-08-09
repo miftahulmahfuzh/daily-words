@@ -44,7 +44,7 @@ those belong to `Screen`, and duplicating them is how the height budget breaks.
 | `ToggleRow` | `@/components/ui/toggle-row` | `{ label, hint?, armedLabel?, checked, onChange, confirmOn? }` |
 | `Spinner` | `@/components/ui/spinner` | `{ size?: 16\|20\|24 }` |
 | `Skeleton` | `@/components/ui/skeleton` | `{ width?, height? }` |
-| `DailyCard` | `@/components/daily/daily-card` | `{ items: DailyCardItemView[], shortCardAction? }` |
+| `DailyCard` | `@/components/daily/daily-card` | `{ items: DailyCardItemView[], hrefFor?, shortCardAction? }` |
 | `NoCardYet` | `@/components/daily/no-card-yet` | `{ action }` |
 | `DayStrip` | `@/components/daily/day-strip` | `{ days: DayStripItem[], label? }` |
 | `Chip`, `ChipSelect` | `@/components/profile/chip-select` | `{ pressed?, onClick? }` / `{ options, selected, onToggle }` |
@@ -171,6 +171,59 @@ Obligations F2 placed on the other features still stand:
   interstitial's button is a real submit inside a real form that a client
   component fires on mount — visible and tappable, because a dead screen is what
   a spinner becomes when the effect never runs.
+- **F18** — one additive kit prop and four `components/share/*` components.
+
+  `DailyCard` gained **`hrefFor?: (item, index) => string`**, and `DailyCardRow`
+  the `href?` behind it — the second additive change to a kit component after
+  F10's `TextArea ref`, and the shape F11's own comment predicted: "if F18's
+  public shared card ever wants this row, lift the href to a prop rather than
+  adding a `share` origin — a public page's rows must not link into `(app)`,
+  which would bounce an anonymous visitor to /signin." Defaulted, so `/today`
+  and `/card/[date]` are untouched, and **one** row component still serves both
+  pages, which is what keeps `data-testid="daily-card-row"` covering both.
+
+  | Component | Import | Props |
+  |---|---|---|
+  | `SharedCard` | `@/components/share/shared-card` | `{ payload, slug, today }` |
+  | `SharedJournal` | `@/components/share/shared-journal` | `{ payload }` |
+  | `ShareButton` | `@/components/share/share-button` | `{ entityType, entityId, title, label, initialSlug, initialUrl }` — client |
+  | `StartYourOwnJournal` | `@/components/share/start-your-own-journal` | `{}` — client |
+
+  `SharedWord` gained `position?` and `eyebrow?`, both optional: one word of a
+  shared card is the same five fields as a shared word, so it renders through
+  that component rather than a fork that would drift. `ShareButton` is F16's
+  `ShareWordButton` generalised to three entity types rather than copied — the
+  `navigator.share` → clipboard → selectable-field chain is the part of this
+  feature most likely to behave differently on a real phone, and three copies of
+  it would be three sets of failure modes.
+
+  **The public card gets a different vertical budget and says so structurally.**
+  No tab bar (+61px), no day strip (+91.8px), no `ScreenHeader`, and it scrolls —
+  so the card is `min-h-[396px] flex-none` rather than `flex-1`. `flex-none` and
+  `flex-1` are the same `tailwind-merge` group, so it genuinely replaces the
+  card's own class rather than sitting beside it; inside a scroll container
+  `flex-1` against `min-h-0` gives rows their content height, which is
+  unpredictable. That is arithmetic where [R19] preferred structure, and if it
+  looks wrong on a tall device the fix is a `min-h`/`max-h` pair, **not** a
+  return to `flex-1` inside a scroll container.
+
+  `SharedJournal` reuses `InsightPanel` **unchanged**, and reuses it specifically
+  so its last line — "Written by the machine. Keep or discard." — cannot be
+  dropped by a public-page rewrite. That sentence was written for the owner's
+  screen; it is more true on a stranger's.
+
+  **A control that was measured out of existence.** F18 D3 wanted a 32px Share
+  pill in `/today`'s header beside the streak pill, costing zero vertical pixels,
+  and estimated ~33px of slack at 375px. Measured with a three-digit streak, the
+  header went from 70.4px to **117px** — "Today's card" wrapped. The existing
+  eighteen assertions would all have stayed green, because a two-line header
+  leaves rows at ~60.8px and the floor is 52px. D3's own fallback was taken: the
+  date `Eyebrow` on `/today` is a link to `/card/[date]`, where a scrolling
+  screen affords a full 44px control. `no-scroll.spec.ts` gained the single-row
+  assertion that caught it, and `/kitchen-sink/today?streak=` is what drives it.
+
+  Reviewable without a session or a database at
+  `/kitchen-sink/share?kind=card&n=6` and `?kind=journal`.
 
 ### `Screen keyboardAware` — the one exception to `100dvh`
 

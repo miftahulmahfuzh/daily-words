@@ -1,6 +1,7 @@
 import { Screen, ScreenBody } from "@/components/layout/screen";
 import { PractiseThisWord } from "@/components/share/practise-this-word";
 import { Eyebrow, Prose } from "@/components/ui/text";
+import { SHARE_BRAND_EYEBROW } from "@/lib/share/policy";
 import type { SharedWordPayload } from "@/lib/share/schemas";
 import { termSizeClass } from "@/lib/vocab/format";
 import { cn } from "@/lib/ui/cn";
@@ -40,10 +41,33 @@ import { cn } from "@/lib/ui/cn";
 export function SharedWord({
   payload,
   claimHref,
+  position,
+  eyebrow,
 }: {
-  payload: SharedWordPayload;
+  /**
+   * A vocab share's payload, or **one word of a card share's** — F18 narrows
+   * `SharedCardWord` to this shape rather than forking the page, because the two
+   * are the same five fields and a second component would drift.
+   */
+  payload: Omit<SharedWordPayload, "kind">;
   /** Where "Practise this word" goes. F17 owns everything past the tap. */
   claimHref: string;
+  /**
+   * Which word of a shared card this is, `1`–`6`. Absent for a vocab share.
+   *
+   * It rides to the claim route as `?w=`, which then puts it **inside the signed
+   * `dw_claim` cookie** — never on `/claim` itself, whose path F17 froze to a
+   * literal with no user data in it. That is what structurally kills the
+   * open-redirect class, and F18 does not undo it: a bounded index into a named
+   * card cannot be pointed anywhere the slug does not already reach.
+   */
+  position?: number;
+  /**
+   * The line above the term. Defaults to the app's name; a shared card's word
+   * says which day it came from instead, so the viewer can tell the two pages
+   * apart after a forward.
+   */
+  eyebrow?: string;
 }) {
   const { term, pronunciation, partOfSpeech, definition, examples } = payload;
 
@@ -52,7 +76,7 @@ export function SharedWord({
       <ScreenBody scroll padded={false} className="px-6 pb-5">
         {/* The only branding on the page, and the only answer a stranger has to
             "what is this?" */}
-        <Eyebrow>Daily Words</Eyebrow>
+        <Eyebrow>{eyebrow ?? SHARE_BRAND_EYEBROW}</Eyebrow>
 
         <h1
           className={cn(
@@ -115,7 +139,7 @@ export function SharedWord({
             timezone to the link. F17 needs a real zone before the OAuth hop,
             because the claim completes onboarding and writes may not fall back to
             a default. It is still a link, and it still works without JS. */}
-        <PractiseThisWord claimHref={claimHref} />
+        <PractiseThisWord claimHref={claimHref} position={position} />
       </footer>
     </Screen>
   );

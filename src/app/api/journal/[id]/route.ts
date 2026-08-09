@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireApiUser } from "@/lib/api/guards";
 import { fail, ok, readJson } from "@/lib/api/respond";
 import { deleteEntry, getEntry, updateEntry } from "@/lib/db/queries/journal";
+import { deleteSharesForEntity } from "@/lib/db/queries/shares";
 import { getUserTimezone } from "@/lib/db/queries/profiles";
 import { patchEntrySchema, type JournalEntryResponse } from "@/lib/journal/schemas";
 import { toJournalEntryDto } from "@/lib/journal/serialize";
@@ -51,6 +52,23 @@ export async function GET(
  * Whether the stored insight survives is decided in SQL, in one statement —
  * see `updateEntry`. Changing the text clears it; changing only the note keeps
  * it.
+ *
+ * **F18 gave the share the same rule, and it is deliberately decided here rather
+ * than in that statement.** A share is a snapshot of the text as it was when it
+ * was shared, so an edited line leaves a public URL quoting something the owner
+ * has replaced — and unlike a stale word definition that matters, because this is
+ * the one entity whose derived text is *destroyed* by an edit. Editing the text
+ * therefore revokes the share; editing only the source note revokes nothing,
+ * mirroring the insight rule exactly.
+ *
+ * Why not fold it into `updateEntry`'s single statement: that comparison is
+ * evaluated against the *old* row inside `SET`, and `RETURNING` sees the new
+ * one, so the fact is not available to the caller without a self-join that would
+ * make a load-bearing statement harder to read for a secondary concern. The
+ * pre-read below costs one indexed lookup and is safe under the race the
+ * statement's comment worries about: two concurrent editors both see the old
+ * text and both revoke, which is idempotent, and a source-note edit racing a
+ * text edit still leaves the text editor to revoke.
  */
 export async function PATCH(
   req: Request,
@@ -65,8 +83,17 @@ export async function PATCH(
   const body = await readJson(req, patchEntrySchema);
   if (!body.ok) return body.response;
 
+  const before = await getEntry(auth.user.id, id);
+  if (!before) return NOT_FOUND();
+
   const row = await updateEntry(auth.user.id, id, body.data);
   if (!row) return NOT_FOUND();
+
+  // `!== undefined` first: the client sends both fields on every save, so
+  // "was text supplied" is not the question — "is it different" is.
+  if (body.data.text !== undefined && body.data.text !== before.text) {
+    await deleteSharesForEntity(auth.user.id, "journal", id);
+  }
 
   const timezone = await getUserTimezone(auth.user.id);
   return ok<JournalEntryResponse>({ entry: toJournalEntryDto(row, timezone) });

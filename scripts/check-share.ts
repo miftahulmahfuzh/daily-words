@@ -28,11 +28,20 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import type { VocabEntry } from '../src/lib/db/types'
 import {
+  clipForMeta,
   isPublicSharePath,
+  isShareNextDestination,
   isShareSlug,
   isShareWordIndex,
+  nextDestinationHref,
+  parseSharePosition,
+  shareCardMetaDescription,
+  shareCardMetaTitle,
   shareClaimHref,
+  sharedCardWordHref,
   shareHref,
+  shareJournalMetaDescription,
+  shareJournalMetaTitle,
   SHARE_ACTION_LABEL,
   SHARE_CLAIM_COOKIE,
   SHARE_CLAIM_COOKIE_OPTIONS,
@@ -42,6 +51,11 @@ import {
   SHARE_EXAMPLES_MAX,
   SHARE_GONE_BODY,
   SHARE_GONE_TITLE,
+  SHARE_JOURNAL_CTA_LABEL,
+  SHARE_JOURNAL_META_TITLE_MAX,
+  SHARE_NEXT_COOKIE,
+  SHARE_NEXT_COOKIE_OPTIONS,
+  SHARE_NEXT_TTL_SECONDS,
   SHARE_PRACTISE_LABEL,
   SHARE_REVOKE_LABEL,
   SHARE_SLUG_ALPHABET,
@@ -51,8 +65,21 @@ import {
 } from '../src/lib/share/policy'
 import { newShareSlug } from '../src/lib/share/slug'
 import { createShareSchema, sharedPayloadSchema } from '../src/lib/share/schemas'
-import { toSharedWordPayload } from '../src/lib/share/serialize'
-import { decodeClaimIntent, encodeClaimIntent } from '../src/lib/share/intent'
+import {
+  toSharedCardPayload,
+  toSharedJournalPayload,
+  toSharedWordPayload,
+} from '../src/lib/share/serialize'
+import { cardFreshness, freshnessLabel, toCardListWords } from '../src/lib/share/card-view'
+import { resolveClaimWord } from '../src/lib/share/claim'
+import {
+  decodeClaimIntent,
+  decodeNextDestination,
+  encodeClaimIntent,
+  encodeNextDestination,
+} from '../src/lib/share/intent'
+import type { CardForShare } from '../src/lib/db/queries/cards'
+import type { JournalEntry } from '../src/lib/db/types'
 
 let failures = 0
 
@@ -137,15 +164,83 @@ check('shareHref', shareHref(S), `/s/${S}`)
 check('shareClaimHref', shareClaimHref(S), `/s/${S}/claim`)
 check('the share path has exactly two segments', shareHref(S).split('/').length - 1, 2)
 check('the claim path nests under it', shareClaimHref(S).startsWith(`${shareHref(S)}/`), true)
+check('sharedCardWordHref', sharedCardWordHref(S, 3), `/s/${S}/3`)
 check(
-  'neither is protocol-relative',
-  [shareHref(S), shareClaimHref(S)].filter((h) => h.startsWith('//')),
+  'none of the three is protocol-relative',
+  [shareHref(S), shareClaimHref(S), sharedCardWordHref(S, 1)].filter((h) =>
+    h.startsWith('//'),
+  ),
   [],
 )
 
+/* ---------------------------- F18: the position ---------------------------- */
+
+section('parseSharePosition — the 1..6 boundary, and the security-relevant line')
+
+/**
+ * A table with the input printed on failure, because a silent widening here is
+ * the whole risk: `parseSharePosition` is what stands between a URL segment and
+ * an index into somebody's card, and every rejection below is a string a real
+ * client will eventually send.
+ */
+const POSITIONS: [string, number | null][] = [
+  ['1', 1],
+  ['2', 2],
+  ['3', 3],
+  ['4', 4],
+  ['5', 5],
+  ['6', 6],
+  ['0', null],
+  ['7', null],
+  ['-1', null],
+  ['1.5', null],
+  // `Number()` accepts all four of these. The regex is what refuses them, and
+  // a leading zero accepted here would make two URLs for one word.
+  ['01', null],
+  ['+1', null],
+  [' 1', null],
+  ['1e0', null],
+  ['', null],
+  ['1;--', null],
+  ['3f2504e0-4f89-41d3-9a0c-0305e82c3301', null],
+  ['1 OR 1=1', null],
+  ['٣', null],
+]
+for (const [input, expected] of POSITIONS) {
+  check(`parseSharePosition(${JSON.stringify(input)})`, parseSharePosition(input), expected)
+}
+check('a number is not a string', parseSharePosition(3), null)
+check('null', parseSharePosition(null), null)
+check('undefined', parseSharePosition(undefined), null)
+
 section('isPublicSharePath — the function the middleware calls')
 
-const PUBLIC = ['/s', `/s/${S}`, `/s/${S}/claim`, `/s/${S}/`, '/s/anything-at-all']
+const PUBLIC = [
+  '/s',
+  `/s/${S}`,
+  `/s/${S}/claim`,
+  `/s/${S}/`,
+  '/s/anything-at-all',
+  /**
+   * F18's nested word route, and the reason this list grew. A middleware that
+   * still recognised only `claim` would bounce every row of a shared card to
+   * /signin — invisibly, because the author testing it is signed in.
+   */
+  `/s/${S}/1`,
+  `/s/${S}/6`,
+  `/s/${S}/3/`,
+  /**
+   * Position-**shaped**, not position-valid. `/s/<slug>/5` on a four-word card
+   * is a URL a real person will follow, and it must reach the share's own
+   * one-sentence 404 rather than /signin — the same rule this function already
+   * keeps for a slug that does not exist. `parseSharePosition` in the route is
+   * what decides which of these name a word.
+   */
+  `/s/${S}/0`,
+  `/s/${S}/7`,
+  `/s/${S}/01`,
+  `/s/${S}/99`,
+]
 for (const p of PUBLIC) check(`exempt: ${p}`, isPublicSharePath(p), true)
 
 /**
@@ -168,6 +263,14 @@ const PRIVATE = [
   '/s/abc/claim/extra',
   '/s/abc/practise',
   '//s/abc',
+  // The enumeration stayed closed when F18 widened it. A fourth segment that is
+  // not `claim` and not digit-shaped is still gated.
+  `/s/${S}/1.5`,
+  `/s/${S}/-1`,
+  `/s/${S}/1e0`,
+  `/s/${S}/100`,
+  `/s/${S}/3f2504e0-4f89-41d3-9a0c-0305e82c3301`,
+  `/s/${S}/1/2`,
 ]
 for (const p of PRIVATE) check(`gated: ${p || '(empty)'}`, isPublicSharePath(p), false)
 
@@ -251,6 +354,238 @@ check(
   ['a', 'b', 'c'],
 )
 
+/* --------------------- F18: the card and journal payloads ------------------- */
+
+section('toSharedCardPayload is an allowlist too, and it drops every uuid')
+
+/** Every uuid-shaped string, anywhere, under any key. The deep-walk assertion. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-/i
+
+function uuidsIn(value: unknown, path = '$'): string[] {
+  if (typeof value === 'string') return UUID_RE.test(value) ? [path] : []
+  if (Array.isArray(value)) return value.flatMap((v, i) => uuidsIn(v, `${path}[${i}]`))
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([k, v]) => uuidsIn(v, `${path}.${k}`))
+  }
+  return []
+}
+
+check(
+  'the walker finds a uuid nested anywhere',
+  uuidsIn({ a: [{ b: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' }] }),
+  ['$.a[0].b'],
+)
+
+/**
+ * The leak this serialiser exists to prevent. `toDailyCardItemView` — one import
+ * away — returns `{ id: item.entryId }`, so reusing it would hand a stranger six
+ * real vocab uuids on one tap of Share.
+ */
+const POISONED_CARD: CardForShare = {
+  id: 'ba5eba11-0000-4000-8000-000000000001',
+  cardDate: '2026-08-09',
+  items: [
+    {
+      position: 1,
+      entryId: 'ba5eba11-0000-4000-8000-000000000002',
+      term: 'genteel',
+      partOfSpeech: 'adjective',
+      pronunciation: '/d\u0292\u025Bn\u02C8ti\u02D0l/',
+      definition: 'polite in a way that is trying too hard',
+      examples: ['His genteel manners fooled nobody.', 42, 'b', 'c', 'd'],
+      enrichmentStatus: 'ready',
+    },
+    {
+      position: 2,
+      entryId: 'ba5eba11-0000-4000-8000-000000000003',
+      term: 'truculent',
+      partOfSpeech: null,
+      pronunciation: null,
+      // Still enriching: the definition must be dropped rather than published.
+      definition: 'LEAK-pending-definition',
+      examples: ['LEAK-pending-example'],
+      enrichmentStatus: 'pending',
+    },
+  ],
+}
+
+const cardPayload = toSharedCardPayload(POISONED_CARD)
+
+check(
+  'the key list is exact',
+  Object.keys(cardPayload).sort(),
+  ['cardDate', 'dateLabel', 'kind', 'words'],
+)
+check(
+  "and so is a word's",
+  Object.keys(cardPayload.words[0]).sort(),
+  ['definition', 'examples', 'partOfSpeech', 'position', 'pronunciation', 'term'],
+)
+check('no uuid survives, anywhere', uuidsIn(cardPayload), [])
+check('and neither does a pending definition', JSON.stringify(cardPayload).includes('LEAK'), false)
+check('a pending word keeps its term', cardPayload.words[1].term, 'truculent')
+check('but its definition is null, which draws the skeleton', cardPayload.words[1].definition, null)
+check('and its examples are empty', cardPayload.words[1].examples, [])
+check('positions come from the row, not the array index', cardPayload.words.map((w) => w.position), [1, 2])
+check(
+  `examples are capped at ${SHARE_EXAMPLES_MAX} and non-strings dropped`,
+  cardPayload.words[0].examples,
+  ['His genteel manners fooled nobody.', 'b', 'c'],
+)
+
+check(
+  'a seventh word is sliced off defensively',
+  toSharedCardPayload({
+    ...POISONED_CARD,
+    items: Array.from({ length: 9 }, (_, i) => ({ ...POISONED_CARD.items[0], position: i + 1 })),
+  }).words.length,
+  6,
+)
+
+section('toSharedJournalPayload — three fields, and two load-bearing absences')
+
+const POISONED_ENTRY: JournalEntry = {
+  id: 'ba5eba11-0000-4000-8000-000000000004',
+  userId: 'ba5eba11-0000-4000-8000-000000000005',
+  text: 'A house with no rice smells of nothing at all.',
+  sourceNote: 'LEAK-in-Ibus-kitchen',
+  insight: {
+    meaning: 'An absence is quieter than a presence, and only the one who had it notices.',
+    whenItApplies: ['Moving out for the first time.', 'A habit noticed only once it stops.'],
+  },
+  insightStatus: 'ready',
+  insightRequestedAt: new Date('2026-08-03T02:00:00.000Z'),
+  createdAt: new Date('2026-08-03T02:00:00.000Z'),
+  updatedAt: new Date('2026-08-04T02:00:00.000Z'),
+}
+
+const journalPayload = toSharedJournalPayload(POISONED_ENTRY, 'Asia/Jakarta')
+
+check(
+  'the key list is exact',
+  Object.keys(journalPayload).sort(),
+  ['dateLabel', 'insight', 'kind', 'text'],
+)
+/**
+ * Named individually even though the equality above subsumes them, because these
+ * three are exactly what a future edit adds back "just for the date line".
+ */
+check('no sourceNote', 'sourceNote' in journalPayload, false)
+check('no id', 'id' in journalPayload, false)
+check('no updatedAt', 'updatedAt' in journalPayload, false)
+check('and no uuid anywhere', uuidsIn(journalPayload), [])
+check('nothing marked LEAK survives', JSON.stringify(journalPayload).includes('LEAK'), false)
+check('the insight crosses — the user asked for exactly this', journalPayload.insight !== null, true)
+
+check(
+  'a pending entry shares as a bare line rather than a button nobody can press',
+  toSharedJournalPayload({ ...POISONED_ENTRY, insightStatus: 'pending' }, 'Asia/Jakarta').insight,
+  null,
+)
+check(
+  'and so does one whose stored insight will not parse',
+  toSharedJournalPayload(
+    { ...POISONED_ENTRY, insight: { nonsense: true } as unknown as JournalEntry['insight'] },
+    'Asia/Jakarta',
+  ).insight,
+  null,
+)
+
+section('the day is the OWNER\'s, not the reader\'s')
+
+/**
+ * `created_at` is 02:00 UTC on the 3rd, which is 09:00 on the 3rd in Jakarta and
+ * 19:00 on the **2nd** in Los Angeles. `toJournalEntryDto` would use the reader's
+ * zone; on a public page the reader is a stranger, so the day has to come from
+ * the owner's — resolved once, at share time.
+ */
+check(
+  'Jakarta',
+  toSharedJournalPayload(POISONED_ENTRY, 'Asia/Jakarta').dateLabel,
+  '3 Aug 2026',
+)
+check(
+  'Los Angeles is a different day, and the owner decides which',
+  toSharedJournalPayload(POISONED_ENTRY, 'America/Los_Angeles').dateLabel,
+  '2 Aug 2026',
+)
+
+section('a card date has no offset, so every viewer reads the same string')
+
+/**
+ * The viewer-in-a-different-timezone claim, tested from the viewer's side: the
+ * process TZ is moved to three zones a day apart and the label must not budge.
+ * `formatLocalDateLong` pins `Intl` to UTC precisely so the weekday and month
+ * are properties of the calendar date rather than of the machine reading it.
+ */
+const originalTZ = process.env.TZ
+for (const tz of ['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
+  process.env.TZ = tz
+  check(`TZ=${tz}`, toSharedCardPayload(POISONED_CARD).dateLabel, '9 August 2026')
+}
+process.env.TZ = originalTZ
+
+section('freshness is a bounded shape, and it never says "Today"')
+
+check('the sharer\'s own day', cardFreshness('2026-08-09', '2026-08-09'), { kind: 'today' })
+check('the day after', cardFreshness('2026-08-09', '2026-08-10'), { kind: 'yesterday' })
+check('a week later', cardFreshness('2026-08-09', '2026-08-16'), { kind: 'older', daysAgo: 7 })
+/**
+ * A viewer whose local date is *behind* the sharer's — Los Angeles reading a
+ * card made in Kiritimati. There is no honest label for a card from tomorrow, so
+ * it reads as today rather than as a negative number.
+ */
+check('a card from ahead of the viewer', cardFreshness('2026-08-10', '2026-08-09'), { kind: 'today' })
+check(
+  'the labels are lower case and none of them is the word Today',
+  ['today', 'yesterday', 'older'].map((k) =>
+    freshnessLabel(k === 'older' ? { kind: 'older', daysAgo: 3 } : { kind: k as 'today' }),
+  ),
+  ['today', 'yesterday', '3 days ago'],
+)
+
+section('the list view narrows, and carries no uuid even by accident')
+
+const listWords = toCardListWords(cardPayload)
+check('one row per word', listWords.length, 2)
+check(
+  'the row id is a position, never an entry uuid',
+  listWords.map((w) => w.id),
+  ['p1', 'p2'],
+)
+check('no uuid anywhere in the rendered props', uuidsIn(listWords), [])
+check(
+  'and the detail fields do not ride along into the first paint',
+  Object.keys(listWords[0]).sort(),
+  ['definition', 'id', 'tag', 'term'],
+)
+
+section('resolveClaimWord — F18 adds an entity kind and no outcome')
+
+const CARD_PAYLOAD = toSharedCardPayload(POISONED_CARD)
+const WORD_PAYLOAD = toSharedWordPayload(POISONED)
+
+check('a vocab share ignores w entirely', resolveClaimWord(WORD_PAYLOAD, null)?.term, 'genteel')
+check('and still resolves when one is present', resolveClaimWord(WORD_PAYLOAD, 4)?.term, 'genteel')
+check('a card share resolves by position', resolveClaimWord(CARD_PAYLOAD, 2)?.term, 'truculent')
+check('a card share with no w resolves to nothing', resolveClaimWord(CARD_PAYLOAD, null), null)
+check('a position the card does not have', resolveClaimWord(CARD_PAYLOAD, 6), null)
+check('no payload at all', resolveClaimWord(null, 1), null)
+check(
+  'a journal share is never claimable',
+  resolveClaimWord(toSharedJournalPayload(POISONED_ENTRY, 'UTC'), 1),
+  null,
+)
+/**
+ * The narrowing drops `position`, which is meaningless to a claim and must not
+ * ride into the inserted row.
+ */
+check(
+  'the resolved word is exactly a vocab payload',
+  Object.keys(resolveClaimWord(CARD_PAYLOAD, 1)!).sort(),
+  ['definition', 'examples', 'kind', 'partOfSpeech', 'pronunciation', 'term'],
+)
+
 section('sharedPayloadSchema is the second, independent net on read')
 
 const parsed = sharedPayloadSchema.safeParse({
@@ -269,7 +604,30 @@ check(
   parsed.success ? Object.keys(parsed.data).sort() : null,
   ['definition', 'examples', 'kind', 'partOfSpeech', 'pronunciation', 'term'],
 )
-check('an unknown kind is refused', sharedPayloadSchema.safeParse({ kind: 'card' }).success, false)
+check(
+  'a bare kind with no fields is still refused',
+  sharedPayloadSchema.safeParse({ kind: 'card' }).success,
+  false,
+)
+check('an unknown kind is refused', sharedPayloadSchema.safeParse({ kind: 'profile' }).success, false)
+check(
+  "F18's card arm parses",
+  sharedPayloadSchema.safeParse(cardPayload).success,
+  true,
+)
+check(
+  "and F18's journal arm",
+  sharedPayloadSchema.safeParse(journalPayload).success,
+  true,
+)
+check(
+  'a word index outside 1..6 is refused on read as well as on the way in',
+  sharedPayloadSchema.safeParse({
+    ...cardPayload,
+    words: [{ ...cardPayload.words[0], position: 7 }],
+  }).success,
+  false,
+)
 check('a payload of null is refused', sharedPayloadSchema.safeParse(null).success, false)
 check('a payload of a string is refused', sharedPayloadSchema.safeParse('genteel').success, false)
 check(
@@ -294,10 +652,23 @@ check(
   createShareSchema.safeParse({ entityType: 'vocab', id: 'genteel' }).success,
   false,
 )
-// F18's two arms do not exist yet, and the route cannot be talked into them.
+// F18's two arms. The route's `switch` is exhaustive over this union, so a
+// fourth entity type stops that file compiling until somebody has decided what
+// a stranger may see of it.
+check('a card share', createShareSchema.safeParse({ entityType: 'card', id: UUID }).success, true)
 check(
-  'a card share is refused until F18 adds the arm',
-  createShareSchema.safeParse({ entityType: 'card', id: UUID }).success,
+  'a journal share',
+  createShareSchema.safeParse({ entityType: 'journal', id: UUID }).success,
+  true,
+)
+check(
+  'and a kind nobody has taught it',
+  createShareSchema.safeParse({ entityType: 'profile', id: UUID }).success,
+  false,
+)
+check(
+  'a card share still needs a uuid',
+  createShareSchema.safeParse({ entityType: 'card', id: '2026-08-09' }).success,
   false,
 )
 
@@ -436,6 +807,138 @@ check(
   [true, true, false, false, false, false],
 )
 
+/* -------------------------- F18: the dw_next cookie ------------------------- */
+
+section('the dw_next cookie — a destination, and never a path')
+
+check('name', SHARE_NEXT_COOKIE, 'dw_next')
+check('httpOnly', SHARE_NEXT_COOKIE_OPTIONS.httpOnly, true)
+// The same silent failure as dw_claim: a Strict cookie is not sent on the
+// top-level navigation back from accounts.google.com.
+check('sameSite is lax, never strict', SHARE_NEXT_COOKIE_OPTIONS.sameSite, 'lax')
+check('path is /', SHARE_NEXT_COOKIE_OPTIONS.path, '/')
+check('maxAge matches the signed TTL', SHARE_NEXT_COOKIE_OPTIONS.maxAge, SHARE_NEXT_TTL_SECONDS)
+// An hour, not ten minutes: this has to survive the OAuth hop *and* five
+// onboarding screens typed on a phone.
+check('and the TTL is an hour', SHARE_NEXT_TTL_SECONDS, 3600)
+
+check(
+  'it round-trips',
+  decodeNextDestination(encodeNextDestination('journal', SECRET, NOW), SECRET, NOW),
+  'journal',
+)
+check(
+  'and expires inside its own signature',
+  decodeNextDestination(
+    encodeNextDestination('journal', SECRET, NOW),
+    SECRET,
+    NOW + SHARE_NEXT_TTL_SECONDS,
+  ),
+  null,
+)
+for (const [label, value] of [
+  ['undefined', undefined],
+  ['the empty string', ''],
+  ['a bare symbol', 'journal'],
+  ['a path', '/journal'],
+  ['a 10 kB string', 'x'.repeat(10_000)],
+  ['signed with another secret', encodeNextDestination('journal', OTHER_SECRET, NOW)],
+] as [string, unknown][]) {
+  check(`decode rejects ${label}`, decodeNextDestination(value, SECRET, NOW), null)
+}
+
+/**
+ * The property the whole design rests on: **no path is ever read out of the
+ * cookie.** A signed value naming a destination nobody implemented decodes to
+ * null, and the only way to a href is the literal `switch`.
+ */
+check(
+  'a signed but unknown destination decodes to nothing',
+  decodeNextDestination(
+    // Hand-forged with the real secret, which is the strongest attacker there is
+    // here, and it still cannot name a path.
+    signFields('/evil.com|' + (NOW + 60)),
+    SECRET,
+    NOW,
+  ),
+  null,
+)
+check(
+  'the value space is exactly one symbol',
+  ['journal', '/journal', 'today', '', null, 1].map((v) => isShareNextDestination(v)),
+  [true, false, false, false, false, false],
+)
+check('and it maps through a literal', nextDestinationHref('journal'), '/journal')
+
+/* --------------------------------- F18: metadata ---------------------------- */
+
+section('the unfurl builders')
+
+check('a full card', shareCardMetaTitle('9 August 2026', 6), 'Six words — 9 August 2026')
+check('a card of one', shareCardMetaTitle('9 August 2026', 1), 'One word — 9 August 2026')
+check('and of four', shareCardMetaTitle('9 August 2026', 4), 'Four words — 9 August 2026')
+check(
+  'the description is the first three terms',
+  shareCardMetaDescription(['genteel', 'truculent', 'perspicacious', 'sesquipedalian']),
+  'genteel, truculent, perspicacious',
+)
+check(
+  'and never empty',
+  shareCardMetaDescription([]).length > 0,
+  true,
+)
+
+const LINE =
+  'Ibu used to say that a house with no rice smells of nothing at all, and I did not understand her until the year I lived alone, in a city where nobody had ever met her.'
+
+/**
+ * **The journal unfurl is the line, never the insight** (D14 rule 1). A
+ * machine-written paragraph in a preview card, under a person's link, with no
+ * room for the "Written by the machine" line, is exactly the misattribution the
+ * shared page spends its argument avoiding.
+ */
+check(
+  'the title is a clip of the line',
+  LINE.startsWith(shareJournalMetaTitle(LINE).replace('…', '')),
+  true,
+)
+check(
+  'and it is not the insight',
+  shareJournalMetaTitle(LINE).includes('An absence is quieter'),
+  false,
+)
+check(
+  'the description is a longer clip of the same line',
+  shareJournalMetaDescription(LINE).length <= 161,
+  true,
+)
+check(
+  'neither builder can reach a source note — it is not in the payload at all',
+  'sourceNote' in journalPayload,
+  false,
+)
+check(
+  'a short line is returned whole, with no ellipsis',
+  shareJournalMetaTitle('Keep going.'),
+  'Keep going.',
+)
+check(
+  'newlines collapse rather than reaching a meta tag',
+  shareJournalMetaTitle('one\ntwo\n\nthree'),
+  'one two three',
+)
+check('clipping lands on a word boundary', clipForMeta('alpha beta gamma delta', 14), 'alpha beta…')
+check(
+  'and a single unbreakable token is hard-clipped rather than returned whole',
+  clipForMeta('a'.repeat(80), 20).length,
+  21,
+)
+check(
+  'a title never exceeds its cap by more than the ellipsis',
+  shareJournalMetaTitle(LINE).length <= SHARE_JOURNAL_META_TITLE_MAX + 1,
+  true,
+)
+
 /* ----------------------------------- Copy ----------------------------------- */
 
 section('the copy register')
@@ -448,6 +951,7 @@ const COPY = [
   SHARE_PRACTISE_LABEL,
   SHARE_GONE_TITLE,
   SHARE_GONE_BODY,
+  SHARE_JOURNAL_CTA_LABEL,
 ]
 check('none of it exclaims', COPY.some((s) => s.includes('!')), false)
 check('none of it asks "are you sure"', COPY.some((s) => /are you sure/i.test(s)), false)
@@ -462,6 +966,9 @@ check(
   /revok|expir|delet|remov/i.test(`${SHARE_GONE_TITLE} ${SHARE_GONE_BODY}`),
   false,
 )
+// The user's own words for F18's CTA, and it means them: nothing is prefilled,
+// so the label must not promise a line.
+check("F18's CTA", SHARE_JOURNAL_CTA_LABEL, 'Start your own journal')
 
 /* --------------------------- Structural assertions -------------------------- */
 
@@ -542,6 +1049,149 @@ check(
 const mw = stripComments(body.get('middleware.ts') ?? '')
 check('the middleware calls isPublicSharePath', mw.includes('isPublicSharePath('), true)
 check('and no bare `s` joined the matcher alternation', /\(\?!api\|s\|/.test(mw), false)
+
+/* ------------------------- F18's structural assertions ---------------------- */
+
+/**
+ * **The public DTO rule** (F18 D8). Neither public serialiser may reuse the
+ * private one, and the leak is one import away in both directions:
+ * `toDailyCardItemView` returns the vocab entry's uuid, and `toJournalEntryDto`
+ * returns the entry uuid, the source note and the reader's-timezone date.
+ */
+const PUBLIC_SURFACE = [...body.keys()].filter(
+  (f) =>
+    f.startsWith('app/s/') ||
+    f.startsWith('components/share/') ||
+    (f.startsWith('lib/share/') && f !== 'lib/share/serialize.ts'),
+)
+check('there is a public surface to check', PUBLIC_SURFACE.length > 0, true)
+for (const forbidden of ['@/lib/cards/serialize', '@/lib/journal/serialize']) {
+  check(
+    `nothing on the public surface imports ${forbidden}`,
+    PUBLIC_SURFACE.filter((f) => (body.get(f) ?? '').includes(forbidden)),
+    [],
+  )
+}
+/**
+ * `lib/share/serialize.ts` is the one exception, and only for
+ * `parseStoredInsight` — reading a `jsonb` column defensively, not building a
+ * DTO. Asserted narrowly so the exemption cannot widen into `toJournalEntryDto`.
+ */
+// Comments stripped, because that file *names* the private serialisers in order
+// to explain why it does not use them, and a grep over prose reads the warning
+// as the bug.
+const shareSerialize = stripComments(body.get('lib/share/serialize.ts') ?? '')
+check(
+  'and serialize.ts borrows only parseStoredInsight from it',
+  /toJournalEntryDto|toDailyCardItemView|toDuplicateMatchDto/.test(shareSerialize),
+  false,
+)
+
+/**
+ * A public page must never link into the `(app)` group: an anonymous visitor
+ * would be bounced to /signin, and the author testing it is signed in, so it
+ * renders perfectly for them.
+ */
+for (const forbidden of ['@/lib/vocab/links', '@/lib/auth/session', 'requireUser']) {
+  check(
+    `nothing under app/s/ references ${forbidden}`,
+    [...body.keys()]
+      .filter((f) => f.startsWith('app/s/'))
+      .filter((f) => (body.get(f) ?? '').includes(forbidden)),
+    [],
+  )
+}
+
+/**
+ * The date discipline. `grep toISOString` must not gain a hit outside the four
+ * files that serialise an *instant*, and the public DTOs must construct no clock
+ * and do no date arithmetic of their own — everything goes through
+ * `lib/time/local-date.ts`.
+ */
+/**
+ * The eight files `grep -rn toISOString src/` yields today, every one of them
+ * serialising an **instant** rather than a day. **F18 adds none**, which is the
+ * assertion: a ninth is either a new sanctioned serialiser or the day-boundary
+ * contract being broken, and either way it should be a decision rather than a
+ * diff nobody read.
+ */
+const SANCTIONED_TO_ISO = [
+  'app/(app)/journal/journal-feed.tsx',
+  'app/api/cards/route.ts',
+  'app/api/profile/complete/route.ts',
+  'lib/cards/serialize.ts',
+  'lib/chat/serialize.ts',
+  'lib/journal/cursor.ts',
+  'lib/journal/serialize.ts',
+  'lib/profile/serialize.ts',
+]
+check(
+  'toISOString appears in exactly the eight files it did before F18',
+  [...body.entries()]
+    .filter(([path, text]) => text.includes('toISOString') && !SANCTIONED_TO_ISO.includes(path))
+    .map(([path]) => path),
+  [],
+)
+for (const f of ['lib/share/serialize.ts', 'lib/share/card-view.ts']) {
+  const text = stripComments(body.get(f) ?? '')
+  check(
+    `${f} constructs no clock and does no date arithmetic`,
+    /toISOString|new Intl\.DateTimeFormat|getFullYear|getMonth\(\)|getDate\(\)/.test(text),
+    false,
+  )
+}
+
+/**
+ * **F17 D2's frozen claim path, asserted from the outside.** `claim:check` owns
+ * the literal; this owns the absence of a parameterised builder, so a later
+ * session cannot reintroduce the open-redirect shape F18 explicitly did not ask
+ * for. The word index rides in the signed cookie instead.
+ */
+check(
+  'no claimHref builder exists anywhere',
+  [...body.entries()].filter(([, text]) => /\bclaimHref\s*[:=]\s*\(/.test(text)).map(([p]) => p),
+  [],
+)
+/**
+ * And nothing anywhere concatenates a *variable* onto it. `policy.ts` builds
+ * `${CLAIM_PATH}/` for the middleware's exact-match test, which is a comparison
+ * rather than a destination; what would be a bug is a slug, a position or a
+ * `next` reaching a redirect target.
+ */
+check(
+  'and nothing interpolates a value into a claim URL',
+  [...body.entries()]
+    .filter(([, text]) => /\$\{CLAIM_PATH\}\$\{|CLAIM_PATH\s*\+\s*[a-z]/.test(stripComments(text)))
+    .map(([path]) => path),
+  [],
+)
+
+/**
+ * `journal-signup-actions.ts` spells the destination out as a literal rather
+ * than calling the helper, because `claim:check` greps every `redirectTo:` in
+ * the application and requires one — F17 D2's defence, expressed as a property.
+ * This is what stops the duplication drifting.
+ */
+check(
+  'and the sign-up action redirects to exactly that string',
+  (body.get('lib/share/journal-signup-actions.ts') ?? '').includes(
+    `redirectTo: '${nextDestinationHref('journal')}'`,
+  ),
+  true,
+)
+
+/**
+ * **`(app)/layout.tsx` gains no branch for any of this** — F17's restraint, and
+ * F18 keeps it. The claim and the journal signup both work by writing the state
+ * the app already has rather than by teaching the gate about a new one.
+ */
+const appLayout = stripComments(body.get('app/(app)/layout.tsx') ?? '')
+check('app/(app)/layout.tsx exists', appLayout.length > 0, true)
+check(
+  'and knows nothing about shares, claims or destinations',
+  /share|claim|dw_next|dw_claim/i.test(appLayout),
+  false,
+)
 
 /** Strips block and line comments, so a grep reads code rather than prose. */
 function stripComments(text: string): string {

@@ -19,6 +19,7 @@ import {
   formatLocalDateLong,
   formatLocalDateWeekday,
   formatMonthLabel,
+  isLocalDate,
   isLocalMonth,
   isValidTimeZone,
   localDateRange,
@@ -115,6 +116,28 @@ check('addLocalMonths across a year', addLocalMonths('2026-12', 1), '2027-01')
 check('addLocalMonths backwards', addLocalMonths('2026-01', -1), '2025-12')
 check('isLocalMonth rejects month 13', isLocalMonth('2026-13'), false)
 check('isLocalMonth rejects a word', isLocalMonth('August'), false)
+
+/**
+ * `isLocalDate` — added by F18, and every rejection below is a string that
+ * **passed** the `/^\d{4}-\d{2}-\d{2}$/` shape test `/card/[date]` originally
+ * shipped with. `2026-13-99` reached a `date` column that way and answered 500
+ * where the honest answer is 404. A shape is not a date.
+ */
+check('a real day', isLocalDate('2026-08-09'), true)
+check('a leap day in a leap year', isLocalDate('2024-02-29'), true)
+check('the same day in a common year', isLocalDate('2026-02-29'), false)
+check('February 30th', isLocalDate('2026-02-30'), false)
+check('month 13', isLocalDate('2026-13-99'), false)
+check('month 00', isLocalDate('2026-00-01'), false)
+check('day 00', isLocalDate('2026-01-00'), false)
+check('day 32', isLocalDate('2026-01-32'), false)
+check('the 31st of a 30-day month', isLocalDate('2026-04-31'), false)
+check('unpadded', isLocalDate('2026-8-9'), false)
+check('an instant', isLocalDate('2026-08-09T00:00:00.000Z'), false)
+check('a word', isLocalDate('yesterday'), false)
+check('the empty string', isLocalDate(''), false)
+check('a Date', isLocalDate(new Date()), false)
+check('null', isLocalDate(null), false)
 check('isLocalMonth accepts', isLocalMonth('2026-08'), true)
 
 section('formatting (English throughout, per principle 4)')

@@ -5,7 +5,7 @@ import { BackLink } from "@/components/layout/back-link";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Eyebrow, Meta, Prose } from "@/components/ui/text";
-import { ShareWordButton } from "@/components/share/share-word-button";
+import { ShareButton } from "@/components/share/share-button";
 import { CorrectionBanner } from "@/components/vocab/correction-banner";
 import { DeleteWordButton } from "@/components/vocab/delete-word-button";
 import { RetryEnrichmentButton } from "@/components/vocab/retry-enrichment-button";
@@ -13,7 +13,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getShareForEntity } from "@/lib/db/queries/shares";
 import { getVocabEntryDetail } from "@/lib/db/queries/vocab";
 import { env } from "@/lib/env";
-import { shareHref } from "@/lib/share/policy";
+import { shareHref, SHARE_ACTION_LABEL } from "@/lib/share/policy";
 import { enrichmentCopy, isStalePending } from "@/lib/vocab/display";
 import { termSizeClass } from "@/lib/vocab/format";
 import { backTarget, parseOrigin, vocabChatHref } from "@/lib/vocab/links";
@@ -191,9 +191,11 @@ export default async function WordPage({
             word is ready" line — a second would be noise, so this control simply
             is not there yet. */}
         {ready && (
-          <ShareWordButton
-            entryId={entry.id}
-            term={entry.term}
+          <ShareButton
+            entityType="vocab"
+            entityId={entry.id}
+            title={entry.term}
+            label={SHARE_ACTION_LABEL}
             initialSlug={share?.slug ?? null}
             initialUrl={share ? `${env.APP_URL}${shareHref(share.slug)}` : null}
           />

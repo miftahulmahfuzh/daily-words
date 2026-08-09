@@ -26,6 +26,57 @@ gains one additive prop and four new component rows (D9).
 
 ---
 
+## Built on 2026-08-09 — where this plan was wrong
+
+**Read this before the rest of the file.** F18 was written before `F16-share-infra.md`
+existed and against a guess at F17. Both shipped differently, and in every case
+the shipped design is the one that survived. The plan's body below is left
+unedited as the reasoning; this section is what actually happened.
+
+| Plan said | Shipped | Why |
+|---|---|---|
+| `src/app/(public)/s/[slug]/` | `src/app/s/[slug]/` | F16 chose a bare `/s/`. Every path in §3 loses one segment; nothing else changes, exactly as §0 predicted. |
+| Snapshot vs live "unknown" (D12) | **Snapshot**, and the journal too | F16 stores a `jsonb` payload and `share:check` greps `queries/shares.ts` for the names of user-owned tables. A live journal read would have been a join into that file. So D12's second branch was taken: `PATCH /api/journal/[id]` **revokes on a text edit**. |
+| Three new resolvers in `queries/shares.ts` (§3) | **None** | Forbidden by that grep, and unnecessary: `getShareBySlug` already returns everything, because the words are on the share row. |
+| `getShareTargetForClaim(slug, w)`, joining `daily_card_items` (D11.4) | Unchanged | `w` indexes into the snapshot. The query was not touched. |
+| D11's six edits across five F17 files | **Two** | F16 had already built `ClaimIntent.w`, its validation, and the `?w=` read in `/s/[slug]/claim`, on the brief's [C2]. What was left was one arm in `resolveClaimOutcome` and one prop on `PractiseThisWord`. |
+| `lib/share/position.ts` (§3) | `parseSharePosition` in `lib/share/policy.ts` | `isPublicSharePath` needs it and `policy.ts` **imports nothing** — a property `share:check` asserts. A separate module would have put the bound and the middleware that enforces it on opposite sides of it. |
+| `lib/share/card-dto.ts`, `journal-dto.ts` (D8, §3) | `lib/share/serialize.ts` | That file is "the one file that decides what a stranger sees". Under a snapshot these are the same job, not a different one. |
+| `freshness` from `card.timezone ?? DEFAULT` (D7) | From `DEFAULT_TIMEZONE` alone | D8's own allowlist excludes the sharer's zone, and it is a location signal. A **read** may fall back where a write may not, and only the word "yesterday" is affected — the date beside it is exact and needs no zone. |
+| Nothing about the middleware | **`isPublicSharePath` had to be widened** | The plan could not know: F16's predicate admitted only `/s/<slug>` and `/s/<slug>/claim`, so every row of a shared card would have bounced a stranger to `/signin` — invisibly, because the author is signed in. It now admits a position-*shaped* fourth segment, so `/s/<slug>/5` on a four-word card reaches the share's own 404 rather than a sign-in page. |
+
+Two of the plan's own risks came due, and one bug was found by the assertions
+the plan asked for:
+
+- **R7 was wrong, and D3's fallback was taken.** The Share pill in `/today`'s
+  header was estimated at ~33px of slack; measured at 375×667 with a three-digit
+  streak the header went from 70.4px to **117px** and the title wrapped. All
+  eighteen existing assertions stayed green, because a two-line header leaves
+  rows at ~60.8px against a 52px floor — which is precisely the blind spot §5's
+  new single-row assertion was specified to cover, and it caught it on the first
+  run. The date `Eyebrow` links to `/card/[date]` instead, exactly as D3 said to
+  do, and the `ShareButton` variant that had no other caller was deleted.
+- **`/card/[date]`'s date guard was not enough.** D2 asks for a
+  `/^\d{4}-\d{2}-\d{2}$/` test "before anything calls `parseLocalDate`, which
+  throws and would turn a typo into a 500 where the honest answer is a 404". The
+  regex passes `2026-13-99`, which then reached a `date` comparison and produced
+  the 500 the guard existed to prevent. A shape is not a date. `isLocalDate` now
+  lives in `lib/time/local-date.ts` with the rest of the date arithmetic and
+  `dates:check` drives every string that used to get through.
+- **R2 (F15's dedup scope) was not asserted.** D15's cross-user assertion is the
+  one thing in §5 that did not get written: F15 ships two layers, and the
+  fixture would have to seed an embedding to exercise Layer 2 honestly rather
+  than passing on Layer 1 alone. `lib/db/queries/journal-embeddings.ts` takes
+  `userId` first like every other file in that directory, which is evidence and
+  not proof. **Still open.**
+
+D13 shipped **both** steps: `dw_next` is a signed, one-symbol cookie read and
+cleared by `POST /api/profile/complete`, which returns a `next` the server chose.
+R12's fence was read narrowly — the objection F17 recorded is to a `?next=`
+parameter, and no path is ever read out of this cookie.
+
+---
+
 ## 0. What this plan assumes from F16 and F17
 
 **`plans/F16-share-infra.md` did not exist when this was written**; F15 and F16

@@ -29,7 +29,7 @@
  */
 
 import type { ShareEntityType } from '@/lib/db/types'
-import type { SharedWordPayload } from '@/lib/share/schemas'
+import type { SharedPayload, SharedWordPayload } from '@/lib/share/schemas'
 import { SHARE_GONE_BODY, SHARE_GONE_TITLE } from '@/lib/share/policy'
 import { vocabChatHref, vocabDetailHref, vocabListHref } from '@/lib/vocab/links'
 import { normalizeTerm, validateTerm } from '@/lib/vocab/normalize'
@@ -225,6 +225,66 @@ export function buildClaimEnrichment(
   }
 }
 
+/* ------------------------- Which word is being claimed ---------------------- */
+
+/**
+ * Snapshot + word index → the one word this claim is about, or null.
+ *
+ * **F18's whole ask on F17, and it turned out to be four lines.** F17's contract
+ * was slug-only because F16's shared page is one slug and one word; a card share
+ * breaks that — the slug identifies a *card*, and there are six candidate rows
+ * behind it. F18's plan expected to widen `getShareTargetForClaim(slug)` into
+ * `(slug, w)` with a join through `daily_card_items`. F16 shipped a snapshot
+ * instead, so there is no join to widen: `w` is an index into a payload the
+ * claim already had in its hand, and the query is untouched.
+ *
+ * The three ways this returns null are every way F18 asks for **no new outcome**
+ * (F18 D11 part 5), and each lands on F17's existing zero-write `expired`:
+ *
+ *   - `w` missing on a card share — a claim link built without a position;
+ *   - `w` present on a vocab share — harmless, and ignored rather than refused;
+ *   - `w` naming a position a short card does not have.
+ *
+ * A **journal** share is never claimable and returns null here rather than
+ * anywhere later. Nothing is copied by F18's journal CTA — it is a sign-up
+ * funnel with no pending write — so there is no `journal` arm to write and
+ * `ClaimIntent` deliberately never gained a variant for one.
+ *
+ * `gone` is in practice unreachable for a card share:
+ * `daily_card_items.vocab_entry_id` is `ON DELETE RESTRICT` per [R1], so the
+ * sharer cannot delete a word that is on a card. A card share is the most
+ * durable share in the app.
+ *
+ * Pure and total, so `claim:check` drives every combination offline.
+ */
+export function resolveClaimWord(
+  payload: SharedPayload | null,
+  w: number | null,
+): SharedWordPayload | null {
+  if (!payload) return null
+  if (payload.kind === 'vocab') return payload
+  if (payload.kind !== 'card' || w === null) return null
+
+  // By the word's own `position`, never by array index. They agree today only
+  // because `daily_card_items.position` is contiguous by contract.
+  const word = payload.words.find((candidate) => candidate.position === w)
+  if (!word) return null
+
+  /**
+   * Narrowed by hand into the vocab payload's shape, with **no spread**. The
+   * card word carries `position`, which is meaningless to a claim and must not
+   * ride along into `buildClaimEnrichment`'s output or the inserted row.
+   */
+  return {
+    kind: 'vocab',
+    term: word.term,
+    pronunciation: word.pronunciation,
+    partOfSpeech: word.partOfSpeech,
+    definition: word.definition,
+    examples: word.examples,
+  }
+}
+
 /* -------------------------------- The resolver ------------------------------ */
 
 /** The signed cookie's fields, as the resolver needs them. `lib/share/intent.ts`. */
@@ -241,8 +301,18 @@ export type ClaimShare = {
   /** The sharer. Used for exactly one thing: the owner short-circuit. */
   userId: string
   entityType: ShareEntityType
+  /**
+   * The sharer's own entry, for the owner short-circuit's destination. **Null
+   * for a card share**, where the snapshot carries no uuid by design — an owner
+   * on their own card link falls through to `already_have` instead, which lands
+   * them in exactly the same chat by way of their own collection.
+   */
   vocabEntryId: string | null
-  /** Parsed from `jsonb`. Null when it did not parse. */
+  /**
+   * The word this claim is about, already resolved by `resolveClaimWord` — for
+   * a vocab share the whole snapshot, for a card share the one word `intent.w`
+   * named. Null when the share did not resolve to a claimable word at all.
+   */
   payload: SharedWordPayload | null
 }
 
@@ -329,14 +399,16 @@ export function resolveClaimOutcome(input: ClaimInput): ClaimDecision {
    * deleting their word revokes the share, and "the sharer's entry is gone" is
    * this branch rather than a separate one.
    *
-   * A share of a kind this build cannot claim takes the same path. It is
-   * unreachable today — F16 mints only vocab shares — and **F18 adds its `card`
-   * and `journal` arms here**, where `intent.w` finally gets read: it is an index
-   * into the card's six words, which is why it rides inside the signed cookie
-   * rather than as a `?w=` query param on a path F17 froze to a literal.
+   * A share of a kind this build cannot claim takes the same path, and **so does
+   * a card share whose `w` named nothing** — `resolveClaimWord` folds all of it
+   * into `payload: null` before the resolver sees it, which is how F18 added a
+   * whole entity kind without adding an outcome to the ten below.
+   *
+   * The `entityType !== 'vocab'` test that used to be on this line went with it:
+   * a card share is claimable now, and the question the resolver actually needs
+   * answered is "is there a word", not "what kind of row was it read from".
    */
-  if (!share || share.entityType !== 'vocab' || !share.payload) return gone('expired')
-  if (!share.vocabEntryId) return gone('expired')
+  if (!share || !share.payload) return gone('expired')
 
   /**
    * 3. The term is the one free-text field that crosses from one user to
@@ -359,8 +431,15 @@ export function resolveClaimOutcome(input: ClaimInput): ClaimDecision {
    * passed as an insert's `userId` — the share tells us *what* to copy, the
    * session tells us *who* to copy it to, and those two facts come from
    * different places and are never allowed to swap (§9).
+   *
+   * **The `vocabEntryId` guard is F18's, and the fall-through is the point.** A
+   * card share carries no entry uuid — the snapshot has none, deliberately — so
+   * the owner of a card tapping their own row drops past this branch and is
+   * caught by `already_have` at step 6, which finds the row in *their own*
+   * collection by term and sends them to the same chat. Same destination, no
+   * uuid in the snapshot, and no fourth outcome.
    */
-  if (share.userId === input.sessionUserId) {
+  if (share.userId === input.sessionUserId && share.vocabEntryId) {
     return {
       outcome: 'owner',
       writes: 'none',
