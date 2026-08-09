@@ -6,8 +6,8 @@ import { TextInput } from "@/components/ui/text-input";
 import { Meta } from "@/components/ui/text";
 import { cn } from "@/lib/ui/cn";
 import { createShare, revokeShare } from "@/lib/share/client";
+import type { CreateShareRequest } from "@/lib/share/schemas";
 import {
-  SHARE_ACTION_LABEL,
   SHARE_COPIED_NOTICE,
   SHARE_COPY_LABEL,
   SHARE_FIELD_LABEL,
@@ -16,8 +16,25 @@ import {
 } from "@/lib/share/policy";
 
 /**
- * The Share affordance on `/vocab/[id]`: one tap to create, two taps to revoke,
- * and no page refresh in either direction.
+ * The Share affordance, for all three entities: one tap to create, two taps to
+ * revoke, and no page refresh in either direction.
+ *
+ * **F18 generalised F16's `ShareWordButton` rather than writing a second
+ * button.** The chain below — `navigator.share`, then the clipboard, then a
+ * selectable field — is the part of this feature most likely to behave
+ * differently on a real phone than in development, and a card or a journal entry
+ * whose Share control had drifted from the word's would be the worst place to
+ * find that out. One component, three call sites, one set of failure modes.
+ *
+ * `entityType` and `entityId` are the only things that vary. `title` is what a
+ * native share sheet shows beside the link, so it is a word, a date or the first
+ * line of an entry depending on what is being shared.
+ *
+ * **There is one shape, not two.** F18 D3 wanted a compact 32px variant for
+ * `/today`'s header; the header was measured and it does not fit at 375px with a
+ * three-digit streak, so D3's own fallback was taken — the date on `/today` links
+ * to `/card/[date]`, and the control lives there at a full 44px. A variant with
+ * no caller was removed rather than left to rot.
  *
  * **Text, never an icon.** [R18] removed the icon set, and
  * `delete-word-button.tsx` already records why: an unlabelled control is exactly
@@ -53,14 +70,20 @@ import {
  * the old text to keeps seeing what you actually sent them until you revoke it.
  * A third control on this page loses to Product Principle 1.
  */
-export function ShareWordButton({
-  entryId,
-  term,
+export function ShareButton({
+  entityType,
+  entityId,
+  title,
+  label,
   initialSlug,
   initialUrl,
 }: {
-  entryId: string;
-  term: string;
+  entityType: CreateShareRequest["entityType"];
+  entityId: string;
+  /** What a native share sheet shows beside the link. Never the sharer's name. */
+  title: string;
+  /** The un-shared call to action. "Share this word" / "…card" / "…line". */
+  label: string;
   /** The server already knows, from `getShareForEntity` beside the page read. */
   initialSlug: string | null;
   initialUrl: string | null;
@@ -91,7 +114,7 @@ export function ShareWordButton({
   async function handOff(target: string) {
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
-        await navigator.share({ title: term, text: term, url: target });
+        await navigator.share({ title, text: title, url: target });
         return;
       } catch (err) {
         // The user dismissed the sheet. That is a completed intention, not a
@@ -120,7 +143,7 @@ export function ShareWordButton({
     }
 
     setBusy(true);
-    const result = await createShare(entryId);
+    const result = await createShare(entityType, entityId);
     setBusy(false);
 
     if (!result.ok) {
@@ -173,7 +196,7 @@ export function ShareWordButton({
           disabled={busy}
           className={cn(control, "text-ink-3", busy && "opacity-60")}
         >
-          {SHARE_ACTION_LABEL}
+          {label}
         </button>
         {problem && <Meta className="text-red">{problem}</Meta>}
       </div>

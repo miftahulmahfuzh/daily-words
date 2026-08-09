@@ -13,6 +13,7 @@ import {
   claimSignInSentence,
   claimWriteFailed,
   noIntentStop,
+  resolveClaimWord,
   type ClaimStop,
 } from "@/lib/share/claim";
 import { finishShareClaim, startShareClaim } from "@/lib/share/claim-actions";
@@ -74,12 +75,18 @@ function ClaimStopScreen({ stop }: { stop: ClaimStop }) {
  * The word behind the cookie, for the two screens that name it before any
  * decision has been made. Parsed rather than cast, like every other read of that
  * `jsonb` column.
+ *
+ * **`w` is what makes this work for a card share** (F18): the cookie carries the
+ * slug *and* which of the card's six words was tapped, so the pre-sign-in
+ * sentence names the right one. `resolveClaimWord` is the same pure function the
+ * claim itself resolves through, so this screen and the write behind it can
+ * never disagree about which word is meant.
  */
-async function readSharedTerm(slug: string): Promise<string | null> {
+async function readSharedTerm(slug: string, w: number | null): Promise<string | null> {
   const row = await getShareBySlug(slug);
   if (!row) return null;
   const parsed = sharedPayloadSchema.safeParse(row.payload);
-  return parsed.success ? parsed.data.term : null;
+  return resolveClaimWord(parsed.success ? parsed.data : null, w)?.term ?? null;
 }
 
 export default async function ClaimPage({
@@ -110,7 +117,7 @@ export default async function ClaimPage({
    * one `/signin` uses, down to "Taking you to Google…".
    */
   if (!user) {
-    const term = await readSharedTerm(intent.slug);
+    const term = await readSharedTerm(intent.slug, intent.w);
     if (!term) {
       return (
         <ClaimStopScreen

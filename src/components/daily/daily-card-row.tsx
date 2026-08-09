@@ -19,20 +19,33 @@ import { vocabDetailHref } from "@/lib/vocab/links";
  */
 export function DailyCardRow({
   item,
+  href,
   last = false,
 }: {
   item: DailyCardItemView;
+  /**
+   * Where the row goes. **Defaults to the word on /today**, which is what this
+   * component meant before F18 and still means everywhere but one page.
+   *
+   * F11's comment here predicted the shape and F18 took it: "if F18's public
+   * shared card ever wants this row, lift the href to a prop rather than adding
+   * a `share` origin — a public page's rows must not link into `(app)`, which
+   * would bounce an anonymous visitor to /signin."
+   *
+   * Additive and defaulted, so one row component serves both pages and the
+   * no-scroll spec's `data-testid="daily-card-row"` keeps covering both. The
+   * alternative — forking the row — gives two components that drift and a spec
+   * that measures only one of them.
+   */
+  href?: string;
   /** No hairline after the last row. */
   last?: boolean;
 }) {
-  /* `"today"` is a literal because this component has exactly one meaning: a
-     row of *today's card*, so the word it opens must come back here (F11 D4).
-     If F18's public shared card ever wants this row, lift the href to a prop
-     rather than adding a `share` origin — a public page's rows must not link
-     into `(app)`, which would bounce an anonymous visitor to /signin. */
+  /* `"today"` is a literal because the *default* meaning of this component is a
+     row of today's card, so the word it opens must come back here (F11 D4). */
   return (
     <Link
-      href={vocabDetailHref(item.id, "today")}
+      href={href ?? vocabDetailHref(item.id, "today")}
       data-testid="daily-card-row"
       className={cn(
         "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-[3px] px-0.5 py-[11px]",

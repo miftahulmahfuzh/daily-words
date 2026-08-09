@@ -21,6 +21,7 @@ import { completeOnboarding } from "@/lib/profile/client";
 import { completeProfileAnswers } from "@/lib/profile/normalize";
 import { toggleExclusive } from "@/lib/profile/selection";
 import { detectTimeZone } from "@/lib/profile/timezone";
+import { ONBOARDING_DEFAULT_HREF } from "@/lib/share/policy";
 
 /**
  * Five questions, one screen each, every one skippable, one write at the end.
@@ -123,9 +124,18 @@ export function OnboardingFlow() {
       return;
     }
 
-    // `replace`, so the back gesture from /today does not return to a flow the
-    // gate would immediately bounce out of again.
-    router.replace("/today");
+    /**
+     * `replace`, so the back gesture from the destination does not return to a
+     * flow the gate would immediately bounce out of again.
+     *
+     * The destination comes from the server (F18 D13 step 2). It is `/today`
+     * for everyone except a stranger who arrived from a shared journal entry and
+     * tapped "Start your own journal" — they get `/journal`, with an **empty**
+     * composer. The route chooses between two literals; nothing here builds a
+     * path, and the fallback exists so an older server that has never heard of
+     * `next` still lands somebody sensible.
+     */
+    router.replace(result.data.next || ONBOARDING_DEFAULT_HREF);
   }
 
   function advance(next: Answers) {

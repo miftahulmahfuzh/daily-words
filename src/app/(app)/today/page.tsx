@@ -18,6 +18,7 @@ import {
   getCardForDate,
   getFirstCardDate,
 } from "@/lib/db/queries/cards";
+import { cardPermalinkHref } from "@/lib/cards/links";
 import { getCurrentStreak } from "@/lib/gamification/profile-stats";
 import {
   addLocalDays,
@@ -88,7 +89,40 @@ export default async function TodayPage() {
             absence — and the profile page is where the honest number lives. */}
         <ScreenHeader
           className="pb-3"
-          eyebrow={<Eyebrow>{formatLocalDateWeekday(today)}</Eyebrow>}
+          /**
+           * **F18 D3's fallback, taken on measurement.**
+           *
+           * The plan wanted a Share pill beside the streak pill, at the streak
+           * pill's height, costing zero vertical pixels — and named the width as
+           * its own R7: "the title, `gap-3`, a three-digit streak pill and a
+           * Share pill in 331px is roughly 33px of slack **by calculation**."
+           * The calculation was wrong. Measured at 375×667 with `?streak=365`,
+           * the header goes from 70.4px to **117px**: the trailing block wins the
+           * space and "Today's card" wraps to two lines. That costs each card row
+           * ~4.8px, and 60.8px still clears the 52px floor — so all eighteen
+           * existing assertions would have stayed green while the screen got
+           * visibly worse. The new single-row assertion in `no-scroll.spec.ts`
+           * exists for exactly that blind spot, and it is what caught this.
+           *
+           * So the date becomes the link, as D3 instructed — "take the fallback
+           * rather than shrinking the title or truncating the streak" — and the
+           * full-size Share control lives on `/card/[date]`, one tap away, where
+           * a scrolling screen can afford a real 44px target and where D18's
+           * revocation already lives.
+           *
+           * Only when there is a card. On a day with no card the eyebrow is
+           * still the date, but it leads nowhere, because there is nothing there
+           * yet.
+           */
+          eyebrow={
+            card ? (
+              <Link href={cardPermalinkHref(today)} className="w-fit">
+                <Eyebrow>{formatLocalDateWeekday(today)}</Eyebrow>
+              </Link>
+            ) : (
+              <Eyebrow>{formatLocalDateWeekday(today)}</Eyebrow>
+            )
+          }
           title="Today’s card"
           trailing={
             currentStreak > 0 ? (

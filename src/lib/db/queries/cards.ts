@@ -142,6 +142,72 @@ export function getCardForDate(
   return readCard(db, userId, cardDate);
 }
 
+/* ------------------------------- F18's reads -------------------------------- */
+
+/**
+ * One word of a card, with the two enrichment fields `CardItemRow` leaves out.
+ *
+ * `readCardItems` selects five columns because that is all `/today` draws.
+ * `/s/<slug>/<n>` draws the whole word, so a card **snapshot** has to carry
+ * `pronunciation` and `examples` too — otherwise the nested public route would
+ * have to read the sharer's live rows, and F16 D3's entire safety argument is
+ * that a stranger's page never touches a user-owned table.
+ */
+export type ShareCardItemRow = CardItemRow & {
+  pronunciation: string | null;
+  examples: unknown;
+};
+
+export type CardForShare = {
+  id: string;
+  cardDate: LocalDate;
+  items: ShareCardItemRow[];
+};
+
+/**
+ * A card of the user's own, by uuid, with everything a snapshot needs.
+ *
+ * `userId` first and in the WHERE clause, like every other function in this
+ * directory — this is the **authenticated** half of sharing. The stranger's half
+ * takes no user id and lives in `queries/shares.ts`, alone, on purpose.
+ *
+ * Null for a card that is not this user's, never a 403: a 403 confirms the id
+ * exists, which is the same rule `/journal/[id]` and `/vocab/[id]` already keep.
+ *
+ * `timezone` is deliberately **not** selected. The snapshot does not carry the
+ * sharer's zone (F18 D8) and the date on the card needs none — `card_date` is a
+ * `LocalDate` computed in that zone at creation and has no offset to convert.
+ */
+export async function getCardForShare(
+  userId: string,
+  cardId: string,
+): Promise<CardForShare | null> {
+  const [card] = await db
+    .select({ id: dailyCards.id, cardDate: dailyCards.cardDate })
+    .from(dailyCards)
+    .where(and(eq(dailyCards.userId, userId), eq(dailyCards.id, cardId)))
+    .limit(1);
+  if (!card) return null;
+
+  const items = await db
+    .select({
+      position: dailyCardItems.position,
+      entryId: vocabEntries.id,
+      term: vocabEntries.term,
+      partOfSpeech: vocabEntries.partOfSpeech,
+      pronunciation: vocabEntries.pronunciation,
+      definition: vocabEntries.definition,
+      examples: vocabEntries.examples,
+      enrichmentStatus: vocabEntries.enrichmentStatus,
+    })
+    .from(dailyCardItems)
+    .innerJoin(vocabEntries, eq(vocabEntries.id, dailyCardItems.vocabEntryId))
+    .where(eq(dailyCardItems.cardId, card.id))
+    .orderBy(asc(dailyCardItems.position));
+
+  return { ...card, items };
+}
+
 /** Inclusive on both ends. Feeds the week strip and the month grid. */
 export async function getCardDatesBetween(
   userId: string,

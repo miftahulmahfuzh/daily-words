@@ -298,3 +298,138 @@ test("the journal list does not scroll sideways and keeps its tab bar", async ({
   });
   expect(overflows, "the page scrolls horizontally").toBe(false);
 });
+
+/**
+ * F18's two additions.
+ *
+ * The eighteen assertions above now measure a `/kitchen-sink/today` fixture that
+ * carries **both** header controls by default — that is the real guard on D3, and
+ * it is why the fixture changed rather than gaining an opt-in flag. These two
+ * cover what those eighteen structurally cannot.
+ */
+
+/**
+ * **The header must stay one row**, and the existing spec cannot catch a wrap.
+ *
+ * A two-line header costs each row ~4.8px, and 60.8px still clears the 52px
+ * floor — so all eighteen would stay green while the screen got visibly worse.
+ * Driven at a three-digit streak, which is the widest the row can ever be:
+ * "Today's card" at `text-2xl`, `gap-3` and "365 day run" inside a 331px content
+ * box at 375px.
+ *
+ * **This assertion has already earned itself.** F18 D3 proposed a Share pill
+ * beside the streak pill and estimated ~33px of slack; measured here, the header
+ * went to 117px and the title wrapped. The pill was dropped for D3's own
+ * fallback — the date links to `/card/[date]` — and this is what stops the next
+ * person re-adding it on a calculation.
+ *
+ * Asserted two ways, because either alone is weak. The height bound catches a
+ * wrap outright; the shared-baseline check catches the case where the trailing
+ * block has dropped below the title without the header growing (a `flex-wrap`
+ * on a container that happened to have room).
+ */
+for (const scheme of SCHEMES) {
+  test(`/today's header is one row with a three-digit streak (${scheme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/kitchen-sink/today?n=6&streak=365");
+
+    const header = page.locator("header").first();
+    await expect(header).toBeVisible();
+
+    if (!DESIGN_TARGET_PROJECTS.includes(test.info().project.name)) return;
+
+    const measured = await header.evaluate((el) => {
+      const h = el as HTMLElement;
+      const title = h.querySelector("h1")!.getBoundingClientRect();
+      const trailing = h.lastElementChild!.getBoundingClientRect();
+      return {
+        height: h.offsetHeight,
+        titleBottom: title.bottom,
+        trailingTop: trailing.top,
+      };
+    });
+
+    expect(measured.height, "the header wrapped to two lines").toBeLessThanOrEqual(72);
+    expect(
+      measured.trailingTop,
+      "the trailing block dropped below the title's baseline row",
+    ).toBeLessThan(measured.titleBottom);
+  });
+}
+
+/**
+ * The shared card is the one public page with rows to measure.
+ *
+ * Vertical scrolling is expected here and is deliberately **not** asserted
+ * against: a public page has no tab bar, no day strip and no `ScreenHeader`, so
+ * it gets a different budget from `/today` and says so structurally (F18 D16).
+ * What must hold is that the rows still clear the floor — the card is
+ * `min-h-[396px] flex-none` rather than `flex-1`, which is arithmetic where
+ * [R19] preferred structure, and this is what keeps that honest.
+ *
+ * And **no tab bar**: four tabs that all bounce to /signin are a trap, not
+ * navigation. Its absence is a decision, so it is asserted rather than assumed.
+ */
+for (const scheme of SCHEMES) {
+  test(`the shared card holds its rows and grows no tab bar (${scheme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/kitchen-sink/share?kind=card&n=6");
+
+    const rows = page.getByTestId("daily-card-row");
+    await expect(rows).toHaveCount(6);
+
+    // A stranger has no session; four tabs that all bounce to /signin are worse
+    // than none.
+    await expect(page.locator("nav[aria-label='Primary']")).toHaveCount(0);
+
+    // Sideways is still a bug, on every page in the app.
+    const scrollsSideways = await page.evaluate(() => {
+      const el = document.scrollingElement!;
+      return el.scrollWidth > el.clientWidth + 1;
+    });
+    expect(scrollsSideways, "the page scrolls horizontally").toBe(false);
+
+    // The sixth word is left un-enriched in the fixture, because a card is at
+    // its most shareable on the day it was made — which is exactly when a word
+    // added minutes earlier is still being looked up.
+    await expect(page.getByTestId("row-definition")).toHaveCount(5);
+
+    if (!DESIGN_TARGET_PROJECTS.includes(test.info().project.name)) return;
+
+    const heights = await rows.evaluateAll((els) =>
+      els.map((el) => (el as HTMLElement).offsetHeight),
+    );
+    for (const height of heights) {
+      expect(
+        height,
+        `shared row is ${height}px, below the ${LAYOUT.rowMinH}px floor`,
+      ).toBeGreaterThanOrEqual(LAYOUT.rowMinH);
+    }
+  });
+}
+
+/**
+ * The shared journal entry. No rows to measure, so the claims are the two a
+ * public page can get wrong: the CTA has to be reachable, and there must be no
+ * tab bar.
+ */
+for (const scheme of SCHEMES) {
+  test(`the shared journal entry offers its CTA and no tab bar (${scheme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/kitchen-sink/share?kind=journal");
+
+    await expect(
+      page.getByRole("button", { name: "Start your own journal" }),
+    ).toBeVisible();
+    // The line the design specified verbatim, reused rather than rewritten, so a
+    // public-page rewrite cannot drop it.
+    await expect(page.getByText("Written by the machine. Keep or discard.")).toBeVisible();
+    await expect(page.locator("nav[aria-label='Primary']")).toHaveCount(0);
+  });
+}

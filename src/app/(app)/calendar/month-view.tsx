@@ -6,6 +6,7 @@ import { CalendarCell, CalendarMarkGlyph } from "@/components/ui/calendar-cell";
 import { Meta } from "@/components/ui/text";
 import { dayStateLabel, toCalendarMark } from "@/lib/cards/calendar";
 import { fetchCalendarMonth } from "@/lib/cards/client";
+import { cardPermalinkHref } from "@/lib/cards/links";
 import type { CalendarResponse, DayState } from "@/lib/cards/schemas";
 import {
   addLocalMonths,
@@ -112,11 +113,21 @@ export function MonthView({ initial }: { initial: CalendarResponse }) {
             day={parseLocalDate(day.date).day}
             accessibleDate={formatLocalDateLong(day.date)}
             {...toCalendarMark(day.state)}
-            // The only cell that is ever a link. There is no /calendar/[date]
-            // route in the roadmap's route map, so every other day is a mark
-            // rather than a destination — and the kit only honours `href` on a
-            // day that has a card, which is the same rule from the other side.
-            href={day.state === "today_card" ? "/today" : undefined}
+            /* F18 gave a past card a destination. Today's card keeps `/today`,
+               which is the live screen and where the nudge lives; every earlier
+               day with a card goes to `/card/<date>`, the app's first
+               owner-side view of a day that happened.
+
+               A day with no card is still a mark rather than a destination, and
+               `CalendarCell` refuses `href` unless `mark === "made"` — the same
+               rule from the other side, so nothing else here needs guarding. */
+            href={
+              day.state === "today_card"
+                ? "/today"
+                : day.state === "card"
+                  ? cardPermalinkHref(day.date)
+                  : undefined
+            }
           />
         ))}
       </div>

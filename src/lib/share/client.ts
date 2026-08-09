@@ -1,5 +1,9 @@
 import { request, type ApiResult } from "@/lib/api/client";
-import type { CreateShareResponse, DeleteShareResponse } from "@/lib/share/schemas";
+import type {
+  CreateShareRequest,
+  CreateShareResponse,
+  DeleteShareResponse,
+} from "@/lib/share/schemas";
 
 /**
  * The browser half of F16's two routes.
@@ -14,9 +18,18 @@ import type { CreateShareResponse, DeleteShareResponse } from "@/lib/share/schem
  * business in that decision.
  */
 
-/** `entityType` is a literal today. F18 widens it when it adds its two arms. */
-export function createShare(id: string): Promise<ApiResult<CreateShareResponse>> {
-  return request("/api/shares", "POST", { entityType: "vocab", id });
+/**
+ * All three entity types, as of F18.
+ *
+ * `entityType` is typed against the request union rather than as a bare string,
+ * so a fourth kind cannot be sent from a phone before the route knows how to
+ * snapshot it.
+ */
+export function createShare(
+  entityType: CreateShareRequest["entityType"],
+  id: string,
+): Promise<ApiResult<CreateShareResponse>> {
+  return request("/api/shares", "POST", { entityType, id });
 }
 
 export function revokeShare(slug: string): Promise<ApiResult<DeleteShareResponse>> {

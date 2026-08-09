@@ -267,9 +267,45 @@ check(
   `/vocab/${SHARER_ENTRY}/chat`,
 )
 check('an unresolvable slug', row(resolve({ share: null })), ['expired', 'none', false, null])
+/**
+ * **F18's two rows, and they are the whole of what it changed here.**
+ *
+ * The `entityType !== 'vocab'` test that used to sit on this line is gone. The
+ * resolver's input carries a word `resolveClaimWord` has **already** resolved —
+ * the whole snapshot for a vocab share, one entry of `words[]` for a card share
+ * — so the question it needs answered is "is there a word", not "what kind of
+ * row was it read from". Every way a card share fails to name one (no `w`, a
+ * position the card lacks, a journal share, an unparsed payload) arrives here as
+ * `payload: null` and takes the row below it.
+ */
 check(
-  'a share of a kind this build cannot claim — F18 adds the arms',
-  row(resolve({ share: { ...SHARE, entityType: 'card' } })),
+  'a card share claims exactly like a word share once w has named one',
+  row(resolve({ share: { ...SHARE, entityType: 'card', vocabEntryId: null } })),
+  ['claim_new', 'insert', false, 'chat'],
+)
+check(
+  'and the owner of a card falls through to already_have, having no uuid to short-circuit on',
+  row(
+    resolve({
+      share: { ...SHARE, entityType: 'card', vocabEntryId: null },
+      sessionUserId: SHARER,
+      existingEntryId: CLAIMER_ENTRY,
+    }),
+  ),
+  ['already_have', 'none', false, null],
+)
+check(
+  'which lands them in the same chat, by way of their own collection',
+  resolve({
+    share: { ...SHARE, entityType: 'card', vocabEntryId: null },
+    sessionUserId: SHARER,
+    existingEntryId: CLAIMER_ENTRY,
+  }).href,
+  `/vocab/${CLAIMER_ENTRY}/chat`,
+)
+check(
+  'a share that named no word at all — every card failure folds to this one row',
+  row(resolve({ share: { ...SHARE, entityType: 'card', payload: null } })),
   ['expired', 'none', false, null],
 )
 check(

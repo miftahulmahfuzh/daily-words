@@ -50,8 +50,8 @@ npm run journal:db                       # F10's insight claim, edit rules and p
 npm run journal:dry-run -- --all         # the insight prompt against the live model, no writes
 npm run journal:similarity               # F15's 20-pair threshold corpus; real calls, no writes
 npm run journal:embed -- --all           # F15's backfill; --user=, --limit=, --retry-failed, --dry-run
-npm run share:check                      # F16's slug entropy, DTO allowlist, path predicate and claim cookie, offline
-npm run share:db                         # F16's CHECK constraint, anonymous read and cascade; -- --keep leaves a live link
+npm run share:check                      # F16+F18: slug entropy, three DTO allowlists, the path predicate, both cookies, offline
+npm run share:db                         # F16+F18: CHECK constraint, anonymous read, cascade, card positions, revoke-on-edit; -- --keep leaves three live links
 npm run claim:check                      # F17's ten outcomes, every href, the enrichment copy and term safety, offline
 npm run claim:db                         # F17's single INSERT, the five nulls, the owner no-op and the 23505 race
 npm run badges:check                     # F12's badge-art manifest, files, hashes and key scan, offline
@@ -95,17 +95,21 @@ Read the output against F10 §7's register rubric — no flattery, no second
 person, no exclamation, concrete situations — rather than trusting the exit
 code, which only reports transport.
 
-`npm run share:db -- --keep` leaves one live share behind and prints its URL.
-That is how the one manual pass F16 cannot automate gets something to look at:
+`npm run share:db -- --keep` leaves **three** live shares behind — one per kind —
+and prints every URL the manual pass needs. That is how the passes no script can
+automate get something to look at:
 
 ```bash
 npm run share:db -- --keep
-curl -i http://localhost:3200/s/<slug>       # expect 200, NOT 307 -> /signin
+curl -sI http://localhost:3200/s/<slug>          # the word, the card or the line
+curl -sI http://localhost:3200/s/<cardSlug>/3    # F18's nested word route
 ```
 
-A `307` there means the middleware exemption or the route's placement outside the
-`(app)` group is wrong, and **the signed-in author sees a perfect page either
-way**. Clean up with `delete from users where email like 'f16-share-%@example.invalid';`
+Every one must answer **200 with no cookie jar**. A `307` means the middleware
+exemption or the route's placement outside the `(app)` group is wrong, and **the
+signed-in author sees a perfect page either way**. Clean up with
+`delete from users where email like 'f16-share-%@example.invalid';` — delete that
+user's `daily_card_items` and `daily_cards` first, because [R1] is RESTRICT.
 
 The same `--keep` slug is what F17's manual pass needs, and there are **three**
 curls, not one — `/claim` has the identical pair of exemptions and the identical
@@ -460,6 +464,79 @@ throwing. Each cost real time.
   takes only the term** — no profile, no `userId`, unlike `chat-system.ts` and
   `suggest-words.ts`. Personalise enrichment and this copy becomes a disclosure of
   one user's context to another.
+- **A card share is one slug and seven URLs; the words are addressed by
+  *position*, never by uuid.** `/s/<slug>` is the card, `/s/<slug>/<1..6>` is one
+  word of it, and one `DELETE` kills all seven. The bound is structural:
+  `parseSharePosition` (in `lib/share/policy.ts`, beside `isShareWordIndex` —
+  **not** in a separate module, because `isPublicSharePath` needs it and
+  `policy.ts` imports nothing) accepts exactly `"1"`…`"6"` and rejects `"01"`,
+  `"+1"`, `" 1"`, `"1e0"` and everything `Number()` would have taken; and there
+  is no function in the public path that can express a vocab uuid, so passing one
+  is not a mistake this code can make. A slug plus a raw uuid was rejected
+  outright: it turns a card share into a capability to *name* a word, and the
+  only thing between that and reading arbitrary words is a join the next refactor
+  drops.
+- **`isPublicSharePath` had to be widened for `/s/<slug>/<n>`, and forgetting
+  would have been invisible** — every row of a shared card bouncing a stranger to
+  `/signin` while rendering perfectly for the signed-in author. It admits a
+  position-**shaped** fourth segment (one or two digits) rather than a valid one,
+  because `/s/<slug>/5` on a four-word card is a URL a real person follows and it
+  must reach the share's own one-sentence 404, not a sign-in page — the same rule
+  the function already keeps for a slug that does not exist. `parseSharePosition`
+  in the route decides which digit-shaped ones name a word. `/s/<slug>/practise`
+  and `/s/<slug>/1.5` stay gated: the enumeration is closed, and "any fourth
+  segment" is how an exemption stops meaning anything.
+- **F18's public serialisers live in `lib/share/serialize.ts`, not in new DTO
+  modules**, because that file is "the one file that decides what a stranger
+  sees". Its plan proposed `lib/share/card-dto.ts` and `journal-dto.ts`; that was
+  written before F16 existed and assumed public pages would read live rows.
+  Against a snapshot it is the same job in a second file. **`toDailyCardItemView`
+  and `toJournalEntryDto` must never be reused on a public page** — the first
+  returns `{ id: item.entryId }` (six real vocab uuids, one tap of Share), the
+  second returns the entry uuid, the `source_note` and a date in the *reader's*
+  zone. `share:check` greps the whole public surface for both imports.
+- **`source_note` does not cross, and the insight does.** The note is about the
+  user's *life* — "in Ibu's kitchen", "the letter from R." — not about the line,
+  and F10's own edit rule already draws the split: changing the text clears the
+  insight, changing only the note does not, "because the note is not part of what
+  was explained". The insight crosses because the user asked for exactly that
+  page, and the attribution problem was already solved: `SharedJournal` reuses
+  `InsightPanel` **unchanged**, specifically so "Written by the machine. Keep or
+  discard." cannot be dropped by a public-page rewrite.
+- **Editing a journal entry's text revokes its share.** A share is a snapshot, so
+  an edited line otherwise leaves a public URL quoting something the owner
+  replaced — worse than a stale definition, because this is the one entity whose
+  derived text an edit *destroys*. `PATCH /api/journal/[id]` calls
+  `deleteSharesForEntity` when the text actually changed; a source-note edit
+  revokes nothing, mirroring the insight rule exactly. The comparison lives in
+  the route rather than in `updateEntry`'s single statement because that
+  statement's `case when` is evaluated against the old row while `RETURNING` sees
+  the new one.
+- **`dw_next` is a destination and never a path.** F18's "Start your own journal"
+  copies nothing into anybody's collection, so it is not F17's claim and adds no
+  variant to `ClaimIntent` — a cookie whose whole state machine is about whether
+  a pending write may happen has no room for an intent that never writes. Its
+  value space is one symbol, it is signed with the same HMAC as `dw_claim`, and
+  it is mapped through a literal `switch` in `nextDestinationHref`. `POST
+  /api/profile/complete` reads and clears it and returns a `next` the *server*
+  chose. `journal-signup-actions.ts` spells `'/journal'` out as a literal rather
+  than calling that helper, because `claim:check` greps every `redirectTo:` in
+  the app and requires one; `share:check` asserts the two agree.
+- **`isLocalDate`, not `/^\d{4}-\d{2}-\d{2}$/`.** `/card/[date]` shipped with
+  the shape test and `2026-13-99` walked through it into a `date` comparison and
+  a **500**, where the honest answer is 404 — the guard was written to prevent
+  exactly that and did not, because a shape is not a date. The round trip through
+  `Date.UTC` lives in `lib/time/local-date.ts` with the rest of the date
+  arithmetic, and `dates:check` drives every string that used to get through.
+- **`/today`'s header has one trailing control, and that was measured.** F18 D3
+  wanted a 32px Share pill beside the streak pill and estimated ~33px of slack at
+  375px; with a three-digit streak the header went to **117px** and the title
+  wrapped. All eighteen no-scroll assertions would have stayed green — a two-line
+  header leaves rows at ~60.8px against a 52px floor. The date `Eyebrow` links to
+  `/card/[date]` instead, which is where the full-size Share control and D18's
+  revocation live. `no-scroll.spec.ts` has the single-row assertion that caught
+  it, driven by `/kitchen-sink/today?streak=365`; do not re-add a control there
+  on a calculation.
 - The sharer's `term` is the one free-text string that crosses from one user into
   another's system prompt, and `normalizeTerm` + `validateTerm` are re-run on the
   way **out** of the snapshot rather than trusted from the way in. `claim:check`

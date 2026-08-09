@@ -17,6 +17,7 @@ import {
   claimLandingHref,
   claimWriteFailed,
   resolveClaimOutcome,
+  resolveClaimWord,
   type ClaimDecision,
   type ClaimInput,
   type ClaimIntentFields,
@@ -88,7 +89,7 @@ const EMPTY_ANSWERS = completeProfileAnswers({})
  * resolver turns into the same screen as a revoked link — rather than crashing a
  * claim. The second net under `lib/share/serialize.ts`'s write-side allowlist.
  */
-async function readShare(slug: string): Promise<ClaimShare | null> {
+async function readShare(slug: string, w: number | null): Promise<ClaimShare | null> {
   const row = await getShareTargetForClaim(slug)
   if (!row) return null
 
@@ -101,9 +102,19 @@ async function readShare(slug: string): Promise<ClaimShare | null> {
     userId: row.userId,
     entityType: row.entityType,
     vocabEntryId: row.vocabEntryId,
-    // F18's `card` and `journal` arms land in `sharedPayloadSchema`, and the
-    // resolver's step 2 is where they become claimable.
-    payload: parsed.success && parsed.data.kind === 'vocab' ? parsed.data : null,
+    /**
+     * **F18: `w` is finally read here, and the query did not change.**
+     *
+     * F17's plan expected `getShareTargetForClaim(slug, w)` joining
+     * `daily_card_items` to `vocab_entries`. F16's snapshot made that
+     * unnecessary — the card's six words are on the share row — so the word
+     * index resolves against a payload rather than against a table, and
+     * `queries/shares.ts` still reads no user-owned table at all.
+     *
+     * Every way this comes back null is one of F17's existing zero-write
+     * outcomes. See `resolveClaimWord`.
+     */
+    payload: resolveClaimWord(parsed.success ? parsed.data : null, w),
   }
 }
 
@@ -137,7 +148,7 @@ async function buildInput(
   // a hand-built intent in a script cannot turn into a query either.
   if (!intent || !isShareSlug(intent.slug)) return base
 
-  const share = await readShare(intent.slug)
+  const share = await readShare(intent.slug, intent.w)
 
   /**
    * The term is normalised here *and* again inside the resolver. That is

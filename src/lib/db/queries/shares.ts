@@ -214,6 +214,35 @@ export async function deleteShare(userId: string, slug: string): Promise<RevokeO
 }
 
 /**
+ * Revoke by entity rather than by slug — **F18's revoke-on-edit** (D12).
+ *
+ * A share is a *snapshot* of what was shared (F16 D3), so a journal entry whose
+ * text is edited leaves a public URL quoting a line the owner has replaced. That
+ * is worse than a stale word definition, because the journal is the one entity in
+ * the app with a documented rule that editing the text **destroys** the derived
+ * text: `updateEntry` nulls the insight in the same statement.
+ *
+ * So `PATCH /api/journal/[id]` calls this when the text actually changed. The
+ * user's own control says the same thing in the other direction — there is no
+ * "update the shared copy", because publishing an edit should mint a new link
+ * rather than silently rewrite what you already sent somebody.
+ *
+ * Scoped by `userId` like every other authenticated act here. Returns the number
+ * of rows removed so a caller can log or assert it; zero is the ordinary case.
+ */
+export async function deleteSharesForEntity(
+  userId: string,
+  entityType: ShareEntityType,
+  entityId: string,
+): Promise<number> {
+  const rows = await db
+    .delete(shares)
+    .where(and(eq(shares.userId, userId), eq(ENTITY_COLUMN[entityType], entityId)))
+    .returning({ id: shares.id })
+  return rows.length
+}
+
+/**
  * Everything this user is sharing, newest first.
  *
  * Nothing renders it in F16 — D9 declines to add a "things I've shared" screen,

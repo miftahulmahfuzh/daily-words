@@ -134,9 +134,14 @@ export async function updateEntry(
 }
 
 /**
- * Hard delete. Nothing references a journal entry, so there is nothing to refuse
- * — this is not [R1]'s vocab situation, where a word can be part of a day that
- * happened.
+ * Hard delete.
+ *
+ * The only thing that references a journal entry is `shares.journal_entry_id`,
+ * added by F16 and `ON DELETE CASCADE` — so deleting the entry revokes its share
+ * rather than refusing. That is not [R1]'s vocab situation, where a word can be
+ * part of a day that happened and RESTRICT protects the record; a share is a link
+ * the user chose to hand out, and taking the line down should take the link down
+ * with it.
  */
 export async function deleteEntry(userId: string, id: string): Promise<boolean> {
   const rows = await db

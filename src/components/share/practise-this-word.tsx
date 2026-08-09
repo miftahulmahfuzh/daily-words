@@ -34,16 +34,38 @@ import { SHARE_PRACTISE_LABEL } from "@/lib/share/policy";
  * `decodeClaimIntent` degrades an unresolvable one to null on the way back out.
  * Nothing here is trusted.
  */
-export function PractiseThisWord({ claimHref }: { claimHref: string }) {
-  const [href, setHref] = useState(claimHref);
+export function PractiseThisWord({
+  claimHref,
+  position,
+}: {
+  claimHref: string;
+  /**
+   * Which word of a shared **card**, `1`–`6`. Absent for a vocab share, which is
+   * every share F16 could mint.
+   *
+   * It goes on the link as `?w=`, and `/s/[slug]/claim` moves it into the signed
+   * cookie. That query param is *not* a `?next=` in disguise: the only
+   * `Location` that route can emit is the frozen literal `/claim`, so there is
+   * nowhere for a hostile value to go — and `isShareWordIndex` discards anything
+   * that is not one of six integers before it is signed.
+   */
+  position?: number;
+}) {
+  /**
+   * The position is known on the server, so it is in the initial href rather
+   * than added on mount. Only the timezone needs a browser.
+   *
+   * Built here rather than by the caller so that `claimHref` stays exactly what
+   * `shareClaimHref` returns, and this component owns the whole query string —
+   * which is what keeps the `?` / `&` below correct as a fact rather than a hope.
+   */
+  const base = position ? `${claimHref}?w=${position}` : claimHref;
+  const [href, setHref] = useState(base);
 
   useEffect(() => {
     const tz = detectTimeZone();
-    // `claimHref` has no query string of its own — it is `/s/<slug>/claim` from
-    // `shareClaimHref` — so `?` is correct and `&` would be a bug waiting for the
-    // day it gains one.
-    if (tz) setHref(`${claimHref}?tz=${encodeURIComponent(tz)}`);
-  }, [claimHref]);
+    if (tz) setHref(`${base}${base.includes("?") ? "&" : "?"}tz=${encodeURIComponent(tz)}`);
+  }, [base]);
 
   return (
     <Button variant="filled" href={href}>

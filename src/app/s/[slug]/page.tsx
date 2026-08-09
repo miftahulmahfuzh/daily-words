@@ -1,20 +1,32 @@
-import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { SharedCard } from "@/components/share/shared-card";
+import { SharedJournal } from "@/components/share/shared-journal";
 import { SharedWord } from "@/components/share/shared-word";
-import { getShareBySlug } from "@/lib/db/queries/shares";
 import { env } from "@/lib/env";
 import {
-  isShareSlug,
+  shareCardMetaDescription,
+  shareCardMetaTitle,
   shareClaimHref,
   shareHref,
+  shareJournalMetaDescription,
+  shareJournalMetaTitle,
   SHARE_GONE_TITLE,
   SHARE_META_FALLBACK,
 } from "@/lib/share/policy";
-import { sharedPayloadSchema, type SharedPayload } from "@/lib/share/schemas";
+import type { SharedPayload } from "@/lib/share/schemas";
+import { DEFAULT_TIMEZONE, localDateNow } from "@/lib/time/local-date";
+import { readShare, SHARE_ROBOTS } from "./read";
 
 /**
- * The one page in this application a stranger can see.
+ * The three pages in this application a stranger can see, as one route.
+ *
+ * `/s/<slug>` carries **no entity type in its path** (F16 D5): the slug is
+ * already unique across all three kinds, so a type in the URL would be redundant
+ * data the database would then have to agree with, and a mismatch is a code path
+ * nobody writes a test for. F18 therefore added a branch in the renderer rather
+ * than two more routes — one resolver, one `generateMetadata`, one 404 path, one
+ * revocation path.
  *
  * **It is a sibling of the `(app)` route group, not a member**, and that is the
  * decision most likely to be got wrong here. `app/(app)/layout.tsx` calls
@@ -32,37 +44,6 @@ import { sharedPayloadSchema, type SharedPayload } from "@/lib/share/schemas";
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-/**
- * One query per request, shared by `generateMetadata` and the render.
- *
- * Next calls the two separately, so without `cache()` every unfurl and every
- * page view would cost two identical reads.
- */
-const readShare = cache(
-  async (slug: string): Promise<SharedPayload | null> => {
-    // A malformed slug must never reach the database. Cheap, and it also means a
-    // hand-typed link and a revoked one take the same path to the same 404.
-    if (!isShareSlug(slug)) return null;
-
-    const row = await getShareBySlug(slug);
-    if (!row) return null;
-
-    /**
-     * Parsed, not cast. The column is `jsonb` and the database guarantees it
-     * nothing; a row written by an older serializer must degrade to the 404
-     * rather than crash a page a stranger is looking at. zod strips unknown
-     * keys, which is the second, independent net under the write-side
-     * allowlist in `lib/share/serialize.ts`.
-     */
-    const parsed = sharedPayloadSchema.safeParse(row.payload);
-    if (!parsed.success) {
-      console.error(`[share] slug ${slug} holds an unreadable payload`);
-      return null;
-    }
-    return parsed.data;
-  },
-);
 
 /**
  * A text-only unfurl. **No OG image, and that is a decision rather than an
@@ -90,18 +71,18 @@ export async function generateMetadata({
   const { slug } = await params;
   const payload = await readShare(slug);
 
-  const robots = { index: false, follow: false, googleBot: { index: false, follow: false } };
-  if (!payload) return { title: `${SHARE_GONE_TITLE} — Daily Words`, robots };
+  // A revoked or unknown slug previews as nothing rather than as the app, and
+  // says the same thing either way.
+  if (!payload) {
+    return { title: `${SHARE_GONE_TITLE} — Daily Words`, robots: SHARE_ROBOTS };
+  }
 
-  const title = `${payload.term} — Daily Words`;
-  // Never the sharer's name (D8). The definition, or nothing that identifies
-  // anyone.
-  const description = payload.definition ?? SHARE_META_FALLBACK;
+  const { title, description } = metaFor(payload);
 
   return {
     title,
     description,
-    robots,
+    robots: SHARE_ROBOTS,
     openGraph: {
       title,
       description,
@@ -113,7 +94,36 @@ export async function generateMetadata({
   };
 }
 
-export default async function SharedWordPage({
+/**
+ * One unfurl per kind. **Never the sharer's name** (D8), and for the journal
+ * never the insight (D14 rule 1): a machine-written paragraph in a preview card,
+ * under a person's link, with no room for the "Written by the machine" line, is
+ * precisely the misattribution `SharedJournal` spends its argument avoiding.
+ *
+ * `source_note` is not reachable from here — it is not in the snapshot at all,
+ * which is a stronger guarantee than remembering the rule (D10, D14 rule 2).
+ */
+function metaFor(payload: SharedPayload): { title: string; description: string } {
+  switch (payload.kind) {
+    case "vocab":
+      return {
+        title: `${payload.term} — Daily Words`,
+        description: payload.definition ?? SHARE_META_FALLBACK,
+      };
+    case "card":
+      return {
+        title: shareCardMetaTitle(payload.dateLabel, payload.words.length),
+        description: shareCardMetaDescription(payload.words.map((w) => w.term)),
+      };
+    case "journal":
+      return {
+        title: shareJournalMetaTitle(payload.text),
+        description: shareJournalMetaDescription(payload.text),
+      };
+  }
+}
+
+export default async function SharedEntityPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
@@ -122,8 +132,35 @@ export default async function SharedWordPage({
   const payload = await readShare(slug);
   if (!payload) notFound();
 
-  // One member today. F18 adds `card` and `journal` arms here — a branch in the
-  // renderer, not a second route, which is the whole point of `/s/[slug]`
-  // carrying no entity type in the path.
-  return <SharedWord payload={payload} claimHref={shareClaimHref(slug)} />;
+  /**
+   * F18 D6's dispatch, and the whole of it. A branch in the renderer rather than
+   * a second route, which is what `/s/[slug]` carrying no entity type buys.
+   *
+   * The `switch` is exhaustive over `SharedPayload`'s discriminant, so a fourth
+   * kind added to `sharedPayloadSchema` stops this file compiling — which is the
+   * same mechanism `createShareSchema`'s discriminated union uses on the write
+   * side. Neither end can gain a kind the other has not been taught.
+   */
+  switch (payload.kind) {
+    case "vocab":
+      return <SharedWord payload={payload} claimHref={shareClaimHref(slug)} />;
+    case "card":
+      return (
+        <SharedCard
+          payload={payload}
+          slug={slug}
+          /**
+           * The viewer's today, in the default zone.
+           *
+           * A **read**, which CLAUDE.md permits to fall back where a write may
+           * not — and the snapshot deliberately does not carry the sharer's own
+           * zone (D8). It reaches only the "3 days ago" line; the date beside it
+           * is exact and needs no zone at all.
+           */
+          today={localDateNow(DEFAULT_TIMEZONE)}
+        />
+      );
+    case "journal":
+      return <SharedJournal payload={payload} />;
+  }
 }

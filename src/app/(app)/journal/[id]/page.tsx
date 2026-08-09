@@ -5,6 +5,9 @@ import { BackLink } from "@/components/layout/back-link";
 import { requireUser } from "@/lib/auth/session";
 import { getEntry } from "@/lib/db/queries/journal";
 import { getUserTimezone } from "@/lib/db/queries/profiles";
+import { getShareForEntity } from "@/lib/db/queries/shares";
+import { env } from "@/lib/env";
+import { shareHref } from "@/lib/share/policy";
 import { toJournalEntryDto } from "@/lib/journal/serialize";
 import { EntryView } from "./entry-view";
 
@@ -35,12 +38,19 @@ export default async function JournalEntryPage({
   if (!row) notFound();
 
   const timezone = await getUserTimezone(user.id);
+  // One indexed read beside the page read, so the action row draws the already
+  // shared state without a round trip. The shape /vocab/[id] and /today use.
+  const share = await getShareForEntity(user.id, "journal", row.id);
 
   return (
     <Screen>
       <ScreenBody scroll padded={false} className="px-6 pb-7">
         <BackLink href="/journal" label="Journal" />
-        <EntryView initial={toJournalEntryDto(row, timezone)} />
+        <EntryView
+          initial={toJournalEntryDto(row, timezone)}
+          initialShareSlug={share?.slug ?? null}
+          initialShareUrl={share ? `${env.APP_URL}${shareHref(share.slug)}` : null}
+        />
       </ScreenBody>
     </Screen>
   );
