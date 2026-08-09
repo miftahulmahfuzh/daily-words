@@ -51,7 +51,7 @@ npm run journal:dry-run -- --all         # the insight prompt against the live m
 npm run journal:similarity               # F15's 20-pair threshold corpus; real calls, no writes
 npm run journal:embed -- --all           # F15's backfill; --user=, --limit=, --retry-failed, --dry-run
 npm run share:check                      # F16+F18: slug entropy, three DTO allowlists, the path predicate, both cookies, offline
-npm run share:db                         # F16+F18: CHECK constraint, anonymous read, cascade, card positions, revoke-on-edit; -- --keep leaves three live links
+npm run share:db                         # F16+F18: CHECK constraint, anonymous read, cascade, card positions, revoke-on-edit, F15's dedup scope; -- --keep leaves three live links
 npm run claim:check                      # F17's ten outcomes, every href, the enrichment copy and term safety, offline
 npm run claim:db                         # F17's single INSERT, the five nulls, the owner no-op and the 23505 race
 npm run badges:check                     # F12's badge-art manifest, files, hashes and key scan, offline

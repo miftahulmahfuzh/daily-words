@@ -63,12 +63,19 @@ the plan asked for:
   the 500 the guard existed to prevent. A shape is not a date. `isLocalDate` now
   lives in `lib/time/local-date.ts` with the rest of the date arithmetic and
   `dates:check` drives every string that used to get through.
-- **R2 (F15's dedup scope) was not asserted.** D15's cross-user assertion is the
-  one thing in §5 that did not get written: F15 ships two layers, and the
-  fixture would have to seed an embedding to exercise Layer 2 honestly rather
-  than passing on Layer 1 alone. `lib/db/queries/journal-embeddings.ts` takes
-  `userId` first like every other file in that directory, which is evidence and
-  not proof. **Still open.**
+- **R2 (F15's dedup scope) is closed, and the assertion is narrower than D15
+  asked for because most of it already existed.** `journal:db` proves both
+  *queries* are owner-scoped, against a byte-identical `norm_sha` and a
+  byte-identical vector. What nothing drove was the **composition** —
+  `checkForDuplicate` is where an id could be dropped between the route and the
+  two queries while every query-level assertion stayed green. `share:db` now
+  drives it end to end, with the fixtures built so an unscoped query returns the
+  *wrong* row rather than passing by luck: B keeps the line first and A second,
+  so `findByNormSha`'s `created_at desc` would hand back A's. Layer 2's half of
+  the composition cannot be driven without a provider and is asserted
+  structurally instead. Both halves were mutation-tested — dropping the owner
+  predicate turns six assertions red, and indirecting the route's id turns the
+  structural one red.
 
 D13 shipped **both** steps: `dw_next` is a signed, one-symbol cookie read and
 cleared by `POST /api/profile/complete`, which returns a `next` the server chose.

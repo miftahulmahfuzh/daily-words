@@ -36,12 +36,18 @@
  *      the link, and editing only the source note must not.
  *   9. **The card claim.** `w` resolving to a word, and — more importantly —
  *      every way it fails resolving to **zero writes**.
+ *  10. **F15's dedup scope, through the composition** (D15). `journal:db` proves
+ *      both *queries* are owner-scoped; this proves `checkForDuplicate` threads
+ *      the id to them, with fixtures built so an unscoped query returns the
+ *      wrong row rather than passing by luck.
  *
  * **No LLM calls and no network.** Seeds throwaway users at `@example.invalid`
  * and deletes them in a `finally`; deletion cascades. A crashed run leaves at
  * most two row sets behind, findable by that domain.
  */
 import 'dotenv/config'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { count, eq } from 'drizzle-orm'
 import { db } from '../src/lib/db'
 import {
@@ -53,6 +59,10 @@ import {
 } from '../src/lib/db/schema'
 import { getCardForShare } from '../src/lib/db/queries/cards'
 import { createEntry, getEntry, updateEntry } from '../src/lib/db/queries/journal'
+import { upsertEmbedding } from '../src/lib/db/queries/journal-embeddings'
+import { env } from '../src/lib/env'
+import { checkForDuplicate } from '../src/lib/journal/duplicate-check'
+import { normShaFor, textShaFor } from '../src/lib/journal/similarity'
 import {
   createShare,
   deleteShare,
@@ -626,6 +636,153 @@ async function main() {
 
     await db.delete(dailyCards).where(eq(dailyCards.id, cardTwo.id))
     check('and so does the card cascade', await getShareBySlug(shortShare.slug), null)
+
+    /* ------------------- F18 D15: F15's dedup is scoped to B ---------------- */
+
+    section("a signer-up's first save is never warned about the sharer's line")
+
+    /**
+     * **F18 D15 / R2, the one cross-plan assertion this feature owes.**
+     *
+     * The scenario is D13's funnel end to end: a stranger reads a shared line,
+     * taps *Start your own journal*, signs up, and immediately keeps that same
+     * line. The behaviour splits, and only one side is correct:
+     *
+     *   - **Right:** nothing happens. They save it, and if they later save it
+     *     again *themselves*, F15 warns — because by then both rows are theirs.
+     *   - **Wrong:** F15 warns on the very first save, because it found the
+     *     *sharer's* entry. That would be nonsense to the new user, would tell
+     *     them a stranger has the same line, and would be a cross-user read of
+     *     journal content from a code path with no business doing one.
+     *
+     * **What is new here, and why `journal:db` does not already cover it.** That
+     * script asserts both *queries* are owner-scoped — a byte-identical
+     * `norm_sha` and a byte-identical vector belonging to somebody else are each
+     * proven never to come back. What neither script drives is the
+     * **composition**: `checkForDuplicate` is where a userId could be dropped,
+     * swapped or defaulted between the route and the two queries, and every
+     * query-level assertion would stay green while it happened.
+     *
+     * **The fixtures are built so that an unscoped query gives the wrong
+     * answer.** B's copy is created *first* and A's *second*, so they share a
+     * `norm_sha` and A's is the newer — and `findByNormSha` orders
+     * `created_at desc`. Drop the owner predicate anywhere in the chain and the
+     * match comes back as A's row. Keep it and it is B's. Without that ordering
+     * the assertion would pass by luck.
+     */
+    const LINE = 'A house with no rice smells of nothing at all.'
+
+    /** Seed the sibling row Layer 1 reads, with no provider and no vector. */
+    const seedLayer1 = async (owner: string, text: string) => {
+      const row = await createEntry(owner, text, null)
+      await upsertEmbedding(owner, row.id, {
+        status: 'failed',
+        textSha: textShaFor(text),
+        normSha: normShaFor(text),
+        reason: 'not embedded',
+      })
+      return row
+    }
+
+    /**
+     * Run one check with Layer 2 switched off at the source.
+     *
+     * `embed()` returns a `config` error when `EMBEDDING_API_KEY` is unset, so
+     * this makes **zero network calls** — which this file's header promises —
+     * and it isolates the assertion to Layer 1, the layer that actually answers
+     * the re-paste. `env` is parsed once at import, so the variable is mutated
+     * on the object rather than in `process.env`, and restored either way.
+     *
+     * The degradation this borrows is itself a documented property — any Layer 2
+     * failure falls through to the insert and reports `unchecked`, never
+     * `unique` and never `duplicate` — and `journal:check` owns asserting it.
+     */
+    async function withoutLayer2<T>(run: () => Promise<T>): Promise<T> {
+      const mutable = env as { EMBEDDING_API_KEY?: string }
+      const saved = mutable.EMBEDDING_API_KEY
+      delete mutable.EMBEDDING_API_KEY
+      try {
+        return await run()
+      } finally {
+        if (saved !== undefined) mutable.EMBEDDING_API_KEY = saved
+      }
+    }
+
+    // B keeps it first; A keeps it second, so A's is the newer of the two.
+    const bKept = await seedLayer1(strangerId, LINE)
+    const aKept = await seedLayer1(ownerId, LINE)
+
+    const b = strangerId
+    const bSecondSave = await withoutLayer2(() => checkForDuplicate(b, LINE, { force: false }))
+    check('layer 1 fires rather than being skipped', bSecondSave.log.layer1, 'hit')
+    check('B saving their own line again is warned', bSecondSave.verdict, 'duplicate')
+    check(
+      'and the line they are shown is their own, not the newer one A kept',
+      bSecondSave.match?.id,
+      bKept.id,
+    )
+    check('which is emphatically not A\'s row', bSecondSave.match?.id === aKept.id, false)
+
+    /**
+     * The bug D15 names, driven directly: a user with **nothing** in their
+     * journal saving a line somebody else already keeps.
+     */
+    const cEmail = `f18-signup-${process.pid}@example.invalid`
+    const [signerUp] = await db.insert(users).values({ email: cEmail }).returning({ id: users.id })
+    try {
+      const firstEver = await withoutLayer2(() =>
+        checkForDuplicate(signerUp.id, LINE, { force: false }),
+      )
+      check('layer 1 was consulted', firstEver.log.layer1, 'miss')
+      check('and found nothing, because the two copies are not theirs', firstEver.verdict !== 'duplicate', true)
+      check('so there is no line to show them', firstEver.match, null)
+      /**
+       * `unchecked`, not `unique` — Layer 2 was switched off above. That is the
+       * documented degradation and the honest answer: nothing was compared
+       * semantically, so nothing may claim the line is new.
+       */
+      check('and the verdict is honest about what was not checked', firstEver.verdict, 'unchecked')
+    } finally {
+      await db.delete(users).where(eq(users.id, signerUp.id))
+    }
+
+    /**
+     * The composition itself, asserted structurally — because Layer 2's half
+     * cannot be driven without a provider, and because a userId that is dropped
+     * between the route and a query is a source-level mistake.
+     */
+    section('and the user id is threaded, not defaulted')
+
+    const dedupSrc = readFileSync(
+      join(import.meta.dirname, '..', 'src', 'lib', 'journal', 'duplicate-check.ts'),
+      'utf8',
+    )
+    check(
+      'layer 1 is called with the userId the function was given',
+      dedupSrc.includes('findByNormSha(userId,'),
+      true,
+    )
+    check(
+      'and so is layer 2 — the half no provider-free test can reach',
+      dedupSrc.includes('findNearest(userId,'),
+      true,
+    )
+    const journalRouteSrc = readFileSync(
+      join(import.meta.dirname, '..', 'src', 'app', 'api', 'journal', 'route.ts'),
+      'utf8',
+    )
+    /**
+     * Strict on purpose, and it will trip on a benign refactor that indirects
+     * the id through a local. That is the same trade `nav:check` makes for the
+     * `from` param — "the cheap check is the one that gets kept" — and the fix
+     * when it fires is one line: read the assertion, confirm the id still comes
+     * from the session, and write it inline again.
+     */
+    check(
+      'and the route passes the session user, never anything off the body',
+      /checkForDuplicate\(\s*auth\.user\.id/.test(journalRouteSrc),
+      true,
+    )
 
     /* --------------------------------- Keep --------------------------------- */
 
