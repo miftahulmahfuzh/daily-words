@@ -143,7 +143,7 @@ numerals, and numerals are text. Turn the face away.
 - leap_day: A hare in mid-leap over a low stone wall, drawn as a natural-history plate, its shadow the only thing beneath it; the wall's coping stones run in even blocks with one block missing from the run and set aside on the grass below. VERMILION: a mark on that single set-aside stone.
 - tolkien: A plain heavy iron ring set down on a bare table beside a briar pipe gone cold, the ring's band entirely smooth and unmarked, a thin coil of smoke still rising from the bowl. VERMILION: a wax seal on the table beside the ring.
 - three_in_a_week: A wooden tally stick lying across a bare rule with three fresh notches cut into its upper edge and clean wood showing in each, a few curled shavings fallen beside it, and a clasp knife laid flat with its blade folded away. VERMILION: a short mark struck across the stick's near end.
-- thirty_day_streak: A plain helmet of beaten metal standing upright and alone on a bare rule, turned firmly three quarters away so that the face is seen at an angle and strongly foreshortened, one narrow eye slot running the width of the face and a short narrow opening dropping a little below the middle of it, the whole surface smooth and unadorned and built entirely from engraved contour and cross-hatch. VERMILION: one small dent above the brow, struck a little off register from the green.
+- thirty_day_streak: A plain steel sallet standing upright and alone on a bare rule, seen nearly in profile with its rounded skull toward the left and its long tapered tail sweeping back and down to the right, a low medial ridge running front to back over the crown, the single vision slit foreshortened to one short unbroken horizontal line at the brow with clear hammered metal above it and below it, the form built entirely from firm engraved contour with dense parallel cross-hatch under the tail and along the far side and stipple where the crown turns. VERMILION: one small dent low on the tail, struck a little off register from the green.
 - dumbledore: A single slender wand of elder wood lying at a slight angle across the flat coping stone of a high parapet, the wand's shaft tapering from a knobbled grip and interrupted along its length by three knobbed swellings where the wood once budded, the coping's blocks drawn in firm contour and running out of frame on both sides, with nothing below them but bare paper. VERMILION: a single short curled feather lying on the stone beside it.
 - dobby: A single knitted woollen sock, alone, laid out flat on a bare rule with its ribbed cuff turned back once, the knit drawn stitch by stitch in engraved line, the wool gone thin and open at the heel. VERMILION: a darn worked across that thin place in a coarser stitch.
 - five_shares: A squat earthenware flask, unstoppered, its stopper lying where it was set down, standing beside a folded travelling blanket on a bare road rule. VERMILION: a small spill running from the flask's lip onto the rule.
@@ -218,24 +218,36 @@ in the prompt risks a refusal from the image endpoint and buys a face this deck
 has no vocabulary for; drawing him unnamed as "a small long-eared foundling"
 lands on `leap_day`'s hare. The order's helmet is the object the phrase actually
 belongs to, it is a clerk's object rather than an award, and it holds a
-silhouette at forty pixels better than anything else in the request. `the whole
-surface smooth and unadorned` is load-bearing for the same reason
-`tolkien`'s smooth band is: every reference image of this helmet has a crest,
-a sigil or a maker's mark, and a mark is text.
+silhouette at forty pixels better than anything else in the request. The scene
+line names no crest, no sigil and no maker's mark, for the same reason
+`tolkien`'s band is smooth: every reference image of a helmet carries one, and a
+mark is text.
 
-**And the visor is why this line says `turned firmly three quarters away`.** The
-first draft said "seen very slightly from one side" and described the opening as
-one horizontal slot with a vertical slot below its centre. Drawn face-on and
-symmetrical, that is not a description of a visor — it is a **construction of the
-letter T**, and the first attempt returned a helmet with a capital T stamped
-across the dome. Naming the letter is worse still, which is why the line never
-says "T-shaped"; but avoiding the word was not enough on its own, because the
-geometry spells it whatever you call it. A firm three-quarter turn foreshortens
-the crossbar, breaks the symmetry, and leaves a shape rather than a glyph. The
-same attempt also came back airbrushed, which is why the line now asks for the
-form to be *built* from contour and cross-hatch rather than merely `drawn in
-even contour` — a smooth metal dome is the strongest invitation to a soft
-gradient in the whole set.
+**And it is a `sallet`, because the first helmet was a letter.** The original
+line asked for a rounded dome `turned firmly three quarters away` with `one
+narrow eye slot running the width of the face and a short narrow opening
+dropping a little below the middle of it`. That is not a description of a visor
+— it is a **construction of the letter T**, and no amount of turning broke it.
+Three attempts went at it, each correction re-describing the same two crossed
+slots in different words, and all three came back with a capital T as the most
+legible thing in the seal at forty pixels. Naming the letter is worse still,
+which is why no version of this line has ever said "T-shaped"; but avoiding the
+word was never enough, because the geometry spells it whatever you call it.
+**The fix was not a better prompt, it was a different helmet.** A sallet's face
+opening is a single unbroken horizontal slit with nothing below it, so there is
+no crossbar to foreshorten and no glyph to break — the letter is designed out of
+the object rather than argued out of the picture.
+
+**The tail is doing two jobs, and the second one is the hatching.** A smooth
+unadorned dome is the strongest invitation to a soft airbrushed gradient in the
+whole set, and the old line's `smooth and unadorned` was inviting it directly:
+the shipped helmet was a grey balloon with a cast shadow, on a badge whose
+contract is engraved line. A sallet's swept tail, medial ridge and rivets give
+the engraver a reason to lay countable line, and the asymmetric silhouette is
+what makes it a helmet rather than an egg at forty pixels. Length is the one
+thing to watch — asked for as `long tapered`, it came back as a beak that reads
+as a bird's head at shelf size. `short and broad … about equal to the width of
+the skull` is the proportion that holds.
 
 **`christmas` deliberately is not a candle.** The obvious Dickens image is a
 guttering stub under a conical extinguisher, and it would have been the second
