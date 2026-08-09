@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
-import { BadgeMedal } from "@/components/gamification/badge-medal";
+import { ArtHero } from "@/components/gamification/art-hero";
 import { Button } from "@/components/ui/button";
 import { Eyebrow, Meta, Prose } from "@/components/ui/text";
+import { BADGE_ART, BADGE_ART_SIZE } from "@/lib/gamification/badge-art";
 import { BADGE_META } from "@/lib/gamification/badge-meta";
 import type { BadgeKey } from "@/lib/gamification/badges";
 import { formatLocalDateLong, type LocalDate } from "@/lib/time/local-date";
@@ -34,9 +35,24 @@ import { formatLocalDateLong, type LocalDate } from "@/lib/time/local-date";
  *
  * **The panel is not a `Card`.** It borrows `Card`'s tokens — `bg-card`,
  * `border-rule`, `--r-card` — but `card.tsx` promises "a card never scrolls
- * internally", and the body below the medal takes a documented `overflow-y`
- * escape under a short viewport. Using the tokens without claiming the component
- * keeps that promise honest.
+ * internally", and the body below the art takes a documented `overflow-y` escape
+ * under a short viewport. Using the tokens without claiming the component keeps
+ * that promise honest.
+ *
+ * **F21: the picture is a full-bleed band, not a centred medal.** A follow-up
+ * ask — "can we change it so the color of the small square fill the whole top
+ * half of the modal … instead of showing small square on top of a white
+ * background" — and the complaint was precise: the art's paper stopped at the
+ * medal's edge with 82px of `--card` around it, so the picture read as a tile
+ * dropped on a sheet. `ArtHero` extends the *colour* instead of cropping the
+ * art, which is also the only option the deck allows (F21 §1.2). `BadgeMedal`
+ * is still the right component for a sized square medal elsewhere; this is
+ * simply no longer one of those places.
+ *
+ * The column below carries `min-h-0`, restating what `.dw-badge-dialog > *`
+ * already supplies. That is the mechanism letting the body shrink below its
+ * content height and scroll instead of overrunning the panel's `max-height` —
+ * without it the gloss is clipped by the border radius with nothing throwing.
  */
 
 export type BadgeSelection = {
@@ -94,17 +110,29 @@ export function BadgeDialog({
       className="dw-badge-dialog m-auto w-[calc(100vw-2*var(--gutter))] max-w-[340px] border border-rule bg-card p-0 text-ink"
     >
       {selection && meta && (
-        <div className="dw-in flex flex-col items-center gap-4 p-5">
-          <div className="shrink-0">
-            <BadgeMedal badgeKey={selection.key} earned={selection.earned !== null} />
-          </div>
+        // No padding on the column itself — the hero is flush to all three of
+        // its edges, which is the whole change. The padding moved into the body
+        // and the footer below. `gap` is gone for the same reason: the spacing
+        // under the hero is the body's `pt-4`, so the hero has nothing between
+        // it and the dialog's border. `items-center` came off too — a full-bleed
+        // child must stretch, and centring the column would shrink the band back
+        // to its content width, which is the artefact this feature removes.
+        <div className="dw-in flex min-h-0 flex-col">
+          <ArtHero
+            src={BADGE_ART[selection.key].src}
+            intrinsic={BADGE_ART_SIZE}
+            plate={BADGE_ART[selection.key].plate}
+            dimmed={selection.earned === null}
+          />
 
-          {/* Everything below the medal is what gives when the panel cannot fit
-              the viewport — the medal and the close button keep their size. The
+          {/* Everything below the hero is what gives when the panel cannot fit
+              the viewport — the hero and the close button keep their size. The
               same documented degradation `.dw-pane-fixed` takes below
               LAYOUT.designFloorDvh, and for the same reason: clip nothing,
-              scroll instead. */}
-          <div className="dw-badge-dialog-body flex w-full flex-col items-center gap-2.5 text-center">
+              scroll instead. F21 D4 measured that at the design target it does
+              not have to: the band spends 1.7px less than the medal and its
+              padding did. */}
+          <div className="dw-badge-dialog-body flex w-full flex-col items-center gap-2.5 px-5 pt-4 text-center">
             <Eyebrow size="sm" tone={selection.earned ? "accent" : "muted"}>
               {selection.earned ? "Earned" : "Not yet earned"}
             </Eyebrow>
@@ -128,25 +156,25 @@ export function BadgeDialog({
           </div>
 
           {/* **No `autoFocus` here, and it is not an oversight.** `showModal()`
-              already focuses the first focusable descendant, and this is it —
-              the medal is an `<img>` and nothing between them takes focus. React's
-              `autoFocus` prop additionally calls `.focus()` when the element
-              *mounts*, which is one commit BEFORE the effect above runs
-              `showModal()`. The dialog therefore records the Close button as the
-              element to restore focus to, that button is unmounted on close, and
-              focus lands on `<body>` — the shelf row the user tapped loses it
-              silently. Measured, both on the pointer and the keyboard path.
-              `fullWidth={false}` keeps it a control rather than a commitment;
-              nothing here is destructive. */}
-          <Button
-            variant="outline"
-            size="sm"
-            fullWidth={false}
-            onClick={onClose}
-            className="shrink-0"
-          >
-            Close
-          </Button>
+              already focuses the first focusable descendant, and this is still
+              it — F21's hero is an `<img>` with no `tabIndex`, exactly as the
+              medal was, so initial focus did not move. React's `autoFocus` prop
+              additionally calls `.focus()` when the element *mounts*, which is
+              one commit BEFORE the effect above runs `showModal()`. The dialog
+              therefore records the Close button as the element to restore focus
+              to, that button is unmounted on close, and focus lands on `<body>`
+              — the shelf row the user tapped loses it silently. Measured, both
+              on the pointer and the keyboard path. `fullWidth={false}` keeps it
+              a control rather than a commitment; nothing here is destructive.
+
+              Do not move this control into the hero. It would become the FIRST
+              focusable descendant and `showModal()` would announce "Close"
+              before the panel's content. F21 D7. */}
+          <div className="flex shrink-0 justify-center px-5 pb-5 pt-4">
+            <Button variant="outline" size="sm" fullWidth={false} onClick={onClose}>
+              Close
+            </Button>
+          </div>
         </div>
       )}
     </dialog>

@@ -347,6 +347,8 @@ dialog::backdrop {
    `tolkien` no-scroll assertion keeps its slack. F21 §1.4 and D4 have the
    arithmetic, including what a true `aspect-ratio: 1 / 1` half would cost. */
 .dw-badge-hero {
+  /* The containing block for the art, which is taken out of flow below. */
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   /* The art's own paper, from the generated manifest. The fallback is only ever
@@ -357,7 +359,21 @@ dialog::backdrop {
   border-bottom: 1px solid var(--rule);
 }
 
+/* MEASURED, and the reason the art is out of flow. In flow, `height: 100%` has
+   no definite height to resolve against — the band is a flex item whose own
+   height is what the ratio is trying to supply — so it falls back to `auto`, the
+   768² source draws itself square at the band's full width, and the band's
+   automatic minimum size grows to fit it: 330px instead of 185px, ratio still
+   reporting `16 / 9` in the computed style. The body then loses 128px and the
+   `tolkien` no-scroll assertion goes red, which is how this was caught.
+
+   `position: absolute` breaks the circularity in one direction rather than
+   relying on a percentage resolving against a transferred size: out of flow, the
+   art contributes nothing to the band's height, so the ratio is the only thing
+   that decides it, and `inset: 0` then gives the art a definite box to fill. */
 .dw-badge-hero img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
