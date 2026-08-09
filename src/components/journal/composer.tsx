@@ -154,19 +154,34 @@ export function Composer({
     if (sending.current) return;
     sending.current = true;
 
-    // Cleared immediately, and focus stays put: a reader working through a page
-    // with three lines worth keeping should be able to paste the next one
-    // without a tap in between.
-    setText("");
-    setSourceNote("");
+    /**
+     * Clear only what the user has not already replaced.
+     *
+     * On a fresh submit the fields *are* the snapshot, so this clears them —
+     * immediately, and focus stays put, because a reader working through a page
+     * with three lines worth keeping should be able to paste the next one
+     * without a tap in between.
+     *
+     * On **"Keep it anyway"** they may not be. The warning can sit on screen
+     * while the user starts their next paste, and the snapshot being saved is
+     * the line that collided, not what is in the box now. Clearing
+     * unconditionally there destroys work the user can see — the same mistake
+     * the `current === ""` guard in `restore` prevents on the way back, and
+     * this is its mirror on the way out.
+     */
+    const wasReset = text.trim() === snapshot.text;
+    setText((current) => (current.trim() === snapshot.text ? "" : current));
+    setSourceNote((current) => (current.trim() === snapshot.sourceNote ? "" : current));
     setProblem(null);
     setDuplicate(null);
-    try {
-      sessionStorage.removeItem(JOURNAL_DRAFT_KEY);
-    } catch {
-      /* see above */
+    if (wasReset) {
+      try {
+        sessionStorage.removeItem(JOURNAL_DRAFT_KEY);
+      } catch {
+        /* see above */
+      }
+      textRef.current?.focus();
     }
-    textRef.current?.focus();
 
     try {
       const result = await onSave(snapshot.text, snapshot.sourceNote || null, { force });

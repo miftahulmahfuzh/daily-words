@@ -29,6 +29,7 @@ npm run typecheck        # tsc --noEmit
 npm run lint
 npm run build
 npm run test:layout      # the no-scroll spec; boots its own dev server on 3200
+DW_TEST_SESSION=… npm run test:layout    # …plus onboarding and F15's duplicate flow
 npm run db:generate && npm run db:migrate
 npm run llm:check                        # smoke-test z.ai through the shared client
 npm run vocab:enrich -- "genteell"       # run the F3 prompt, no database writes
@@ -63,9 +64,14 @@ v0.1.0.
 
 `npm run journal:similarity` is how `NEAR_DUPLICATE_MAX_DISTANCE` was chosen and
 the only way to change it: the numbers are the deliverable, read against F15
-§6.4's procedure. Re-run it before swapping the embedding model, and record the
-new `maxA`/`minC` in the comment beside the constant rather than editing the
-digits. `npm run journal:embed` takes `--all` or `--user=<uuid|email>`, plus
+§6.4's procedure. Re-run it before swapping the embedding model — it takes
+`--model=` and `--dimensions=` for exactly that — and record the new
+`maxA`/`minC` in the comment beside the constant rather than editing the digits.
+**`text-embedding-3-large` has already been measured and rejected**, at 1536 and
+at its native 3072: it fails the sanity gate at both, because it weights lexical
+overlap more heavily and every dangerous false positive in the corpus is
+lexically similar with an opposite claim. A bigger embedder is not a better one
+here. The table is in `lib/journal/similarity.ts`. `npm run journal:embed` takes `--all` or `--user=<uuid|email>`, plus
 `--limit=N`, `--retry-failed` and `--dry-run`; it is idempotent and
 interruptible, and a run in which every batch failed is the only non-zero exit.
 
@@ -282,6 +288,14 @@ throwing. Each cost real time.
   cycle. Adding a fifth origin means adding a row to `BACK_TARGETS`, not a
   template literal in a producer; `npm run nav:check` fails if the literal
   `from=` appears in any file under `src/` but `lib/vocab/links.ts`.
+- `tests/e2e/journal-duplicate.spec.ts` is the one spec in the suite that
+  **writes**, so it is `mode: "serial"` and runs at the design-target viewport
+  only — `fullyParallel` across two projects would have three tests deleting each
+  other's fixtures out of one shared journal. It skips without `DW_TEST_SESSION`,
+  like `onboarding.spec.ts`, and deletes every row it wrote in an `afterEach`. It
+  exists because the bug it guards — "Keep it anyway" wiping a line the user had
+  started typing while the warning was up — is invisible to every offline
+  assertion, since no single function was wrong.
 - `user_stats` is a **cache and is never displayed** ([R11]). `current_streak`
   decays with the passage of time and nothing writes on absence, so every
   consumer — `/profile` and `/today`'s streak pill alike — recomputes from

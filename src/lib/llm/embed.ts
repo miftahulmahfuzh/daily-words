@@ -59,6 +59,28 @@ export type EmbedOptions = {
    * column at the worst possible moment.
    */
   dimensions: number
+  /**
+   * Override `EMBEDDING_MODEL` for one call. Calibration only.
+   *
+   * `npm run journal:similarity -- --model=…` is how a candidate model is
+   * measured against the corpus before anything is changed, which is what
+   * `CLAUDE.md` means by "re-run it before swapping the embedding model". No
+   * runtime path passes this: production reads the environment, so a model can
+   * never differ between the save that writes a vector and the search that
+   * compares it.
+   */
+  model?: string
+  /**
+   * Ask the provider for a specific width, rather than only checking what came
+   * back.
+   *
+   * OpenAI's `text-embedding-3-*` models accept a `dimensions` parameter and
+   * truncate-then-renormalise to it, which is what makes a larger model a
+   * **drop-in** for a `vector(1536)` column with no migration. Sent only when
+   * set: an OpenAI-compatible endpoint that does not know the parameter would
+   * reject the request, and the default path must stay portable.
+   */
+  requestDimensions?: number
 }
 
 export async function embed(
@@ -68,8 +90,9 @@ export async function embed(
   if (!env.EMBEDDING_API_KEY) {
     return { ok: false, error: llmError('config', 'EMBEDDING_API_KEY is not set') }
   }
+  const model = opts.model ?? env.EMBEDDING_MODEL
   if (inputs.length === 0) {
-    return { ok: true, vectors: [], model: env.EMBEDDING_MODEL }
+    return { ok: true, vectors: [], model }
   }
 
   let res: Response
@@ -80,7 +103,13 @@ export async function embed(
         'content-type': 'application/json',
         authorization: `Bearer ${env.EMBEDDING_API_KEY}`,
       },
-      body: JSON.stringify({ model: env.EMBEDDING_MODEL, input: inputs }),
+      body: JSON.stringify({
+        model,
+        input: inputs,
+        ...(opts.requestDimensions === undefined
+          ? {}
+          : { dimensions: opts.requestDimensions }),
+      }),
       signal: AbortSignal.timeout(opts.timeoutMs),
     })
   } catch (err) {
@@ -142,6 +171,6 @@ export async function embed(
   return {
     ok: true,
     vectors,
-    model: typeof payload.model === 'string' ? payload.model : env.EMBEDDING_MODEL,
+    model: typeof payload.model === 'string' ? payload.model : model,
   }
 }

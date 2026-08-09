@@ -1004,25 +1004,84 @@ because the reasoning constrains how Phase B is built, not just whether.
    independently, which matters because the badge-art key has already been
    through a chat transcript.
 
-### 7.2 The threshold is unmeasured
+### 7.2 The threshold is unmeasured — ✅ RESOLVED 2026-08-09, and it is `0.25`
 
-`NEAR_DUPLICATE_MAX_DISTANCE` is stated above as `0.15` and **that number is a
+`NEAR_DUPLICATE_MAX_DISTANCE` was stated below as `0.15` and **that number was a
 guess**, because no vector could be obtained from any provider reachable from
 this machine with the credentials in the repository. §6.4 is the procedure that
-replaces it. Phase B must not be called done with the provisional value in place;
-the `TODO(F15-B4)` marker is there so a grep finds it.
+replaced it, and it was run.
 
-### 7.3 The dimensionality is asserted, not measured
+`npm run journal:similarity`, `text-embedding-3-small`, 20 pairs / 28 strings:
+`maxA = 0.2319`, `minC = 0.3502` (pair 14). §6.4's arithmetic gives
+`0.3502 × 0.8 = 0.2802` → floor `0.28` → **clamped to `0.25`** by step 4. So the
+number comes from the clamp rather than from the corpus, and the margin that
+actually protects the user is the 0.10 to `minC`. The `TODO(F15-B4)` marker is
+gone.
 
-1536 is `text-embedding-3-small`'s documented native width. It was **not**
-observed on this machine. If it is wrong, `embed()` fails loudly at the width
-assertion [D8] rather than writing a malformed vector — but the migration would
-then need re-issuing against a different `vector(N)`. **Before running A2 in
-Phase B, make one curl to the chosen provider and count the array.** On an empty
-table the correction is one migration; after a backfill it is a re-embed of
+Two findings that constrain any future change, recorded in full beside the
+constant in `src/lib/journal/similarity.ts`:
+
+- **The "identical" floor is not zero.** Pair 3 — one line against itself with
+  different whitespace and a newline — measured **0.2320**, not ~0.02. Short
+  strings are noisy on this model, so §6.4's "a threshold any Group A pair
+  exceeds is wrong" leaves a usable window of only about [0.24, 0.25]. Layer 1
+  catches all four Group A pairs for free regardless, so this costs nothing in
+  practice — but it means the vector layer has almost no room.
+- **Paraphrase is barely detectable at a safe threshold: Group B scored 2/6**,
+  and one of the two is a colon-vs-semicolon difference. §6.4 step 5 anticipated
+  exactly this and calls it an acceptable outcome rather than a failure. The
+  honest summary is that **Layer 1 carries this feature** and Layer 2 earns
+  little. That is the [D5] trade taken deliberately, not a defect.
+
+**`text-embedding-3-large` was measured and rejected** (2026-08-09), so the
+obvious "upgrade" does not have to be discovered the hard way:
+
+| model | width | maxA | minC | §6.4 sanity gate |
+|---|---|---|---|---|
+| `text-embedding-3-small` | 1536 | 0.2319 | 0.3502 | pass |
+| `text-embedding-3-large` | 1536 (truncated) | 0.2328 | 0.2021 | **FAIL** |
+| `text-embedding-3-large` | 3072 (native) | 0.2399 | 0.2118 | **FAIL** |
+
+It fails at both widths, so it is the model and not the truncation. The culprit
+is pair 12 — *"Time heals all wounds."* against *"Time wounds all heels."* —
+which 3-large places at 0.20, **nearer than one line against a whitespace
+variant of itself**. It weights lexical overlap more heavily, which is precisely
+backwards here: every dangerous false positive in Group C is lexically similar
+with a different or opposite claim. A bigger embedder is not a better one for
+this question. `journal:similarity` gained `--model=` and `--dimensions=` so the
+next candidate is one command rather than an env dance.
+
+### 7.3 The dimensionality is asserted, not measured — ✅ RESOLVED 2026-08-09
+
+1536 is `text-embedding-3-small`'s documented native width, and it was **not**
+observed when this plan was written. It is now: one call to the embeddings
+endpoint before A2's migration was generated returned **exactly 1536** floats, at
+a cost of 12 tokens. The migration was written against a measured number rather
+than a documented one, which is what §7.3 asked for — on an empty table the
+correction would have been one migration; after a backfill it is a re-embed of
 everything.
 
-### 7.4 Cross-lingual duplicates will probably not work
+The assertion survives as a guard rather than as a hope: `embed()` still checks
+the width and returns a `config` error on mismatch, and `journal:check` asserts
+`EMBEDDING_DIMENSIONS` equals the width drizzle declares on the column, read from
+column metadata rather than from a second copy of the digits.
+
+### 7.4 Cross-lingual duplicates will probably not work — ✅ CONFIRMED, but not inverted
+
+Measured 2026-08-09. Pairs 6 and 7 landed at **0.4610** and **0.7345**, both far
+above any threshold Group C allows, so cross-lingual detection is indeed absent
+and the feature works within a language and not across one. That belongs in this
+plan's successor as a stated limitation.
+
+The sharper worry in this section did **not** materialise. Pair 16 — two
+*unrelated* Indonesian proverbs — measured **0.7703**, which is *higher* than
+pair 6's 0.4610. So the model is not clustering by language ahead of meaning; it
+ranks the cross-lingual translation nearer than the same-language non-translation,
+just not nearly near enough to act on. Cross-lingual detection is weak, not
+inverted, and pair 16 earned its place in the corpus by making that measurable
+rather than assumed.
+
+### 7.4a (was in 7.4) The original text
 
 Pairs 6 and 7 embed an Indonesian proverb against its English rendering.
 `text-embedding-3-small` is multilingual but its cross-lingual alignment is

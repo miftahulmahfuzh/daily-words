@@ -151,9 +151,27 @@ export const EMBEDDING_DIMENSIONS = 1536;
  *     that did not happen — 0.7703 vs 0.4610 — so the model does rank meaning
  *     above language, just not sharply enough to use.
  *
+ * **`text-embedding-3-large` was measured and rejected**, 2026-08-09, so nobody
+ * has to "upgrade" into it to find out:
+ *
+ *   | model            | width | maxA   | minC   | gate |
+ *   |------------------|-------|--------|--------|------|
+ *   | 3-small          | 1536  | 0.2319 | 0.3502 | pass |
+ *   | 3-large          | 1536  | 0.2328 | 0.2021 | FAIL |
+ *   | 3-large (native) | 3072  | 0.2399 | 0.2118 | FAIL |
+ *
+ * It fails §6.4's sanity gate at both widths, so it is the model and not the
+ * truncation. The culprit is pair 12 — "Time heals all wounds." against "Time
+ * wounds all heels." — which 3-large places at 0.20, *nearer* than one line
+ * against a whitespace variant of itself. It weights lexical overlap more
+ * heavily, which is precisely backwards here: every dangerous false positive in
+ * Group C is lexically similar with a different or opposite claim. A bigger
+ * embedder is not a better one for this question.
+ *
  * The comparison is strict — `distance < T` warns, `distance === T` does not —
  * per the asymmetry at the top of this file. Re-run the corpus before changing
- * the model, and record the new numbers here rather than editing the digits.
+ * the model (`npm run journal:similarity -- --model=… --dimensions=…`) and
+ * record the new numbers here rather than editing the digits.
  */
 export const NEAR_DUPLICATE_MAX_DISTANCE = 0.25;
 
