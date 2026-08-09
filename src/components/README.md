@@ -104,7 +104,15 @@ Obligations F2 placed on the other features still stand:
   kept strip is `ListRow` (`inline`), and the tab draws no primitive of its own.
   Reviewable without a session at `/kitchen-sink/discover`.
 - **F9** — uses the roadmap's exact level and badge strings with `LevelPill` and
-  `BadgeRow`; recomputes the streak on read ([R11]).
+  `BadgeRow`; recomputes the streak on read ([R11]). **Shipped**: two
+  `LevelPill`s (streak and collection) and no progress bars — the design has
+  none — over the design's ruled 2×2 stat grid and a `BadgeRow` shelf that shows
+  all thirteen, earned first. It also filled the trailing slot F5 left empty on
+  `/today` with the design's "N day run" pill, hidden at zero. Reviewable without
+  a session at `/kitchen-sink/profile?state=full|lapsed|nowords|empty`.
+  `RewardToast` is the one component outside `Screen` allowed `position: fixed`:
+  it contributes zero layout height, which is the property the rule protects, and
+  `/kitchen-sink/today?n=6&toast=1` is where that is measured.
 - **F10** — the journal composer is a permanent field at the top of `/journal`;
   entry body is serif; the insight is a ruled accent block.
 

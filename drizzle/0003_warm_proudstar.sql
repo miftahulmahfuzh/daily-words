@@ -1,0 +1,1 @@
+CREATE INDEX "vocab_entries_user_source_idx" ON "vocab_entries" USING btree ("user_id","source");

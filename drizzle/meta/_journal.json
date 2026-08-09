@@ -22,6 +22,13 @@
       "when": 1786222165271,
       "tag": "0002_hot_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786237907147,
+      "tag": "0003_warm_proudstar",
+      "breakpoints": true
     }
   ]
 }

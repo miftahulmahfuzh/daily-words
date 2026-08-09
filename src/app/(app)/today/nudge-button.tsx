@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Meta } from "@/components/ui/text";
 import { createCard, detectTimezone } from "@/lib/cards/client";
+import { publishRewards } from "@/lib/gamification/reveal";
 
 /**
  * The press that brings the card into existence.
@@ -42,6 +43,11 @@ export function NudgeButton() {
       setProblem(result.message);
       return;
     }
+
+    // Hand F9's payload across before the refresh: this component is inside the
+    // no-card branch and stops existing the moment the card takes its place.
+    // `null` on a repeat press, which is what keeps a badge from toasting twice.
+    publishRewards(result.data.rewards);
 
     // Never compare the response's cardDate against a date captured at render
     // time — a press at 00:00:03 local legitimately lands on the next day, and

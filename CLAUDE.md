@@ -41,7 +41,16 @@ npm run chat:dry-run -- "genteel"        # the three chat prompts against the li
 npm run discover:check                   # F8's dedup fold, prompt and limiter, offline
 npm run discover:db                      # F8's mastered-blocks-suggestion and source rules
 npm run discover:dry-run                 # the suggestion prompt against the live model, no writes
+npm run stats:check                      # F9's streaks, levels, badges and reveal queue, offline
+npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
+npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay badges
 ```
+
+`npm run stats:recompute` takes `--user=<uuid|email>`, `--all`, `--dry-run`,
+`--prune` and `--force`. `--prune` is the only destructive operation in the app
+and refuses to combine with `--all` without `--force`. Run it after any change to
+`lib/gamification/badges.ts`, and never on a schedule — there is no cron in
+v0.1.0.
 
 `npm run discover:dry-run` takes `--profile full|partial|empty|none`,
 `--avoid a,b,c`, `--count N` and `--runs N`. One model call per run. The words it
@@ -131,3 +140,12 @@ throwing. Each cost real time.
   type?"; the two disagree about case, diacritics and punctuation on purpose.
   Under-folding is the correct failure mode: a near-duplicate costs one tap, a
   false collision hides a good word forever.
+- `user_stats` is a **cache and is never displayed** ([R11]). `current_streak`
+  decays with the passage of time and nothing writes on absence, so every
+  consumer — `/profile` and `/today`'s streak pill alike — recomputes from
+  `daily_cards` on read and treats the row as a value to verify and repair.
+  `lib/gamification/` holds no clock and no `Intl.DateTimeFormat` of its own; it
+  converts dates to integers through `lib/time/local-date.ts` and stays there.
+  `evaluateBadges` is pure for one reason: the live award path and
+  `npm run stats:recompute` call it, and a replay that disagreed with what was
+  awarded on the day would be unfixable.

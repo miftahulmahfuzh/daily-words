@@ -155,6 +155,13 @@ export const vocabEntries = pgTable(
       t.lastShownOn.asc().nullsFirst(),
     ),
     index('vocab_entries_user_created_idx').on(t.userId, t.createdAt.desc()),
+    /**
+     * F9's collector level counts `user_id = $1 AND source = 'manual'` on every
+     * /profile read. Neither index above can serve that filter: the unique one
+     * is on `lower(term)` and the other on `created_at`. Additive, and approved
+     * as one of the set in [R8]–[R10].
+     */
+    index('vocab_entries_user_source_idx').on(t.userId, t.source),
   ],
 )
 

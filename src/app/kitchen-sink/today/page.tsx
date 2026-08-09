@@ -8,6 +8,7 @@ import { Eyebrow } from "@/components/ui/text";
 import { Pill } from "@/components/ui/pill";
 import type { DailyCardItemView } from "@/lib/ui/types";
 import { WEEK_STRIP } from "@/lib/sample-data";
+import { RewardToast } from "@/components/gamification/reward-toast";
 import { CardEmpty } from "@/app/(app)/today/card-empty";
 
 /**
@@ -21,6 +22,11 @@ import { CardEmpty } from "@/app/(app)/today/card-empty";
  * `?n=` sets the number of words so the spec can exercise 0, 1, 3 and 6.
  * `?state=empty` swaps the nudge for F5's `CardEmpty` — the widest of /today's
  * six card-region states, since it is the only one carrying two buttons.
+ *
+ * `?toast=1` pins F9's reveal toast open on its longest line. It is
+ * `position: fixed`, so the card's measured height must be identical with and
+ * without it — which is the whole reason the reveal is allowed on the one screen
+ * that may not scroll.
  */
 /**
  * Both strings must OVERFLOW their line box at 375px, not merely fill it — the
@@ -45,11 +51,11 @@ function fixture(n: number): DailyCardItemView[] {
 export default async function KitchenSinkTodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ n?: string; state?: string }>;
+  searchParams: Promise<{ n?: string; state?: string; toast?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
 
-  const { n, state } = await searchParams;
+  const { n, state, toast } = await searchParams;
   const count = Math.min(Math.max(Number(n ?? 6), 0), 6);
   const items = fixture(count);
   const empty = state === "empty";
@@ -114,6 +120,18 @@ export default async function KitchenSinkTodayPage({
         )}
 
         <DayStrip days={WEEK_STRIP} />
+
+        {toast === "1" && (
+          <RewardToast
+            preview={[
+              {
+                id: "badge:sunday",
+                label: "Badge",
+                text: "No Weekend Without Ration Card",
+              },
+            ]}
+          />
+        )}
       </ScreenBody>
     </Screen>
   );

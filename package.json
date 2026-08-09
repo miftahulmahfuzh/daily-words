@@ -28,7 +28,10 @@
     "discover:dry-run": "tsx --conditions=react-server --env-file=.env.local scripts/discover-dry-run.ts",
     "test:layout": "playwright test",
     "design:build": "node scripts/build-previews.mjs",
-    "design:changed": "node scripts/dssync-changed.mjs"
+    "design:changed": "node scripts/dssync-changed.mjs",
+    "stats:check": "tsx scripts/check-gamification.ts",
+    "stats:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-gamification-db.ts",
+    "stats:recompute": "tsx --conditions=react-server --env-file=.env.local scripts/recompute-stats.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.116.0",

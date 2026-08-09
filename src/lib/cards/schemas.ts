@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cardCreatedRewardsSchema } from "@/lib/gamification/schemas";
 import { LAYOUT } from "@/lib/ui/layout";
 
 /**
@@ -60,6 +61,14 @@ export const createCardResponseSchema = z.object({
   /** The IANA zone actually used to compute `card.cardDate`. */
   timezone: z.string(),
   timezoneMismatch: z.boolean(),
+  /**
+   * F9's streak, badge and level-up payload for the reveal toast.
+   *
+   * Null on a repeat press (`created: false`) and null when F9's hook handled
+   * its own failure. Never load-bearing: everything it announces is on /profile
+   * permanently, so a lost `rewards` costs a courtesy and nothing else.
+   */
+  rewards: cardCreatedRewardsSchema.nullable(),
 });
 
 /* --------------------------- GET /api/cards/calendar ------------------------ */

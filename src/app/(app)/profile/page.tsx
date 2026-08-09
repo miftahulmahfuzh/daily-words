@@ -1,67 +1,75 @@
 import { Screen, ScreenBody } from "@/components/layout/screen";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { EditProfileLink } from "@/components/profile/edit-profile-link";
-import { BadgeRow } from "@/components/ui/badge-row";
-import { LevelPill } from "@/components/ui/level-pill";
-import { Eyebrow, Meta, Prose } from "@/components/ui/text";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Eyebrow, Prose } from "@/components/ui/text";
 import { requireUser } from "@/lib/auth/session";
 import { signOutAction } from "@/lib/auth/actions";
-import { STATS, BADGES, PROFILE } from "@/lib/sample-data";
+import { getProfileStats } from "@/lib/gamification/profile-stats";
+import { formatLocalDateLong } from "@/lib/time/local-date";
+import { BadgeShelf } from "./badge-shelf";
+import { LevelBlock } from "./level-block";
+import { StatsGrid } from "./stats-grid";
 
-/* The pride screen. No nagging, no loss-aversion, no unseen-badge dots —
-   the tone is dry and affectionate, matching the level names.
+/**
+ * The pride screen.
+ *
+ * Every number here is recomputed from `daily_cards` on this request. [R11]:
+ * `user_stats` is a cache, and `current_streak` in particular rots by the mere
+ * passage of time — nothing writes to that row when a user simply stops
+ * appearing. `getProfileStats` verifies and repairs it; the page never shows it.
+ *
+ * What is deliberately not on this page: no "your streak is at risk", no
+ * countdown, no freeze tokens, no red states, no leaderboard, no share button,
+ * no unseen-badge dot. A long-time user should feel a record kept. A brand-new
+ * one should find it inviting without being credited with anything they have not
+ * done — which is why the counters vanish at zero cards rather than reading
+ * "0 · 0", and why the badge shelf still shows all thirteen names.
+ */
+export const dynamic = "force-dynamic";
 
-   F1 owns only the identity line and the sign-out control here — they are what
-   prove the auth loop closes. Every figure below is still sample data; F9 owns
-   replacing it with real queries, and [R11] requires it to recompute the streak
-   on read rather than trust the `user_stats` cache. */
 export default async function ProfilePage() {
   const user = await requireUser();
+  const stats = await getProfileStats(user);
 
   return (
     <Screen tabs>
       <ScreenBody scroll className="pb-4">
-        <div className="flex shrink-0 flex-col gap-3 pb-5.5">
-          <Eyebrow>{user.name ?? user.email}</Eyebrow>
-          <LevelPill
-            kind="streak"
-            label={PROFILE.streakLevel}
-            tier={5}
-            tierCount={9}
-            className="self-start"
+        <div className="flex shrink-0 flex-col gap-5 pb-5.5">
+          <Eyebrow>{stats.user.name ?? stats.user.email}</Eyebrow>
+          {/* Both tables, always. The streak level is keyed on the *longest*
+              streak, so a lapse never takes a title away. */}
+          <LevelBlock kind="streak" label="Streak" level={stats.streakLevel} />
+          <LevelBlock
+            kind="collector"
+            label="Collection"
+            level={stats.collectorLevel}
           />
-          <Meta>Next: {PROFILE.nextLevel}.</Meta>
         </div>
 
-        {/* A ruled grid rather than four cards: these are readings off one
-            instrument, not four separate things. */}
-        <div className="grid shrink-0 grid-cols-2 border-t border-l border-rule">
-          {STATS.map((stat) => (
-            <div
-              key={stat.label}
-              className="flex flex-col gap-[5px] border-r border-b border-rule px-3.5 py-4"
-            >
-              <span className="text-[32px] leading-none tracking-display tabular-nums">
-                {stat.n}
-              </span>
-              <Eyebrow size="sm" className="tracking-[0.16em]">
-                {stat.label}
-              </Eyebrow>
-            </div>
-          ))}
-        </div>
+        {/* Branching on `sinceDate` rather than on `isEmpty`, which is the same
+            question — both are "has this user ever made a card" — but this one
+            also narrows the date for the line below it. */}
+        {stats.sinceDate === null ? (
+          <EmptyState
+            className="flex-none py-6"
+            title="The pocket is empty"
+            body="It starts with one card."
+            action={{ label: "Make today’s card", href: "/today" }}
+          />
+        ) : (
+          <>
+            <StatsGrid stats={stats} />
+            <Prose className="shrink-0 py-4.5 pb-6">
+              Keeping a card since {formatLocalDateLong(stats.sinceDate)}.
+            </Prose>
+          </>
+        )}
 
-        <Prose className="shrink-0 py-4.5 pb-6">{PROFILE.since}</Prose>
+        <BadgeShelf badges={stats.badges} />
 
-        <Eyebrow size="sm">Badges</Eyebrow>
-        <div className="flex shrink-0 flex-col pt-2">
-          {BADGES.map((badge) => (
-            <BadgeRow key={badge.key} label={badge.name} count={badge.count} />
-          ))}
-        </div>
-
-        {/* F7's entire footprint on this page. F9 owns everything above it and
-            may move this row wherever its own layout wants. */}
+        {/* F7's row and F1's sign-out, kept at the foot where the page turns
+            from a record into settings. */}
         <div className="shrink-0 pt-7">
           <EditProfileLink />
         </div>
