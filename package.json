@@ -23,6 +23,9 @@
     "chat:check": "tsx scripts/check-chat.ts",
     "chat:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-chat-db.ts",
     "chat:dry-run": "tsx --conditions=react-server --env-file=.env.local scripts/chat-dry-run.ts",
+    "discover:check": "tsx scripts/check-discover.ts",
+    "discover:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-discover-db.ts",
+    "discover:dry-run": "tsx --conditions=react-server --env-file=.env.local scripts/discover-dry-run.ts",
     "test:layout": "playwright test",
     "design:build": "node scripts/build-previews.mjs",
     "design:changed": "node scripts/dssync-changed.mjs"

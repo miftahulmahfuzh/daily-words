@@ -1,11 +1,13 @@
 import { request, type ApiResult } from "@/lib/api/client";
 import type {
   AcceptCorrectionResponse,
+  AcceptSuggestionResponse,
   CreateVocabResponse,
   DeleteVocabResponse,
   DismissCorrectionResponse,
   EnrichResponse,
   ListVocabResponse,
+  SuggestResponse,
   VocabDetailResponse,
   VocabStatus,
 } from "@/lib/vocab/schemas";
@@ -66,4 +68,25 @@ export function setEntryStatus(
 /** Fails with `in_use` and a readable sentence when the word has been carded. */
 export function deleteEntry(id: string): Promise<ApiResult<DeleteVocabResponse>> {
   return request(`/api/vocab/${id}`, "DELETE");
+}
+
+/* -------------------------------- Discovery -------------------------------- */
+
+/**
+ * One batch of candidates. `exclude` is what the user has declined so far in
+ * this browser session — held in the component, never persisted (F8 §9 D2).
+ */
+export function suggestWords(exclude: string[]): Promise<ApiResult<SuggestResponse>> {
+  return request("/api/vocab/suggestions", "POST", { exclude });
+}
+
+/**
+ * Keep one. The term is the only thing sent: `source` is forced server-side and
+ * the preview gloss is discarded here, which is what guarantees the stored
+ * definition can only ever come from F3's enrichment.
+ */
+export function acceptSuggestion(
+  term: string,
+): Promise<ApiResult<AcceptSuggestionResponse>> {
+  return request("/api/vocab/suggestions/accept", "POST", { term });
 }

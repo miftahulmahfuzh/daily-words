@@ -38,7 +38,15 @@ npm run profile:check                    # F7's prompt-context and timezone asse
 npm run chat:check                       # F6's turn policy, sanitiser and prompts, offline
 npm run chat:db                          # F6's turn cap and rounds; seeds and deletes a fixture user
 npm run chat:dry-run -- "genteel"        # the three chat prompts against the live model, no writes
+npm run discover:check                   # F8's dedup fold, prompt and limiter, offline
+npm run discover:db                      # F8's mastered-blocks-suggestion and source rules
+npm run discover:dry-run                 # the suggestion prompt against the live model, no writes
 ```
+
+`npm run discover:dry-run` takes `--profile full|partial|empty|none`,
+`--avoid a,b,c`, `--count N` and `--runs N`. One model call per run. The words it
+returns are the feature; read them against F8 §7's rules rather than trusting the
+exit code, which only reports transport.
 
 `npm run chat:dry-run` takes `--profile full|partial|empty`, `--round N` and
 `--reply "…"`. Four model calls per run; it is the tool for F6's prompt-tuning
@@ -117,3 +125,9 @@ throwing. Each cost real time.
   layout, which is what keeps `POST /api/profile/complete` reachable.
 - The user's timezone is detected, never asked. `timezone_source = 'manual'`
   means a human corrected it and automatic re-detection must leave it alone.
+- Discovery's `listAllUserTerms` carries **no status filter** — a mastered word
+  must still block a suggestion. `lib/vocab/dedup.ts` answers "are these the same
+  word?" and is not `lib/vocab/normalize.ts`, which answers "what did the user
+  type?"; the two disagree about case, diacritics and punctuation on purpose.
+  Under-folding is the correct failure mode: a near-duplicate costs one tap, a
+  false collision hides a good word forever.
