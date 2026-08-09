@@ -8,6 +8,7 @@ import { cn } from "@/lib/ui/cn";
 import { createShare, revokeShare } from "@/lib/share/client";
 import type { CreateShareRequest } from "@/lib/share/schemas";
 import {
+  shareHandoff,
   SHARE_COPIED_NOTICE,
   SHARE_COPY_LABEL,
   SHARE_FIELD_LABEL,
@@ -27,7 +28,7 @@ import {
  * find that out. One component, three call sites, one set of failure modes.
  *
  * `entityType` and `entityId` are the only things that vary. `title` is what a
- * native share sheet shows beside the link, so it is a word, a date or the first
+ * native share sheet shows above the link, so it is a word, a date or the first
  * line of an entry depending on what is being shared.
  *
  * **There is one shape, not two.** F18 D3 wanted a compact 32px variant for
@@ -50,13 +51,16 @@ import {
  * verified on a real iPhone during development (F16 R1), so the chain is built
  * so that **every** failure lands somewhere usable:
  *
- *   1. `navigator.share(...)`. If it rejects with `AbortError`, **stop** — the
- *      user dismissed the sheet, which is a success, and falling through to the
- *      clipboard would silently copy something they declined to send.
- *   2. Any other rejection, or no `navigator.share`: `navigator.clipboard`, and
- *      a `Link copied` line.
- *   3. Always, regardless: the URL sits in a selectable read-only field.
- *      **The terminal state is never "nothing happened."**
+ *   1. `navigator.share({ title, url })`. If it rejects with `AbortError`,
+ *      **stop** — the user dismissed the sheet, which is a success, and falling
+ *      through to the clipboard would silently copy something they declined to
+ *      send. **No `text` field**: with one, iOS concatenates it onto the URL and
+ *      the sheet's *Copy* yields `"genteel https://…"` rather than a link. The
+ *      payload is built by `shareHandoff`, not written out here.
+ *   2. Any other rejection, or no `navigator.share`: `navigator.clipboard` gets
+ *      `handoff.text`, the bare URL, and a `Link copied` line.
+ *   3. Always, regardless: the same bare URL sits in a selectable read-only
+ *      field. **The terminal state is never "nothing happened."**
  *
  * Once the share exists, `Copy link` runs the same chain with the URL already in
  * hand, so that tap carries its activation intact — which is the shape to fall
@@ -80,7 +84,10 @@ export function ShareButton({
 }: {
   entityType: CreateShareRequest["entityType"];
   entityId: string;
-  /** What a native share sheet shows beside the link. Never the sharer's name. */
+  /**
+   * The native share sheet's heading. Never the sharer's name, and never the
+   * `text` field — see `shareHandoff`.
+   */
   title: string;
   /** The un-shared call to action. "Share this word" / "…card" / "…line". */
   label: string;
@@ -112,9 +119,11 @@ export function ShareButton({
 
   /** Steps 1 and 2 of the chain. Step 3 is the field, which is always drawn. */
   async function handOff(target: string) {
+    const { sheet, text } = shareHandoff(title, target);
+
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
-        await navigator.share({ title, text: title, url: target });
+        await navigator.share(sheet);
         return;
       } catch (err) {
         // The user dismissed the sheet. That is a completed intention, not a
@@ -124,7 +133,7 @@ export function ShareButton({
     }
 
     try {
-      await navigator.clipboard.writeText(target);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
     } catch {
       // `navigator.clipboard` needs a secure context: localhost:3200 qualifies,
@@ -203,6 +212,10 @@ export function ShareButton({
     );
   }
 
+  // The same record the chain hands off, so the field cannot drift from the
+  // clipboard: both draw `text`.
+  const payload = shareHandoff(title, url);
+
   return (
     <div className="flex flex-col items-start gap-2 pt-5">
       {/* Step 3, and the reason the other two are allowed to fail: whatever the
@@ -212,7 +225,7 @@ export function ShareButton({
       </label>
       <TextInput
         id="share-url"
-        value={url}
+        value={payload.text}
         readOnly
         onFocus={(e) => e.currentTarget.select()}
         className="w-full"
