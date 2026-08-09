@@ -57,7 +57,14 @@ export const BADGE_CATALOG = [
   { key: "dumbledore", title: "The Headmaster’s Last Word" },
   { key: "dobby", title: "Master Has Given a Sock" },
   { key: "five_shares", title: "The Good Samaritan" },
-  { key: "ten_journal_lines", title: "Another Link in the Chain" },
+  // Retitled. The key stays `ten_journal_lines` for `ibu`'s reason above — it is
+  // the value in `badges_awarded`, in the art filename and in `style.md`'s scene
+  // list. "Another Link in the Chain" was a defect rather than a preference: as
+  // an English idiom it means *one more of the same*, which is close to the
+  // opposite of what a maester's chain is, where no two links are alike and each
+  // one is a different subject. The `gloss` in `badge-meta.ts` was already about
+  // maesters and the art was already the chain; only the title disagreed.
+  { key: "ten_journal_lines", title: "Maester of the Seven Kingdoms" },
 ] as const;
 
 export type BadgeKey = (typeof BADGE_CATALOG)[number]["key"];
