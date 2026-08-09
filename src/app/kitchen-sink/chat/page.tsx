@@ -3,6 +3,7 @@ import { Screen } from "@/components/layout/screen";
 import { ChatClient } from "@/app/(app)/vocab/[id]/chat/chat-client";
 import { MAX_ASSISTANT_TURNS } from "@/lib/chat/turn-policy";
 import type { ChatMessageDto, ChatPageState } from "@/lib/chat/schemas";
+import { vocabDetailHref } from "@/lib/vocab/links";
 
 /**
  * The chat layout under worst-case content, for the no-scroll spec.
@@ -103,7 +104,10 @@ export default async function KitchenSinkChatPage({
 
   return (
     <Screen keyboardAware>
-      <ChatClient initial={initial} />
+      {/* The preview has no origin to inherit — this is not a real navigation
+          — so the back link points at the word, which is what the chat's own
+          back always means. */}
+      <ChatClient initial={initial} backHref={vocabDetailHref(initial.vocabEntryId)} />
     </Screen>
   );
 }

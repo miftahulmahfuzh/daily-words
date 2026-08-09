@@ -106,7 +106,7 @@ export function VocabList({
           {group.items.map((item) => (
             <ListRow
               key={item.id}
-              href={vocabDetailHref(item.id)}
+              href={vocabDetailHref(item.id, "collection")}
               title={item.term}
               subtitle={listGloss(item)}
               muted={item.status === "mastered"}

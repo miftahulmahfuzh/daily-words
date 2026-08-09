@@ -33,6 +33,7 @@ npm run db:generate && npm run db:migrate
 npm run llm:check                        # smoke-test z.ai through the shared client
 npm run vocab:enrich -- "genteell"       # run the F3 prompt, no database writes
 npm run dates:check                      # F5's day-boundary + calendar assertions, offline
+npm run nav:check                        # F11's back-origin whitelist and href round trip, offline
 npm run selection:check                  # 300 real draws; seeds and rolls back a fixture
 npm run profile:check                    # F7's prompt-context and timezone assertions, offline
 npm run chat:check                       # F6's turn policy, sanitiser and prompts, offline
@@ -151,6 +152,19 @@ throwing. Each cost real time.
   type?"; the two disagree about case, diacritics and punctuation on purpose.
   Under-folding is the correct failure mode: a near-duplicate costs one tap, a
   false collision hides a good word forever.
+- The word-detail back link names where the user came from, carried as
+  `?from=<token>` and resolved server-side against a **closed whitelist** in
+  `lib/vocab/links.ts` — `parseOrigin` narrows to a four-member union or `null`,
+  `backTarget` maps a union member (never a string) to a literal `{ href, label }`,
+  and no code path builds an href *out of* the query value, so an open redirect
+  is structurally impossible rather than mitigated. Absent, unrecognised and
+  `collection` all resolve to the Collection, so every pre-F11 URL still says
+  what it said. `vocabDetailHref(id, origin)` and `vocabChatHref(id, origin)`
+  type `origin` as the union: user input cannot reach them without a cast. The
+  chat is not an origin — it *inherits* the word's, or back becomes a two-node
+  cycle. Adding a fifth origin means adding a row to `BACK_TARGETS`, not a
+  template literal in a producer; `npm run nav:check` fails if the literal
+  `from=` appears in any file under `src/` but `lib/vocab/links.ts`.
 - `user_stats` is a **cache and is never displayed** ([R11]). `current_streak`
   decays with the passage of time and nothing writes on absence, so every
   consumer — `/profile` and `/today`'s streak pill alike — recomputes from

@@ -128,6 +128,12 @@ Obligations F2 placed on the other features still stand:
   component, additive, and the same one `TextInput` already carried: React 19
   passes `ref` as an ordinary prop but TypeScript needs it declared, and the
   composer measures the element to auto-grow it and re-focuses it after a save.
+- **F11** — `BackLink`'s props are unchanged and stay `{ href, label }`. On
+  `/vocab/[id]` both now come from `backTarget()` in `lib/vocab/links.ts`, which
+  names the screen the user came from; `OriginBackLink` is the client wrapper
+  that does the same for `loading.tsx`, which cannot see `searchParams`. Nothing
+  in the kit knows about origins — a `BackLink` still just renders the two
+  strings it is handed.
 
 ### `Screen keyboardAware` — the one exception to `100dvh`
 
