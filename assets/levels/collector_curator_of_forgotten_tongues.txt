@@ -1,9 +1,9 @@
-level:          collector_jam_jar_of_words
+level:          collector_curator_of_forgotten_tongues
 model:          gpt-image-2
 style version:  v1
-reference:      (none — anchor run)
+reference:      assets/levels/_anchor.png
 size / quality: 1024x1024 / high
-image sha256:   52949dc3a35bc4cb3312cc2e60fa5ecb64947931fe5aea7e3aacff1bb320f221
+image sha256:   0c412fa800a1000159d820492cd19fdbf1fed38e3be1ba23facc31a10042818e
 
 --- prompt as sent ---
 A single printed keepsake ticket, square, in the manner of a nineteenth-century
@@ -69,6 +69,4 @@ whole set; what stands inside the frame belongs to this level alone. Do not fall
 back on an open book, a quill, a wreath or a star as a default centre. Seventeen
 levels built from the same object is the way this set fails.
 
-SUBJECT FOR THIS LEVEL: A glass preserving jar standing on a scrubbed table, a cloth cover tied over its mouth with string, a dozen small smooth pebbles visible through the glass. VERMILION: the knot in the string.
-
-CORRECTION FOR THIS ATTEMPT: Three things. FRAME: set the double-ruled frame in from the paper's edge by the same distance on all four sides, leaving a bare band of paper about one eighth of the image wide all the way around the outside of it. PAPER: one single stock, the identical tone edge to edge and corner to corner, the same inside the frame as outside it, close to #F6F2E4 — a bright, clean, faintly warm index card. INK: the single second-pass mark, the knot in the string, is a dull brick vermilion near #8A3324, deep and dark rather than orange.
+SUBJECT FOR THIS LEVEL: A glazed cabinet on turned legs, its door standing ajar, three objects on graded stands inside — a bone flute, a clay drinking cup and a folded length of cloth. VERMILION: the cord tying the folded cloth.

@@ -193,6 +193,16 @@ the prepared alternative already written down for it:
 | `collector_private_collector` × `collector_hoarder_of_rare_speech` | both drawers | `collector_hoarder_of_rare_speech` → *a lock-up store seen through its open door, crates stacked to the ceiling on both sides of a narrow aisle* |
 | `collector_curator_of_forgotten_tongues` × badge `midnight_oil` | the first draft held a clay **oil lamp**; the badge deck already owns the only lamp | already changed to a bone flute and a drinking cup — **do not put the lamp back** |
 
+**Audited on the finished deck, both decks laid out at row size: none of the
+four converged, and no prepared alternative was needed.** The two drawer scenes
+are the pair worth naming, because they are the one that could still go wrong on
+a regeneration: `collector_private_collector` is a single drawer pulled out at
+an angle, showing pinned specimens in compartments, and
+`collector_hoarder_of_rare_speech` is a flat square-on wall of forty-two
+identical drawer fronts. One reads at 56px as an angled tray of dots and the
+other as a dense grid. If a regeneration ever brings them together, the
+lock-up-store alternative above is the one to use.
+
 Two deliberate avoidances, recorded so a later session does not "improve" them
 back in:
 
@@ -229,6 +239,48 @@ nobody decided to make.
 **The badge anchor must not be used.** `assets/badges/_anchor.png` is a circular
 seal, and an edit call against it produces circular seals; that is the whole
 point of the split.
+
+**Aim the anchor's paper HIGH, and this was measured.** The first approved
+anchor sat at 79.3% plate luminance — 1.3 points above `check_badge_art.py`'s
+absolute 78% floor — and every one of its children came back 2 to 5 points
+darker still, at 74.3–77.8%. The drift is in the `/v1/images/edits` endpoint,
+not in the prompt: a note asking in as many words to hold the paper moved one
+of them by 0.6 of a point. The fix was to regenerate the anchor at 85.9% and
+regenerate the four tiers already made against the old one; they came back at
+81–83.6% and the deck landed where the badge deck lives. If this deck is ever
+regenerated, start the anchor near 86%.
+
+### What the seventeen actually measure
+
+Recorded so a later session re-deriving a band has a distribution rather than
+one sample — which is the mistake `check_badge_art.py`'s own header exists to
+warn about.
+
+| Quantity | Level deck, style v1 | Badge deck, style v1 |
+|---|---|---|
+| Plate luminance | 78.8–85.9%, median 82.8% | 79.9–89.6% |
+| Plate hex | `#ede6ca`–`#f5efd3` | `#eae6d7`–`#f1ede1` |
+| Vermilion share | 0.00–0.20% | — |
+| 8a "off centre" | 0.31–7.56% | 0.21–4% |
+
+**Two bands fire on this deck and neither was edited**, per F22 §7.2. Both are a
+circle-finder reading a rectangle:
+
+- **8a seal centred** (≤3.50%) fires on seven tiers, to 7.56%. The subject
+  stands on a ground rule near the foot of the frame, so the ink centroid sits
+  below the image centre *by construction*. A roundel's does not.
+- **9a seal radius vs anchor** is meaningless here. There is no ring; the
+  detector fits noise, and the same anchor has read 24.2%, 41.0% and 48.8%
+  across attempts.
+- **9b plate luminance vs anchor** (≤4.0 points) fires on five tiers, to 7.1.
+  The band is sound; the *anchor* is the problem, because at 85.9% it sits at
+  the very top of the deck's own 78.8–85.9% range rather than in the middle of
+  it. Anchor the paper near the median and this band would pass throughout.
+
+`check_badge_art.py` is a generation-time aid, not a CI gate — `npm run
+badges:check` never runs it, and its own closing line says the exit code is not
+the verdict. **Do not comment a band out**; a threshold somebody comments out is
+the failure mode that file was written to avoid.
 
 ---
 
