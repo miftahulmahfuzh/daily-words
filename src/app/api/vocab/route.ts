@@ -1,5 +1,6 @@
 import { requireApiUser } from "@/lib/api/guards";
 import { fail, ok, readJson } from "@/lib/api/respond";
+import { isUniqueViolation } from "@/lib/db/errors";
 import {
   countEntriesCreatedSince,
   createVocabEntry,
@@ -31,21 +32,6 @@ export const runtime = "nodejs";
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * `UNIQUE (user_id, lower(term))` is caught rather than pre-checked: a
- * pre-check is a race, and two devices adding the same word at once is a real
- * case (§11 E17). Drizzle wraps driver errors, so the code may be one level down.
- */
-function isUniqueViolation(err: unknown): boolean {
-  const code = (e: unknown) =>
-    typeof e === "object" && e !== null && "code" in e
-      ? (e as { code?: unknown }).code
-      : undefined;
-  if (code(err) === "23505") return true;
-  const cause = typeof err === "object" && err !== null ? (err as { cause?: unknown }).cause : undefined;
-  return code(cause) === "23505";
-}
 
 /**
  * One page of the caller's collection. F4's `load more` is the only caller —

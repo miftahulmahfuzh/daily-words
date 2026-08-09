@@ -1,31 +1,28 @@
-import { EmptyState } from "@/components/ui/empty-state";
+import { DiscoverPanel } from "@/components/vocab/discover-panel";
+import { listKeptFromDiscover } from "@/lib/db/queries/vocab-suggestions";
 
 /**
- * F4 contract — F8 replaces the body. Do not change the path, the props, or the
- * default export. See plans/F4-vocab-detail.md §9.1 and ROADMAP [R17].
+ * F4 contract — the path, the props and the default export are frozen. See
+ * `plans/F4-vocab-detail.md` §9.1 and ROADMAP [R17].
  *
- * What F4 guarantees:
+ * What F4 guarantees, and what F8 relies on:
  *
  * 1. `/vocab?tab=discover` routes here. F8 adds no route, no `page.tsx` and no
  *    `layout.tsx` under `app/(app)/vocab/`.
- * 2. It renders as an async server component inside the shell's scroll pane,
- *    below the header and tab strip. It may render client components beneath it.
- * 3. `userId` is authenticated and non-null. F8 does not re-check the session
- *    for identity; the route group's layout already redirected.
- * 4. F8 gets the pane's full width, inside the design's gutter, and unbounded
- *    height. It supplies its own vertical rhythm.
- * 5. The shell reserves `top: 0` inside the pane for the Mine tab's search
- *    field. Discover renders no sticky element there.
- * 6. Bottom inset for the tab bar and the safe area is the shell's; do not
- *    repeat it.
- * 7. Query params other than `tab` are not cleared when Discover is active. F8
- *    may use its own, provided none is named `tab` or `q` — Mine owns those.
+ * 2. This is an async server component inside the shell's scroll pane, below the
+ *    header and tab strip. It may render client components beneath it — and does:
+ *    everything with state is `DiscoverPanel`.
+ * 3. `userId` is authenticated and non-null. The route group's layout already
+ *    redirected, so nothing here re-checks the session for identity.
+ * 4. The pane is a flex column with the design's gutter and a 20px gap, so the
+ *    three blocks below are direct children and set no margins of their own.
+ * 5. `top: 0` inside the pane belongs to the Mine tab's search field. Discover
+ *    renders no sticky element.
+ * 6. The bottom inset for the tab bar and the safe area is the shell's.
  *
- * F8 links to a word it has kept with `vocabDetailHref(id)` from
- * `@/lib/vocab/links`, and must dedup its suggestions against **every** row of
- * `vocab_entries` for the user, mastered ones included — a suggestion matching
- * a term already held violates `UNIQUE (user_id, lower(term))` on accept.
- * [R1] removed tombstones, so there is nothing invisible to reason about.
+ * The kept list is read here rather than fetched on mount: the first paint of a
+ * returning user's Discover tab should be their own words, not a spinner. The
+ * panel prepends anything kept in the current session on top of it.
  */
 export interface DiscoverTabProps {
   /** Authenticated user id, already resolved by the shell. */
@@ -33,13 +30,6 @@ export interface DiscoverTabProps {
 }
 
 export default async function DiscoverTab({ userId }: DiscoverTabProps) {
-  void userId;
-
-  return (
-    <EmptyState
-      title="Discover is on the way"
-      body="Until then, add a word you met today."
-      action={{ label: "Add a word", href: "/vocab/new" }}
-    />
-  );
+  const kept = await listKeptFromDiscover(userId);
+  return <DiscoverPanel initialKept={kept} />;
 }

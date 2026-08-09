@@ -100,7 +100,9 @@ Obligations F2 placed on the other features still stand:
   `onboarded_at`. `/profile/edit` is a `Screen` with `BackLink` and a footer that
   is the last row of the flex column, never `position: fixed`.
 - **F8** — Discover lives behind `Tabs` on `/vocab` via `?tab=`, not a new route
-  segment and not a fifth tab. [R17].
+  segment and not a fifth tab. [R17]. **Shipped**: the proposal is a `Card`, the
+  kept strip is `ListRow` (`inline`), and the tab draws no primitive of its own.
+  Reviewable without a session at `/kitchen-sink/discover`.
 - **F9** — uses the roadmap's exact level and badge strings with `LevelPill` and
   `BadgeRow`; recomputes the streak on read ([R11]).
 - **F10** — the journal composer is a permanent field at the top of `/journal`;

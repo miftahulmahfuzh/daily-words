@@ -156,6 +156,58 @@ export const deleteVocabResponseSchema = z.object({
   deleted: z.literal(true),
 });
 
+/* -------------------------------- Discovery -------------------------------- */
+
+/**
+ * F8's two routes.
+ *
+ * Both are POST: one costs LLM quota, the other writes a row, and neither is
+ * idempotent.
+ */
+
+export const suggestRequestSchema = z.object({
+  /**
+   * Terms declined earlier in this browser session. Client-held and
+   * best-effort — a reload loses them by design ([R1] left no table for this
+   * and F8 §9 D2 rejected adding one).
+   */
+  exclude: z.array(z.string().min(1).max(64)).max(50).default([]),
+});
+
+export const suggestionSchema = z.object({
+  term: z.string(),
+  partOfSpeech: z.enum(["noun", "verb", "adjective", "adverb"]),
+  /** ≤ 80 characters. **A preview to decide by. Never persisted.** */
+  gloss: z.string(),
+});
+
+export const suggestResponseSchema = z.object({
+  suggestions: z.array(suggestionSchema),
+  /** True when the model ran and everything it offered was already held. */
+  exhausted: z.boolean(),
+});
+
+/**
+ * `z.strictObject`, and that is the point of this schema.
+ *
+ * Note what is absent: no `source`, no `definition`, no `gloss`, no
+ * `partOfSpeech`. `source` is forced to `'suggested'` in the route, and
+ * everything descriptive comes from F3's enrichment. A client that posts
+ * `{"term":"winnow","source":"manual"}` gets a 400 rather than a row it
+ * authored the provenance of.
+ */
+export const acceptSuggestionRequestSchema = z.strictObject({
+  term: z.string().min(2).max(64),
+});
+
+export const acceptSuggestionResponseSchema = z.object({
+  id: z.uuid(),
+  term: z.string(),
+  enrichmentStatus: z.enum(["pending", "ready", "failed"]),
+  /** A **success**: the term arrived between the suggestion and the tap. */
+  alreadyExisted: z.boolean(),
+});
+
 /* ---------------------------------- Types ---------------------------------- */
 
 export type VocabStatus = z.infer<typeof vocabStatusSchema>;
@@ -165,6 +217,12 @@ export type ListVocabResponse = z.infer<typeof listVocabResponseSchema>;
 export type VocabDetailResponse = z.infer<typeof vocabDetailResponseSchema>;
 export type PatchVocabBody = z.infer<typeof patchVocabBodySchema>;
 export type DeleteVocabResponse = z.infer<typeof deleteVocabResponseSchema>;
+
+export type SuggestRequest = z.infer<typeof suggestRequestSchema>;
+export type Suggestion = z.infer<typeof suggestionSchema>;
+export type SuggestResponse = z.infer<typeof suggestResponseSchema>;
+export type AcceptSuggestionRequest = z.infer<typeof acceptSuggestionRequestSchema>;
+export type AcceptSuggestionResponse = z.infer<typeof acceptSuggestionResponseSchema>;
 
 export type CreateVocabRequest = z.infer<typeof createVocabRequestSchema>;
 export type VocabEntrySummary = z.infer<typeof vocabEntrySummarySchema>;
