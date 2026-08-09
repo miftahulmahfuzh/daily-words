@@ -103,3 +103,39 @@ export function runLengthEndingAt(dayNums: number[], target: number): number {
   for (let d = target; set.has(d); d--) n++;
   return n;
 }
+
+/**
+ * Which Monday-start week a day number falls in.
+ *
+ * 1970-01-01 was a Thursday, so `+ 3` puts every Monday on a multiple of seven
+ * and `Math.floor` carries that correctly into negative day numbers — a date
+ * before the epoch is reachable here, because a user may type any birth year
+ * into a card date the database will accept.
+ *
+ * Integer arithmetic on day numbers, like everything else in this file. It is
+ * deliberately not `Intl`'s idea of a week: `lib/time/local-date.ts` is the only
+ * module allowed to ask a calendar anything, and a locale-dependent first day of
+ * the week would make `three_in_a_week` mean different things in two zones.
+ */
+function weekIndex(dayNum: number): number {
+  return Math.floor((dayNum + 3) / 7);
+}
+
+/**
+ * How many cards fall in `target`'s Monday-start week, counting only days up to
+ * and including `target`. 0 if `target` itself has no card.
+ *
+ * Drives `three_in_a_week`. The caller passes only the dates up to and including
+ * the card being judged, for the same reason `runLengthEndingAt` requires it: a
+ * replay that saw the rest of the week would award the badge on Monday.
+ */
+export function countInWeekEndingAt(dayNums: number[], target: number): number {
+  const set = new Set(dayNums);
+  if (!set.has(target)) return 0;
+  const week = weekIndex(target);
+  let n = 0;
+  for (const d of set) {
+    if (d <= target && weekIndex(d) === week) n++;
+  }
+  return n;
+}

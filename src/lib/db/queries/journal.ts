@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { journalEntries } from "@/lib/db/schema";
 import type { JournalEntry } from "@/lib/db/types";
@@ -149,6 +149,29 @@ export async function deleteEntry(userId: string, id: string): Promise<boolean> 
     .where(and(eq(journalEntries.id, id), eq(journalEntries.userId, userId)))
     .returning({ id: journalEntries.id });
   return rows.length > 0;
+}
+
+/**
+ * When each of this user's entries was written, oldest first. F9's
+ * `ten_journal_lines` badge and nothing else.
+ *
+ * **`created_at`, deliberately not `updated_at`.** A line counts from when it
+ * was written; editing it later is not a new line, and reading `updated_at`
+ * here would let a single edit reorder a user's whole history and move an award
+ * that has already been made.
+ *
+ * Live rows only, and `deleteEntry` above is a hard delete — so this count can
+ * fall. `crossedMultipleOf` in `lib/gamification/badges.ts` owns that
+ * consequence and refuses to award on a count that has gone down. Served by
+ * `journal_entries_user_created_idx`.
+ */
+export async function listEntryCreatedAts(userId: string): Promise<Date[]> {
+  const rows = await db
+    .select({ createdAt: journalEntries.createdAt })
+    .from(journalEntries)
+    .where(eq(journalEntries.userId, userId))
+    .orderBy(asc(journalEntries.createdAt));
+  return rows.map((r) => r.createdAt);
 }
 
 /* --------------------------------- Insight --------------------------------- */

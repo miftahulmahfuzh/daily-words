@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { shares } from '@/lib/db/schema'
 import type { Share, ShareEntityType } from '@/lib/db/types'
@@ -257,4 +257,30 @@ export async function listShares(userId: string): Promise<Share[]> {
     .from(shares)
     .where(eq(shares.userId, userId))
     .orderBy(desc(shares.createdAt))
+}
+
+/**
+ * When each of this user's **word** shares was created, oldest first. F9's
+ * `five_shares` badge and nothing else.
+ *
+ * `entity_type = 'vocab'` is the whole point: the badge is for handing somebody
+ * a word, and a shared card or a shared journal line is a different act with its
+ * own reasons. One column, so the filter cannot drift from the title.
+ *
+ * **This counts live rows, and a revoked share is a deleted row.** The badge
+ * rule reads the count as a crossing and refuses to award when it has gone down
+ * (`crossedMultipleOf` in `lib/gamification/badges.ts` documents the whole
+ * consequence). It is not a monotonic tally and must not be described as one.
+ *
+ * Timestamps rather than a `count(*)`, because the caller needs the count as it
+ * stood at two different instants — at this card and at the one before it — and
+ * a user's shares are tens of rows. Served by `shares_user_created_idx`.
+ */
+export async function listVocabShareCreatedAts(userId: string): Promise<Date[]> {
+  const rows = await db
+    .select({ createdAt: shares.createdAt })
+    .from(shares)
+    .where(and(eq(shares.userId, userId), eq(shares.entityType, 'vocab')))
+    .orderBy(asc(shares.createdAt))
+  return rows.map((r) => r.createdAt)
 }

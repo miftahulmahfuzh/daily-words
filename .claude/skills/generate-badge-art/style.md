@@ -142,6 +142,12 @@ numerals, and numerals are text. Turn the face away.
 - year_end: A squared stack of twelve identical torn-off paper leaves on a desk, the topmost lifting at one corner in a draught, the empty calendar backing board leaning against the stack behind. VERMILION: the pin still stuck through the top leaf.
 - leap_day: A hare in mid-leap over a low stone wall, drawn as a natural-history plate, its shadow the only thing beneath it; the wall's coping stones run in even blocks with one block missing from the run and set aside on the grass below. VERMILION: a mark on that single set-aside stone.
 - tolkien: A plain heavy iron ring set down on a bare table beside a briar pipe gone cold, the ring's band entirely smooth and unmarked, a thin coil of smoke still rising from the bowl. VERMILION: a wax seal on the table beside the ring.
+- three_in_a_week: A wooden tally stick lying across a bare rule with three fresh notches cut into its upper edge and clean wood showing in each, a few curled shavings fallen beside it, and a clasp knife laid flat with its blade folded away. VERMILION: a short mark struck across the stick's near end.
+- thirty_day_streak: A plain helmet of beaten metal standing upright and alone on a bare rule, turned firmly three quarters away so that the face is seen at an angle and strongly foreshortened, one narrow eye slot running the width of the face and a short narrow opening dropping a little below the middle of it, the whole surface smooth and unadorned and built entirely from engraved contour and cross-hatch. VERMILION: one small dent above the brow, struck a little off register from the green.
+- dumbledore: A pair of half-moon spectacles folded shut and set down on the flat coping stone of a high parapet, the coping's blocks drawn in firm contour and running out of frame on both sides, with nothing below them but bare paper. VERMILION: a single short curled feather lying on the stone beside them.
+- dobby: A single knitted woollen sock, alone, laid out flat on a bare rule with its ribbed cuff turned back once, the knit drawn stitch by stitch in engraved line, the wool gone thin and open at the heel. VERMILION: a darn worked across that thin place in a coarser stitch.
+- five_shares: A squat earthenware flask, unstoppered, its stopper lying where it was set down, standing beside a folded travelling blanket on a bare road rule. VERMILION: a small spill running from the flask's lip onto the rule.
+- ten_journal_lines: A short length of heavy chain lying in a loose curve on a bare rule, its links interlocked and overlapping one another in one continuous unbroken run, each link a slightly different section from its neighbour — one round, one square, one flat and drawn out long — and the run ending in a last link lying free at the near end. VERMILION: a small bright mark on that last link.
 <!-- /SCENES -->
 ```
 
@@ -153,13 +159,67 @@ noticing convergence on badge eleven:
 hand-and-pocket / fanned coupons / columns-and-mug / oil lamp /
 hourglass-and-ink-pot / mimosa-and-envelope / stage-and-stool / coiled wristwatch
 / microphone-and-pole / cupped hands / door knocker / stack of leaves /
-hare-and-wall / ring-and-pipe.
+hare-and-wall / ring-and-pipe / tally-stick-and-knife / helmet /
+spectacles-on-parapet / sock / flask-and-blanket / open chain.
 
 **Two known adjacencies to watch:** `first_card` and `ibu` are both hands
 (different framings — a back of a hand vs a cupped pair), and `full_week` and
 `year_end` are both stacks of paper (a fanned arc vs a squared block). If either
 pair converges in generation, the one to change is `full_week` — a bundle of
 seven wooden tally sticks bound with twine is the prepared alternative.
+
+**Three adjacencies badges #15–#20 add, and what each was checked against:**
+
+- `three_in_a_week`'s tally stick is close to `full_week`'s *reserve* scene (a
+  bundle of seven sticks bound with twine), which is not in use and now must not
+  be adopted without redrawing it. The two in play are unlike: one notched stick
+  lying flat with a knife, against a fanned arc of perforated coupons.
+- `five_shares`' earthenware flask is the second vessel of oil in the deck after
+  `midnight_oil`'s lamp. They share a substance and nothing else — a lit lamp
+  with a glass chimney and engraved rays, against a squat unlit flask lying open
+  beside a folded blanket. If they converge, the flask is the one to change; a
+  pannier basket on a standing donkey is the prepared alternative, and it keeps
+  the parable.
+- `ten_journal_lines`' chain is the only other closed curve in the set besides
+  `tolkien`'s ring, and it is drawn as *unlike* links so that it cannot be
+  mistaken for one at forty pixels.
+
+**`ten_journal_lines` says `interlocked and overlapping` because separated links
+are letters.** The first draft asked for a loose open S of unlike links "with the
+last link still open and not yet closed" — which is a good description of a
+maester's chain and a fatal one for this deck. An open link *is* the letter C.
+Drawn as the line asked, the first attempt returned four detached shapes strewn
+across the seal that read, left to right, as something very like `G C D C`, and a
+mark that can be read as writing in any alphabet is an automatic rejection under
+the style block. Interlocking is what makes a chain read as a chain rather than
+as a row of glyphs; the "not yet closed" idea, which was carrying the badge's
+whole meaning about a chain that is only ever added to, had to move out of the
+picture and into the gloss, where it costs nothing.
+
+**`thirty_day_streak` is a helmet, not a character.** The badge was asked for as
+a picture of a specific copyrighted infant from a television series. Naming him
+in the prompt risks a refusal from the image endpoint and buys a face this deck
+has no vocabulary for; drawing him unnamed as "a small long-eared foundling"
+lands on `leap_day`'s hare. The order's helmet is the object the phrase actually
+belongs to, it is a clerk's object rather than an award, and it holds a
+silhouette at forty pixels better than anything else in the request. `the whole
+surface smooth and unadorned` is load-bearing for the same reason
+`tolkien`'s smooth band is: every reference image of this helmet has a crest,
+a sigil or a maker's mark, and a mark is text.
+
+**And the visor is why this line says `turned firmly three quarters away`.** The
+first draft said "seen very slightly from one side" and described the opening as
+one horizontal slot with a vertical slot below its centre. Drawn face-on and
+symmetrical, that is not a description of a visor — it is a **construction of the
+letter T**, and the first attempt returned a helmet with a capital T stamped
+across the dome. Naming the letter is worse still, which is why the line never
+says "T-shaped"; but avoiding the word was not enough on its own, because the
+geometry spells it whatever you call it. A firm three-quarter turn foreshortens
+the crossbar, breaks the symmetry, and leaves a shape rather than a glyph. The
+same attempt also came back airbrushed, which is why the line now asks for the
+form to be *built* from contour and cross-hatch rather than merely `drawn in
+even contour` — a smooth metal dome is the strongest invitation to a soft
+gradient in the whole set.
 
 **`christmas` deliberately is not a candle.** The obvious Dickens image is a
 guttering stub under a conical extinguisher, and it would have been the second
