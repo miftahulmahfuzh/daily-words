@@ -168,6 +168,16 @@ misses correctly. Do not extend that header to a path whose names are not
 content-hashed. `src/middleware.ts` excludes `badges` from the auth matcher —
 badge art is committed art, not user data, and F16–F18 serve it to strangers.
 
+`BADGE_ART[key].plate` is the art's own paper (`#rrggbb`, the mean of the
+master's outer 5% frame), and it is **generated for the same reason `sha256`
+is** — it is a property of the master's bytes, so a regenerated badge whose
+paper shifted invalidates it. `npm run badges:check` recomputes it from the
+master, in its own PNG decoder on `node:zlib` rather than by importing the
+generator's arithmetic, because two readings that share an implementation
+assert nothing. It exists because the deck **cannot be cropped**: ink runs to
+95.7% of the image height on `ibu`, so F21's hero fills its band with this
+colour and lays the square art `contain` on top rather than `cover`.
+
 Adding badge #15: add the key to `BADGE_CATALOG`, add one `- <key>: <scene>` line
 inside `<!-- SCENES -->` in `style.md`, add its `condition` and `gloss` to
 `src/lib/gamification/badge-meta.ts`, run `/generate-badge-art <key>`, promote
@@ -198,6 +208,24 @@ Two things bite here and neither throws:
   its own as the element to restore focus to — and that child is unmounted on
   close, dropping focus to `<body>`. `showModal()` already focuses the first
   focusable descendant.
+- **A full-bleed child needs `overflow: clip` on the dialog.**
+  `.dw-badge-dialog[open]` carries `border-radius: var(--r-card)` and no
+  overflow, which was invisible while `p-5` kept every child off the corners.
+  F21's hero reaches them, and without the clip the panel gets two square
+  corners at the top and two round ones at the bottom. `clip`, not `hidden` —
+  `hidden` would make the dialog a scroll container beside
+  `.dw-badge-dialog-body`.
+
+The panel's art is `ArtHero`, a full-bleed band, and **its `<img>` is
+`position: absolute`**. In flow, `height: 100%` has no definite height to
+resolve against — the band's own height is what `aspect-ratio` is supplying —
+so it falls back to `auto`, the square source draws itself at the band's full
+width, and the band is 330px instead of 185 while the computed style still
+reads `16 / 9`. Nothing throws; the body silently loses 128px.
+`npm run test:layout` asserts the band's measured height, not its ratio, for
+exactly that reason. Nothing focusable goes in the band, either: it would
+become the first focusable descendant and `showModal()` would announce it
+before the panel's content.
 
 Every *destructive* action still uses `ToggleRow`'s two-tap arm. The ban this
 relaxes was about confirmation modals; see [R22]'s neighbours and F13 D5.

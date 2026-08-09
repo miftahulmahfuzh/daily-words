@@ -39,6 +39,7 @@ those belong to `Screen`, and duplicating them is how the height budget breaks.
 | `ChatBubble`, `ChatBubbleTyping` | `@/components/ui/chat-bubble` | `{ role, eyebrow?, state?: sent\|pending\|failed }` |
 | `BadgeRow` | `@/components/ui/badge-row` | `{ label, count? }` |
 | `LevelPill` | `@/components/ui/level-pill` | `{ kind, label, tier, tierCount }` |
+| `ArtHero` | `@/components/gamification/art-hero` | `{ src, intrinsic, plate, dimmed? }` — the full-bleed band, F22's seam |
 | `CalendarCell`, `CalendarMarkGlyph` | `@/components/ui/calendar-cell` | `{ day, mark, isToday?, href?, accessibleDate? }` |
 | `Tabs` | `@/components/ui/tabs` | `{ items: { label, href, active }[] }` |
 | `ToggleRow` | `@/components/ui/toggle-row` | `{ label, hint?, armedLabel?, checked, onChange, confirmOn? }` |
@@ -224,6 +225,30 @@ Obligations F2 placed on the other features still stand:
 
   Reviewable without a session or a database at
   `/kitchen-sink/share?kind=card&n=6` and `?kind=journal`.
+- **F21** — `BadgeDialog`'s medal becomes `ArtHero`, a full-bleed band across the
+  top of the panel. The ask was about colour, not size: the art's paper stopped
+  at the medal's edge with 82px of `--card` around it at 375px, so the picture
+  read as a tile dropped on a sheet. The band extends the *colour* instead of
+  cropping the art, because the deck cannot be cropped — ink runs from 6.2% to
+  95.7% of the image height across the fourteen masters, capping a centred crop
+  at an aspect ratio of 1.094.
+
+  `ArtHero` takes `src`, `intrinsic`, `plate` and `dimmed` and **never a
+  `BadgeKey`** — it is the seam F22 reuses for streak and collector level art,
+  which is also why the unearned flag is `dimmed` rather than `earned`. The dim
+  goes on the band and not the `<img>`: on the image the plate stays at full
+  strength, and in dark mode an unearned badge becomes a slab of full-brightness
+  cream, brighter than an earned one, inverting the only signal between them.
+
+  Two things were measured. The band costs the panel **less** than the medal and
+  its padding did (580.03px against 597 at the design target, up from 15.28px of
+  headroom to 16.97), so both existing badge-dialog assertions pass unmodified —
+  and the art must be **out of flow**, or `height: 100%` finds no definite height
+  to resolve against, the square source draws itself at the band's full width,
+  and the band is 330px while `aspect-ratio` still computes to `16 / 9`.
+
+  `BadgeMedal` is kept and unchanged; the dialog simply no longer mounts it.
+  Reviewable at `/kitchen-sink/profile?badge=<key>`, in both schemes.
 
 ### `Screen keyboardAware` — the one exception to `100dvh`
 
@@ -315,28 +340,37 @@ fourteen engraved letterpress seals, generated offline by `/generate-badge-art`.
 
 | Field | Intrinsic | Draw at | Where |
 |---|---|---|---|
-| `BADGE_ART[key].src` | 768×768 | **~220 css px** | the badge modal (F13) |
+| `BADGE_ART[key].src` | 768×768 | **the hero band's height** — 185px at 375, 190px at the 340px dialog cap; ~220 remains the ceiling | the badge modal (F13, F21) |
 | `BADGE_ART[key].small` | 192×192 | **~40 css px** | the shelf mark on `/profile` |
 
-**~220 is a ceiling, and F13 draws it as `min(220px, 25dvh)`.** Measured: at
-375×667 a flat 220 pushes the longest gloss in `badge-meta.ts` 38px past the
+**~220 is a ceiling, and `BadgeMedal` draws it as `min(220px, 25dvh)`.** Measured:
+at 375×667 a flat 220 pushes the longest gloss in `badge-meta.ts` 38px past the
 panel's max-height, and the first line to go under the fold is the earned-on
 date — the one thing on that panel a user cannot reconstruct from anywhere else.
 At 390×844 the clamp resolves to 211 and nothing moves. The rule lives in
 `.dw-badge-medal` in `globals.css`, beside the dialog's other measured sizing.
+
+**F21: that dvh clamp no longer governs the dialog.** The modal draws `ArtHero`
+instead, whose band sizes from the dialog's already-clamped *width* through a
+fixed `16 / 9` ratio and from nothing else — 185.06px at 375, 154.06 at 320,
+190.13 at the cap. Clamping the height too would couple one box to the viewport
+twice and make the plate margins a different width on every phone. `BadgeMedal`
+is unchanged and still the right component for a sized square medal.
 
 Import them from `src/lib/gamification/badge-art.ts` — a **generated** file, never
 edited by hand — together with `BADGE_ART_SIZE` and `BADGE_ART_SMALL_SIZE` so a
 component never restates the numbers. It is plain data with no `import
 "server-only"`, so a client component may import it.
 
-Four properties the art already guarantees, so no component should re-implement
+Five properties the art already guarantees, so no component should re-implement
 them:
 
 - **No transparency.** Each file carries its own cream paper plate, edge to edge.
   There is no alpha channel, so there is no halo and no "what colour is behind
   the antialiased edge" question. Do not put a background behind a badge
-  expecting it to show through.
+  expecting it to show through — but do put the badge's own `plate` colour
+  *beside* it. `ArtHero` fills its band with `BADGE_ART[key].plate` and lays the
+  square art `contain` on top, because the deck cannot be cropped (F21 §1.2).
 - **One asset serves both colour schemes.** Paper does not invert. In light theme
   the plate sits nearly flush with `--paper`; in dark theme it reads as a
   specimen laid on a dark table. **Do not add a `dark:` variant, a CSS filter or
@@ -346,6 +380,14 @@ them:
   need padding, and a `--r-card` radius clips only that margin.
 - **Filenames are content-hashed** and served `immutable` for a year. Never add a
   cache-busting query string; regenerating a badge changes the filename.
+- **Each master carries its plate colour as data.** `BADGE_ART[key].plate` is the
+  art's own paper as `#rrggbb`, the mean of the master's outer 5% frame —
+  generated, and recomputed from the master by `npm run badges:check` exactly as
+  `sha256` is, because it is a property of the master's bytes rather than an
+  editorial choice. The deck spans `#eae6d7`…`#f1ede1`, so a single constant
+  would seam; and `tools/check_badge_art.py` check 3 holds the four edge strips
+  to an inter-strip spread of 4.0 luminance points, which is what licenses a flat
+  fill sitting beside the art with no visible step.
 
 Titles are drawn by the app, never by the picture — the style contract forbids
 lettering inside the seal, which is why a badge needs its title beside it to name
