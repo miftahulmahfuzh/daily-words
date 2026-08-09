@@ -299,7 +299,7 @@ See [R12] for the exact trigger of each.
 | `first_card` | the very first card ever | The Uncle's Trick |
 | `sunday` | any Sunday | No Weekend Without Ration Card |
 | `indonesia_independence` | 17 August | National Speaker |
-| `ibu` | 22 December (Indonesian Mother's Day) | Ibu Would Be Proud |
+| `ibu` | 22 December (Indonesian Mother's Day) | Mama Would Be Proud |
 | `womens_day` | 8 March | Words for Her |
 | `fathers_day` | third Sunday of June | For the Old Man |
 | `world_book_day` | 23 April | The Bard's Regard |
