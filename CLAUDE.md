@@ -226,6 +226,16 @@ on `badge-art.ts` and `badge-meta.ts` — that is both parity guards firing, not
 mistake. Badge #14 (`tolkien`) was added exactly this way and is the worked
 example.
 
+`/generate-new-badge "<name>" "<description>"`
+(`.claude/skills/generate-new-badge/`) drives that checklist from a name and a
+rule in prose, and covers the two steps it leaves out: the `evaluateBadges` rule
+itself — including the `BadgeContext` extension a history-based badge needs,
+threaded through **both** `on-card-created.ts` and `recompute.ts`'s replay — and
+`check-gamification.ts`'s three literal `14`s and its `'tolkien is last in the
+catalog'` assertion. It stops at one gate before spending anything on art, then
+hands off to `/generate-badge-art`. This paragraph is still the authority; the
+skill is how it gets followed.
+
 **Adding a level tier**: add the band *with its `key`* to `STREAK_LEVELS` or
 `COLLECTOR_LEVELS`, add one `- <key>: <scene>` line inside `<!-- SCENES -->` in
 `levels.md`, add its gloss to `src/lib/gamification/level-meta.ts`, generate
