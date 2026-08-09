@@ -17,6 +17,8 @@
  * server at all. `autoCorrect="off"` is what makes the whole correction path
  * reachable, and only a real iPhone can confirm it. F14 §7 lists it.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { normalizeForDedup } from '../src/lib/vocab/dedup'
 import {
   ENRICHMENT_COPY,
@@ -363,6 +365,58 @@ const WORST_ROW = JSON.stringify({
 const budget = VOCAB_CLIENT_INDEX_MAX * WORST_ROW.length
 console.log(`  note worst-case payload at the ceiling: ${Math.round(budget / 1024)} kB raw`)
 check('the whole-collection payload stays under 400 kB raw', budget < 400_000, true)
+
+/* -------------- §6 the four things a future edit would break --------------- */
+
+section('§6 structural properties of the collection search')
+
+const root = join(import.meta.dirname, '..')
+const read = (rel: string) => readFileSync(join(root, rel), 'utf8')
+
+const searchModule = read('src/lib/vocab/search.ts')
+const mineTab = read('src/components/vocab/mine-tab.tsx')
+const mineClient = read('src/components/vocab/mine-client.tsx')
+const vocabSearch = read('src/components/vocab/vocab-search.tsx')
+
+// 1. The rule must not become dedup's or normalize's. Either import would change
+//    what the search means and make the browser disagree with the SQL.
+//    Anchored to `^import` on purpose: search.ts's own docblock names both files
+//    in prose, and it should keep being allowed to.
+check(
+  'search.ts imports neither dedup.ts nor normalize.ts',
+  /^import[^\n]*vocab\/(dedup|normalize)/m.test(searchModule),
+  false,
+)
+
+// 2. toLocaleLowerCase would make the search depend on the phone's language.
+//    Matched as a *call* — the docblock says the word, and must keep saying it.
+check('search.ts uses no locale-sensitive case mapping', searchModule.includes('.toLocaleLowerCase('), false)
+
+// 3. The local branch must not filter on the server. If it does,
+//    history.replaceState starts pointing a history entry at a tree that was
+//    rendered for a different query — silently, and only on back.
+check(
+  'mine-tab.tsx passes q to exactly one query (the server-mode branch)',
+  (mineTab.match(/q: q \|\| undefined/g) ?? []).length,
+  1,
+)
+
+// 4. The trap CLAUDE.md documents: one value import of a zod schema put all of
+//    zod in /vocab/new, 73 kB -> 4.6 kB once it was type-only. Both client
+//    islands import VocabListItem and both must import it as a type.
+for (const [name, source] of [
+  ['mine-client.tsx', mineClient],
+  ['vocab-search.tsx', vocabSearch],
+  ['vocab-list.tsx', read('src/components/vocab/vocab-list.tsx')],
+] as const) {
+  const valueImport = /^import \{[^}]*\} from ["']@\/lib\/vocab\/schemas["']/m.test(source)
+  check(`${name} imports schemas.ts as a type only`, valueImport, false)
+}
+
+// 5. The field must not grow a router again. Everything URL-shaped lives in
+//    mine-client.tsx, which is the only file that knows which mode it is in.
+check('vocab-search.tsx imports nothing from next/navigation', vocabSearch.includes('next/navigation'), false)
+check('vocab-search.tsx holds no state', vocabSearch.includes('useState'), false)
 
 /* ---------------------------------- Result ---------------------------------- */
 
