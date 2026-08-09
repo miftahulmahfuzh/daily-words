@@ -41,6 +41,9 @@ npm run chat:dry-run -- "genteel"        # the three chat prompts against the li
 npm run discover:check                   # F8's dedup fold, prompt and limiter, offline
 npm run discover:db                      # F8's mastered-blocks-suggestion and source rules
 npm run discover:dry-run                 # the suggestion prompt against the live model, no writes
+npm run journal:check                    # F10's schemas, cursor, grouping and prompt, offline
+npm run journal:db                       # F10's insight claim, edit rules and paging; seeds fixture users
+npm run journal:dry-run -- --all         # the insight prompt against the live model, no writes
 npm run stats:check                      # F9's streaks, levels, badges and reveal queue, offline
 npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
 npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay badges
@@ -60,6 +63,13 @@ exit code, which only reports transport.
 `npm run chat:dry-run` takes `--profile full|partial|empty`, `--round N` and
 `--reply "…"`. Four model calls per run; it is the tool for F6's prompt-tuning
 pass, and the prompts are the feature.
+
+`npm run journal:dry-run` takes a line as its argument, `--note "…"` and
+`--all` (five calibration lines: the worked example, an Indonesian proverb, a
+literary line, a bleak one, and an injection attempt). One model call per line.
+Read the output against F10 §7's register rubric — no flattery, no second
+person, no exclamation, concrete situations — rather than trusting the exit
+code, which only reports transport.
 
 `scripts/profile-peek.ts` is the F7 verification helper — `show`, `unonboard`,
 `onboard`, `tz <zone> [manual]`, `clear`, `delete`, `context`. Run it with
@@ -116,8 +126,9 @@ throwing. Each cost real time.
   read and written as `'YYYY-MM-DD'` strings, never as JS `Date`s. All of it goes
   through `lib/time/local-date.ts` — the only place `Intl.DateTimeFormat` is
   constructed, and the only file allowed to do date arithmetic. `grep toISOString`
-  should never find a new hit outside `lib/cards/serialize.ts` and
-  `lib/chat/serialize.ts`, where it serialises an instant rather than a day.
+  should never find a new hit outside `lib/cards/serialize.ts`,
+  `lib/chat/serialize.ts` and `lib/journal/{serialize,cursor}.ts`, where it
+  serialises an instant rather than a day.
 - Reads may fall back to a default timezone; **writes may not**. `POST /api/cards`
   refuses with 409 rather than date a card by guesswork.
 - The daily card is created by `POST /api/cards` and by nothing else. No cron, no
@@ -149,3 +160,13 @@ throwing. Each cost real time.
   `evaluateBadges` is pure for one reason: the live award path and
   `npm run stats:recompute` call it, and a replay that disagreed with what was
   awarded on the day would be unfixable.
+- A journal insight is generated **once**, by an explicit tap, and never on page
+  load or on save. The slot is taken by a conditional `UPDATE … WHERE status IN
+  ('none','failed') OR (status='pending' AND requested_at < now() - 120s)` before
+  the model call — the same discipline as the chat's turn cap — and both the
+  completion and the failure writes match on `text = <the text at claim time>`,
+  so an insight can never describe a line the user has since edited. Editing the
+  text clears the insight; editing only the source note keeps it.
+  `lib/db/queries/journal.ts` writes every timestamp with SQL `now()`, never
+  `new Date()`: `edited` compares `updated_at` against a `created_at` the
+  database wrote, and app-to-Neon clock skew silently decided the answer.

@@ -222,48 +222,12 @@ export const DISCOVER_KEPT = [
   { term: "truculent", definition: "eager to argue or fight" },
 ];
 
-export type JournalEntry = {
-  id: string;
-  text: string;
-  source: string;
-  date: string;
-  insight?: { meaning: string; whenItApplies: string[] };
-};
-
-export const JOURNAL: JournalEntry[] = [
-  {
-    id: "1",
-    text: "A fall in a pit, a gain in one’s wit.",
-    source: "Chinese proverb",
-    date: "12 Sep",
-    insight: {
-      meaning:
-        "The line prices the mistake rather than excusing it: the pit is not undone, only paid for.",
-      whenItApplies: [
-        "Said to someone still standing in the hole, which is what keeps it from sounding smug.",
-        "After a loss that taught something the winner would not have learned.",
-      ],
-    },
-  },
-  {
-    id: "2",
-    text: "The past is a foreign country: they do things differently there.",
-    source: "L. P. Hartley",
-    date: "3 Sep",
-  },
-  {
-    id: "3",
-    text: "Nothing to be done.",
-    source: "Waiting for Godot",
-    date: "28 Aug",
-  },
-  {
-    id: "4",
-    text: "We are all in the gutter, but some of us are looking at the stars.",
-    source: "Oscar Wilde",
-    date: "21 Aug",
-  },
-];
+/* The `JOURNAL` placeholder lived here until F10, the way `STATS` went in F9 and
+   `ONBOARDING` in F7. `/journal` now reads `journal_entries` through
+   `lib/db/queries/journal.ts`, and its insight is the two-part `{meaning,
+   whenItApplies}` the model actually returns ([R7]) rather than a hand-written
+   paragraph. `/kitchen-sink/journal` carries the invented lines now, where it is
+   obvious they are invented. */
 
 /** The proactive opener: the model speaks first, in role. See F6. */
 export const CHAT_OPENER = {
