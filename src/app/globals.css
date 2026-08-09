@@ -301,6 +301,12 @@ dialog::backdrop {
 .dw-badge-dialog[open] {
   max-height: calc(100dvh - var(--pad-top) - var(--pad-bottom) - 2 * var(--gutter));
   border-radius: var(--r-card);
+  /* F21. A full-bleed child paints over the radius and the panel gets two square
+     top corners and two round bottom ones, with nothing throwing. `clip` rather
+     than `hidden` on purpose: it does not create a scroll container, so it can
+     never become a second scroll port beside `.dw-badge-dialog-body` or be
+     scrolled by a focus move. */
+  overflow: clip;
   display: flex;
   flex-direction: column;
 }
@@ -313,10 +319,66 @@ dialog::backdrop {
    disappear under the fold is the earned-on date, which is the one line on the
    panel a user cannot reconstruct from anywhere else. Trading 53px of picture
    for it is the right way round. At 390×844 this resolves to 211px and nothing
-   moves. */
+   moves.
+
+   F21: this clamp now governs `BadgeMedal` ALONE. The dialog no longer mounts
+   that component — it draws `.dw-badge-hero` below, whose height follows from
+   the dialog's already-clamped width rather than from the viewport. The rule
+   stays because the component does; ~220 remains the ceiling either publishes. */
 .dw-badge-medal {
   width: min(220px, 25dvh);
   height: min(220px, 25dvh);
+}
+
+/* F21's hero band. The badge's own paper, edge to edge, with the square plate
+   laid on top of it — never cropped: measured over the deck, ink runs from 6.2%
+   to 95.7% of the image height (ibu's tassel hangs out of the seal ring), which
+   caps a centred crop at an aspect ratio of 1.094. See F21 §1.2.
+
+   THE RATIO IS THE SIZE RULE, and it is deliberately not a dvh clamp. The band's
+   width is already viewport-clamped by the dialog
+   (`min(100vw - 2*var(--gutter), 340px)`), so the height follows from it and is
+   deterministic: 185.06px at 375, 154.06px at 320, 190.13px at the 340px cap.
+   Clamping the height too would couple one box to the viewport twice and make
+   the plate margins a different width on every phone.
+
+   Measured, not chosen: at 375×667 this spends 1.7px LESS than the medal-and-
+   padding it replaces, so the body gets more room than it has today and the
+   `tolkien` no-scroll assertion keeps its slack. F21 §1.4 and D4 have the
+   arithmetic, including what a true `aspect-ratio: 1 / 1` half would cost. */
+.dw-badge-hero {
+  /* The containing block for the art, which is taken out of flow below. */
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  /* The art's own paper, from the generated manifest. The fallback is only ever
+     reached by a caller that forgot the prop; --paper-2 is the nearest token to
+     the deck's measured range (#eae6d7…#f1ede1) and is wrong for every badge,
+     which is the correct behaviour for a value that must be supplied. */
+  background-color: var(--dw-plate, var(--paper-2));
+  border-bottom: 1px solid var(--rule);
+}
+
+/* MEASURED, and the reason the art is out of flow. In flow, `height: 100%` has
+   no definite height to resolve against — the band is a flex item whose own
+   height is what the ratio is trying to supply — so it falls back to `auto`, the
+   768² source draws itself square at the band's full width, and the band's
+   automatic minimum size grows to fit it: 330px instead of 185px, ratio still
+   reporting `16 / 9` in the computed style. The body then loses 128px and the
+   `tolkien` no-scroll assertion goes red, which is how this was caught.
+
+   `position: absolute` breaks the circularity in one direction rather than
+   relying on a percentage resolving against a transferred size: out of flow, the
+   art contributes nothing to the band's height, so the ratio is the only thing
+   that decides it, and `inset: 0` then gives the art a definite box to fill. */
+.dw-badge-hero img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* `contain`, never `cover`. See the note above. */
+  object-fit: contain;
 }
 
 /* `min-height: 0` on the flex child is the whole mechanism. Without it a flex

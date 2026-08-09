@@ -287,6 +287,50 @@ test("the badge panel does not scroll internally at the design target", async ({
   expect(overflow, "the badge panel scrolls at the design target").toBeLessThanOrEqual(1);
 });
 
+/**
+ * F21's hero, and the two properties that make it more than a bigger picture.
+ *
+ * The first is the user's actual ask: the art's colour reaches both edges of the
+ * panel. That is invisible to every other assertion here — a hero inset by 20px
+ * of `--card` looks correct in a screenshot at a glance and is exactly the thing
+ * being removed.
+ *
+ * The second is the size rule. The band's height comes from its width through a
+ * fixed aspect ratio and from nothing else, so it is a number this test can
+ * state: at 375 the dialog's content box is 329px and 329 * 9/16 = 185.06.
+ * Asserting the number rather than "it is tall" is what catches a well-meaning
+ * dvh clamp being added later — see the note in globals.css for why there is
+ * none. It also catches the failure this feature actually shipped with once: an
+ * in-flow `<img>` inflating the band to 330px while `aspect-ratio` still read
+ * `16 / 9` in the computed style, which a ratio-only assertion would have
+ * passed.
+ */
+test("the badge hero bleeds to both edges of the panel", async ({ page }) => {
+  await page.goto("/kitchen-sink/profile?badge=tolkien");
+  await expect(page.locator("dialog")).toBeVisible();
+
+  const { hero, panel, ratio } = await page.evaluate(() => {
+    const d = document.querySelector("dialog")!.getBoundingClientRect();
+    const h = document.querySelector(".dw-badge-hero")!.getBoundingClientRect();
+    return {
+      hero: { l: h.left, r: h.right, h: h.height, w: h.width },
+      panel: { l: d.left, r: d.right },
+      ratio: h.width / h.height,
+    };
+  });
+
+  // Flush to the border on both sides — the 1px border is the only gap allowed.
+  expect(hero.l - panel.l, "the hero is inset on the left").toBeLessThanOrEqual(1.5);
+  expect(panel.r - hero.r, "the hero is inset on the right").toBeLessThanOrEqual(1.5);
+
+  // 16 / 9 = 1.7778, and it must not be a dvh clamp in disguise.
+  expect(ratio, "the hero is not 16/9").toBeCloseTo(16 / 9, 2);
+
+  if (!DESIGN_TARGET_PROJECTS.includes(test.info().project.name)) return;
+  expect(hero.w, "the dialog content box is not 329px at 375").toBeCloseTo(329, 0);
+  expect(hero.h, "the hero is not 185px at the design target").toBeCloseTo(185.06, 0);
+});
+
 test("the journal list does not scroll sideways and keeps its tab bar", async ({ page }) => {
   await page.goto("/kitchen-sink/journal");
 
