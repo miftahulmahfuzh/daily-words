@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { requireApiUser } from "@/lib/api/guards";
 import { fail, ok } from "@/lib/api/respond";
+import { isUniqueViolation } from "@/lib/db/errors";
 import { applyCorrection, clearCorrection } from "@/lib/db/queries/vocab";
+import type { CorrectionOutcome } from "@/lib/db/queries/vocab";
 import type {
   AcceptCorrectionResponse,
   DismissCorrectionResponse,
 } from "@/lib/vocab/schemas";
+import { toCorrectionResponse } from "@/lib/vocab/serialize";
 
 export const runtime = "nodejs";
 
@@ -24,7 +27,22 @@ async function readId(ctx: { params: Promise<{ id: string }> }) {
   return idSchema.safeParse((await ctx.params).id);
 }
 
-/** Accept — rename, or merge into the spelling the user already had. */
+/**
+ * Accept — rename, or merge into the spelling the user already had.
+ *
+ * **Every outcome but `not_found` is a `200`**, including `kept_both`. F14 D2
+ * supersedes F3 §6.3's `409 in_use` row:
+ *
+ * > "| Merge blocked | `409` | `error: "in_use"`. The misspelled entry is
+ * > referenced by `daily_card_items` and cannot be deleted. …"
+ *
+ * Nothing failed there. The user asked to merge, [R1] says a past card is a
+ * record of a day that happened, so both spellings were kept **on purpose**.
+ * Filing a deliberate, successful, fully explained outcome as an error is what
+ * forced the survivor's id onto the floor — `{error:{code,message}}` has nowhere
+ * to put one — and left the client unable to offer a way to the word the user
+ * actually meant.
+ */
 export async function POST(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -35,25 +53,37 @@ export async function POST(
   const parsed = await readId(ctx);
   if (!parsed.success) return fail(400, "No such word.", "bad_id");
 
-  const result = await applyCorrection(auth.user.id, parsed.data);
-
-  switch (result.outcome) {
-    case "not_found":
-      return fail(404, "That word is gone.", "not_found");
-
-    case "in_use":
-      // [R1]: a word that has ever been carded cannot be deleted, so the merge
-      // is refused and both spellings survive. Unreachable for a word added a
-      // second ago; reachable from F4's retry path on an older one.
-      return fail(409, "Kept both — this one is already on a card.", "in_use");
-
-    default:
-      return ok<AcceptCorrectionResponse>({
-        outcome: result.outcome,
-        id: result.entry.id,
-        term: result.entry.term,
-      });
+  /**
+   * F14 D3, and the same one-retry discipline `POST /api/vocab` already
+   * carries. `applyCorrection`'s "does the corrected spelling already exist"
+   * SELECT takes no lock on that term — there is no row to lock when the
+   * collision is an *insert* — so a concurrent add in a second tab, or
+   * Discover's accept, can land `genteel` between it and the rename and raise
+   * `23505` inside the transaction. Uncaught, Next returns a bodyless 500 that
+   * `lib/api/client.ts` reports as GARBLED: "Something went wrong. Try again."
+   *
+   * The second run finds the row that raced in and takes the merge branch. One
+   * retry, never a loop — a loop here would be a spin against a live writer.
+   */
+  let result: CorrectionOutcome;
+  try {
+    result = await applyCorrection(auth.user.id, parsed.data);
+  } catch (err) {
+    if (!isUniqueViolation(err)) {
+      console.error("[api/vocab/correction] apply failed", err);
+      return fail(500, "Could not save that. Try again.", "correction_failed");
+    }
+    try {
+      result = await applyCorrection(auth.user.id, parsed.data);
+    } catch (retryErr) {
+      console.error("[api/vocab/correction] apply failed after 23505 retry", retryErr);
+      return fail(500, "Could not save that. Try again.", "correction_failed");
+    }
   }
+
+  if (result.outcome === "not_found") return fail(404, "That word is gone.", "not_found");
+
+  return ok<AcceptCorrectionResponse>(toCorrectionResponse(result));
 }
 
 /**

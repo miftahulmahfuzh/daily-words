@@ -3,20 +3,31 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { TextInput } from "@/components/ui/text-input";
-import { Eyebrow, Prose } from "@/components/ui/text";
+import { Eyebrow } from "@/components/ui/text";
 import { EnrichmentCard } from "@/components/vocab/enrichment-card";
+import { ExistingWordNotice } from "@/components/vocab/existing-word-notice";
 import { createEntry, enrichEntry } from "@/lib/vocab/client";
 import { MAX_TERM_CHARS, normalizeTerm, validateTerm } from "@/lib/vocab/normalize";
-import type { EnrichResponse, VocabEntrySummary } from "@/lib/vocab/schemas";
+import type { CreateVocabResponse, EnrichResponse } from "@/lib/vocab/schemas";
 import { vocabDetailHref } from "@/lib/vocab/links";
 
 export type RecentWord = { id: string; term: string };
 
-type Duplicate = Pick<VocabEntrySummary, "id" | "term" | "status">;
+/**
+ * A word the add did not create. `term` is the row the user already holds;
+ * `typed` is what they just typed, and for a near duplicate the two differ —
+ * which is exactly what the notice has to be able to say.
+ */
+type Existing = {
+  id: string;
+  term: string;
+  status: CreateVocabResponse["status"];
+  situation: "duplicate" | "near_duplicate";
+  typed: string;
+};
 
 /**
  * The whole of `/vocab/new`: one field, one button, and the word landing.
@@ -35,24 +46,35 @@ export function AddWordForm({ recent }: { recent: RecentWord[] }) {
 
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [duplicate, setDuplicate] = useState<Duplicate | null>(null);
+  const [existing, setExisting] = useState<Existing | null>(null);
   const [entry, setEntry] = useState<EnrichResponse | null>(null);
   const [saving, setSaving] = useState(false);
+  /** The "Add … anyway" round trip, so it spins and the Add button does not. */
+  const [forcing, setForcing] = useState(false);
   const [justAdded, setJustAdded] = useState<RecentWord[]>(recent);
 
   function onChange(next: string) {
     setValue(next);
-    // The duplicate notice is dismissed by typing. It is about a word the user
-    // has stopped typing, and leaving it up makes the next word look rejected.
-    if (duplicate) setDuplicate(null);
+    // The notice is dismissed by typing. It is about a word the user has
+    // stopped typing, and leaving it up makes the next word look rejected.
+    if (existing) setExisting(null);
     if (error) setError(null);
   }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || forcing) return;
+    await save(normalizeTerm(value), false);
+  }
 
-    const term = normalizeTerm(value);
+  /**
+   * One save path, taken twice: once as the user typed it, and — only if the
+   * near-duplicate notice was shown and overruled — once with
+   * `allowNearDuplicate`. F14 D5's warning never blocks, and the second attempt
+   * is a plain re-POST rather than a different endpoint, so the exact-duplicate
+   * catch and the daily cap still apply to it.
+   */
+  async function save(term: string, allowNearDuplicate: boolean) {
     // The same module the server runs. A message the client invents is a message
     // that can disagree with what actually happened.
     const valid = validateTerm(term);
@@ -61,27 +83,33 @@ export function AddWordForm({ recent }: { recent: RecentWord[] }) {
       return;
     }
 
-    setSaving(true);
+    const setBusy = allowNearDuplicate ? setForcing : setSaving;
+    setBusy(true);
     setError(null);
-    setDuplicate(null);
+    if (!allowNearDuplicate) setExisting(null);
 
-    const created = await createEntry(term);
-    setSaving(false);
+    const created = await createEntry(term, allowNearDuplicate);
+    setBusy(false);
 
     if (!created.ok) {
       setError(created.message);
       return;
     }
 
-    if (created.data.duplicate) {
-      setDuplicate({
+    if (created.data.outcome !== "created") {
+      // `created.data` describes the row the user already holds, which for a
+      // near duplicate is a different word from the one they typed.
+      setExisting({
         id: created.data.id,
         term: created.data.term,
         status: created.data.status,
+        situation: created.data.outcome,
+        typed: term,
       });
       return;
     }
 
+    setExisting(null);
     const id = created.data.id;
     const mine = ++ticket.current;
 
@@ -127,7 +155,7 @@ export function AddWordForm({ recent }: { recent: RecentWord[] }) {
     setEntry(null);
     setValue("");
     setError(null);
-    setDuplicate(null);
+    setExisting(null);
     inputRef.current?.focus();
   }
 
@@ -152,7 +180,26 @@ export function AddWordForm({ recent }: { recent: RecentWord[] }) {
         </div>
       ) : (
         <form onSubmit={submit} className="flex shrink-0 flex-col">
-          {duplicate && <DuplicateNotice duplicate={duplicate} />}
+          {existing && (
+            <ExistingWordNotice
+              className="mt-4"
+              id={existing.id}
+              term={existing.term}
+              status={existing.status}
+              situation={existing.situation}
+              origin="new"
+              typedTerm={existing.typed}
+              addingAnyway={forcing}
+              /* Only the fold is refusable. An exact duplicate has nowhere to
+                 go: the unique index owns that answer, and offering "add it
+                 anyway" would be a button that cannot do what it says. */
+              onAddAnyway={
+                existing.situation === "near_duplicate"
+                  ? () => void save(existing.typed, true)
+                  : undefined
+              }
+            />
+          )}
 
           <div className="shrink-0 pt-6">
             <Field
@@ -215,22 +262,8 @@ export function AddWordForm({ recent }: { recent: RecentWord[] }) {
   );
 }
 
-/**
- * F3 does not offer "make it active again" here even for a mastered duplicate:
- * that writes `vocab_entries.status`, which is F4's column, and a silent status
- * change on an add is surprising. The un-master control lives on the detail page.
- */
-function DuplicateNotice({ duplicate }: { duplicate: Duplicate }) {
-  return (
-    <Card variant="outline" padding="sm" className="dw-in mt-4 flex shrink-0 flex-col items-start gap-3">
-      <Prose size="body" tone="ink">
-        {duplicate.status === "mastered"
-          ? `${duplicate.term} — you marked this mastered.`
-          : `You already have ${duplicate.term}.`}
-      </Prose>
-      <Button size="sm" fullWidth={false} href={vocabDetailHref(duplicate.id, "new")}>
-        Open it
-      </Button>
-    </Card>
-  );
-}
+/* `DuplicateNotice` lived here and drew its own sentence. It is now
+   `ExistingWordNotice`, shared with the enrichment card and the Discover panel
+   (F14 D10), and it does offer "Put it back in rotation" for a mastered
+   duplicate — F3 §8.3's objection was to a *silent* status change, not to a
+   labelled one (F14 D8). */

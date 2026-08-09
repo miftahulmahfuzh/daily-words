@@ -5,10 +5,13 @@ import {
   countEntriesCreatedSince,
   createVocabEntry,
   findEntryByNormalizedTerm,
+  listTermsForDedup,
   listVocabEntries,
   DAILY_ADD_LIMIT,
+  type DedupRow,
 } from "@/lib/db/queries/vocab";
 import { decodeCursor, encodeCursor } from "@/lib/vocab/cursor";
+import { findNearDuplicate } from "@/lib/vocab/near-duplicate";
 import { normalizeTerm, validateTerm } from "@/lib/vocab/normalize";
 import {
   createVocabRequestSchema,
@@ -68,6 +71,14 @@ export async function GET(req: Request): Promise<Response> {
   });
 }
 
+/** A scanned row, in the shape the wire wants. It is already a full summary. */
+const rowSummary = (row: DedupRow) => ({
+  id: row.id,
+  term: row.term,
+  status: row.status,
+  enrichmentStatus: row.enrichmentStatus,
+});
+
 export async function POST(req: Request): Promise<Response> {
   const auth = await requireApiUser();
   if (!auth.ok) return auth.response;
@@ -85,9 +96,37 @@ export async function POST(req: Request): Promise<Response> {
     return fail(429, "That's 50 words in a day. Come back tomorrow.", "daily_limit");
   }
 
+  /**
+   * F14 D5's duplicate layer, between validation and the insert. No row is
+   * written and no model call is made for either non-`created` outcome.
+   *
+   * **No status filter on the read** — a mastered word must still be found, for
+   * the same reason it still blocks a suggestion.
+   *
+   * The exact test is `toLowerCase()` here rather than Postgres `lower()`, and
+   * the two can disagree (Turkish dotted I, final sigma). That is safe *because*
+   * of the `23505` catch below: where JS says "new" and the index says
+   * "duplicate", the insert throws, the row is re-read, and the answer is still
+   * `duplicate`. The scan is an optimisation on the message, never the gate.
+   */
+  const held = await listTermsForDedup(userId);
+  const lowered = term.toLowerCase();
+
+  const exact = held.find((row) => row.term.toLowerCase() === lowered);
+  if (exact) {
+    return ok<CreateVocabResponse>({ ...rowSummary(exact), outcome: "duplicate" });
+  }
+
+  if (!body.data.allowNearDuplicate) {
+    const near = findNearDuplicate(held, term);
+    if (near) {
+      return ok<CreateVocabResponse>({ ...rowSummary(near), outcome: "near_duplicate" });
+    }
+  }
+
   try {
     const entry = await createVocabEntry(userId, term);
-    return ok<CreateVocabResponse>({ ...toSummary(entry), duplicate: false }, 201);
+    return ok<CreateVocabResponse>({ ...toSummary(entry), outcome: "created" }, 201);
   } catch (err) {
     if (!isUniqueViolation(err)) {
       console.error("[api/vocab] insert failed", err);
@@ -96,7 +135,7 @@ export async function POST(req: Request): Promise<Response> {
 
     const existing = await findEntryByNormalizedTerm(userId, term);
     if (existing) {
-      return ok<CreateVocabResponse>({ ...toSummary(existing), duplicate: true });
+      return ok<CreateVocabResponse>({ ...toSummary(existing), outcome: "duplicate" });
     }
 
     // The row that collided is not there any more — the only way to reach this
@@ -104,7 +143,7 @@ export async function POST(req: Request): Promise<Response> {
     // a loop here would be a spin against a live writer.
     try {
       const entry = await createVocabEntry(userId, term);
-      return ok<CreateVocabResponse>({ ...toSummary(entry), duplicate: false }, 201);
+      return ok<CreateVocabResponse>({ ...toSummary(entry), outcome: "created" }, 201);
     } catch (retryErr) {
       console.error("[api/vocab] insert failed after 23505 retry", retryErr);
       return fail(500, "Could not save that. Try again.", "insert_failed");

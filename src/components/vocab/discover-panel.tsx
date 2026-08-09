@@ -5,10 +5,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ListRow } from "@/components/ui/list-row";
 import { Eyebrow, Prose } from "@/components/ui/text";
+import { ExistingWordNotice } from "@/components/vocab/existing-word-notice";
 import { SuggestionCard } from "@/components/vocab/suggestion-card";
 import { acceptSuggestion, enrichEntry, suggestWords } from "@/lib/vocab/client";
 import { vocabDetailHref } from "@/lib/vocab/links";
-import type { Suggestion } from "@/lib/vocab/schemas";
+import type { AcceptSuggestionResponse, Suggestion } from "@/lib/vocab/schemas";
 
 /**
  * The whole of the Discover tab's behaviour.
@@ -50,6 +51,9 @@ function keptGloss(word: KeptWord): string {
 
 type Blocked = { label: string; note: string } | null;
 
+/** The accepted word turned out to be one the user already held (F14 Gap 4). */
+type Existing = Pick<AcceptSuggestionResponse, "id" | "term" | "status">;
+
 export function DiscoverPanel({
   initialKept,
   initialSuggestion = null,
@@ -74,6 +78,7 @@ export function DiscoverPanel({
   const [error, setError] = useState<string | null>(null);
   const [signedOut, setSignedOut] = useState(false);
   const [blocked, setBlocked] = useState<Blocked>(null);
+  const [existing, setExisting] = useState<Existing | null>(null);
 
   async function advance(declined?: string) {
     if (busy || blocked) return;
@@ -81,6 +86,7 @@ export function DiscoverPanel({
     const exclude = declined ? [declined, ...rejected] : rejected;
     if (declined) setRejected(exclude);
     setError(null);
+    setExisting(null);
 
     // The instant path: four taps in five never touch the network.
     const [next, ...rest] = queue;
@@ -135,6 +141,7 @@ export function DiscoverPanel({
 
     setBusy("keeping");
     setError(null);
+    setExisting(null);
     const accepted = await acceptSuggestion(current.term);
 
     if (!accepted.ok) {
@@ -154,6 +161,34 @@ export function DiscoverPanel({
           ? "No connection."
           : "Could not save that one. Try again.",
       );
+      return;
+    }
+
+    /**
+     * F14 Gap 4. The route has always returned `alreadyExisted` and nothing
+     * read it: the panel pushed the word onto the "Kept" strip as though it
+     * were new, and then fired `enrichEntry` on it — which, for a row already
+     * `failed`, burns one of the three attempts `MAX_ENRICHMENT_ATTEMPTS`
+     * allows. If the pre-existing row was `mastered`, the strip claimed a keep
+     * that no card will ever show.
+     *
+     * So: show the word the user already has, offer the way back into rotation,
+     * and **make no enrichment call**. The route's own logic is unchanged —
+     * F14 D7 keeps its re-check exact-only, because the fold has already run
+     * against the whole collection in `lib/vocab/suggest.ts` and a collision
+     * here can only be a race, which is an exact match.
+     */
+    if (accepted.data.alreadyExisted) {
+      // The strip is left exactly as it was. If the word is already on it, it
+      // belongs there — it was kept from Discover once — and removing it to
+      // make room for the notice would delete a true row to explain a true fact.
+      setExisting({
+        id: accepted.data.id,
+        term: accepted.data.term,
+        status: accepted.data.status,
+      });
+      setCurrent(null);
+      setBusy(null);
       return;
     }
 
@@ -203,6 +238,18 @@ export function DiscoverPanel({
       >
         {blocked ? blocked.label : picking ? "Thinking…" : "Pick a new word for me"}
       </Button>
+
+      {/* Dismissed by the next "Pick a new word for me" or "Another", the same
+          way the add form's notice is dismissed by typing. */}
+      {existing && (
+        <ExistingWordNotice
+          id={existing.id}
+          term={existing.term}
+          status={existing.status}
+          situation="already_existed"
+          origin="discover"
+        />
+      )}
 
       {current ? (
         <div className="flex flex-col gap-3">

@@ -3,6 +3,7 @@
 > - **[R4]** Decision 1 (propose before add) **stands**, but its justification is void — v0.1.0 *does* have a delete path. Rewrite the reasoning: the argument is pollution of the 6-word card pool, not irreversibility.
 > - **[R1]** No tombstones exist. Drop any soft-delete handling from the dedup design.
 > - **[R17]** F4 froze the Vocab tab contract: `?tab=` params, `DiscoverTabProps { userId }`, no sticky `top: 0`, and the names `tab`/`q`/`status`/`sort` are reserved.
+> - **F14** supersedes §6.2's claim that the client "can navigate to the existing row instead" on `alreadyExisted` — true of the route, never implemented in the panel until F14. §8's Layer 5 is **kept as written**, and F14 D7 justifies the divergence from the add path rather than removing it. See `plans/F14-vocab-duplicates.md`.
 >
 > These plans were written in parallel by agents that could not see each other.
 > The Reconciliation section wins over anything below.

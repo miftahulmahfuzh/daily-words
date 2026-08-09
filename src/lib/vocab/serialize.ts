@@ -1,6 +1,7 @@
 import type { VocabEntry } from "@/lib/db/types";
-import type { VocabEntryDetail, VocabListRow } from "@/lib/db/queries/vocab";
+import type { CorrectionOutcome, VocabEntryDetail, VocabListRow } from "@/lib/db/queries/vocab";
 import type {
+  AcceptCorrectionResponse,
   EnrichResponse,
   VocabDetailResponse,
   VocabEntrySummary,
@@ -65,5 +66,26 @@ export function toDetail(entry: VocabEntryDetail): VocabDetailResponse {
     source: entry.source,
     enrichmentError: entry.enrichmentError,
     carded: entry.carded,
+    suggestedCorrection: entry.suggestedCorrection,
+  };
+}
+
+/**
+ * Every non-`not_found` correction outcome, in one shape.
+ *
+ * `entry` is always the **survivor**, which for `merged` and `kept_both` is not
+ * the row the request named. That is the whole reason F14 D2 moved `kept_both`
+ * out of the error envelope: `{error:{code,message}}` had nowhere to put an id,
+ * so the client could not offer a way to the word the user actually meant.
+ */
+export function toCorrectionResponse(
+  result: Extract<CorrectionOutcome, { entry: VocabEntry }>,
+): AcceptCorrectionResponse {
+  return {
+    outcome: result.outcome,
+    id: result.entry.id,
+    term: result.entry.term,
+    status: result.entry.status,
+    practiceLost: result.practiceLost,
   };
 }

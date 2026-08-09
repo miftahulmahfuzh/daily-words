@@ -13,12 +13,29 @@ import { MAX_SEARCH_CHARS, VOCAB_PAGE_SIZE } from "@/lib/vocab/format";
  * client component and the whole of zod lands in that route's bundle.
  */
 
+/**
+ * Declared first because three later schemas reference it. A `const` referenced
+ * above its own declaration is a TDZ ReferenceError at import time, not a
+ * compile error — and the first thing to see it would be a route handler.
+ */
+export const vocabStatusSchema = z.enum(["active", "mastered"]);
+
 /* --------------------------------- Create --------------------------------- */
 
 export const createVocabRequestSchema = z.object({
   // 120 pre-normalization: a paste carries quotes and spaces that normalizeTerm
   // strips. The real cap is MAX_TERM_CHARS, enforced after normalizing.
   term: z.string().min(1, "Type a word.").max(120, "Too long."),
+  /**
+   * F14 D5. The user was shown "that looks like `study`, which you already
+   * have" and asked for it anyway.
+   *
+   * Named for exactly what it does. It is **not** "bypass the unique index":
+   * the `23505` catch runs regardless, so a forced add of an exact duplicate
+   * still comes back as `outcome: 'duplicate'` with the row the user already
+   * holds. The only thing it skips is the morphological fold.
+   */
+  allowNearDuplicate: z.boolean().default(false),
 });
 
 export const vocabEntrySummarySchema = z.object({
@@ -28,8 +45,21 @@ export const vocabEntrySummarySchema = z.object({
   enrichmentStatus: z.enum(["pending", "ready", "failed"]),
 });
 
+/**
+ * F14 D6: a discriminant, not two booleans.
+ *
+ * `created` is the only outcome whose `id` is a row this request wrote.
+ * `duplicate` and `near_duplicate` both point at a row that already existed —
+ * and getting that wrong means the client enriches, chips and links somebody
+ * else's word as though it were new. `duplicate: boolean` alongside a second
+ * flag would have been two booleans where one of them changes what the `id`
+ * refers to, which is a trap; one word is not.
+ *
+ * Supersedes F3 §6.1's `duplicate: boolean`. `201` for `created`, `200` for the
+ * other two, unchanged for the two cases that existed before F14.
+ */
 export const createVocabResponseSchema = vocabEntrySummarySchema.extend({
-  duplicate: z.boolean(),
+  outcome: z.enum(["created", "duplicate", "near_duplicate"]),
 });
 
 /* --------------------------------- Enrich --------------------------------- */
@@ -65,11 +95,44 @@ export const enrichResponseSchema = z.object({
 
 /* ------------------------------- Correction -------------------------------- */
 
+/**
+ * Every outcome carries the surviving entry, and every outcome is a `200`.
+ *
+ * Supersedes F3 §6.3's `409 in_use` row, which read:
+ *
+ * > "| Merge blocked | `409` | `error: "in_use"`. The misspelled entry is
+ * > referenced by `daily_card_items` and cannot be deleted. Clear the
+ * > suggestion and leave both entries. |"
+ *
+ * F14 D2: nothing failed there. The user asked to merge, [R1] says a past card
+ * is a record of a day that happened, so we kept both **on purpose** and can say
+ * so in a sentence. Filing it as an error envelope is what forced the survivor's
+ * id to be thrown away — `{error:{code,message}}` has nowhere to put one — and
+ * the client then could not offer a way to the word the user actually meant.
+ */
 export const acceptCorrectionResponseSchema = z.object({
-  /** `merged` means this entry is gone and `id` points at the survivor. */
-  outcome: z.enum(["renamed", "merged", "noop"]),
+  /**
+   * `merged` — the typo is gone and `id` points at the spelling that survived.
+   * `kept_both` — [R1] refused the delete; both rows exist and `id` is the
+   * survivor, not the entry that was posted.
+   * `renamed` / `noop` — `id` is the entry that was posted.
+   */
+  outcome: z.enum(["renamed", "merged", "kept_both", "noop"]),
   id: z.uuid(),
   term: z.string(),
+  /**
+   * The survivor's status. F14 Gap 1e: merging into a *mastered* word produces
+   * nothing any future card can show, and "You already had genteel." does not
+   * say that. The notice offers "Put it back in rotation" off this field.
+   */
+  status: vocabStatusSchema,
+  /**
+   * F14 D4. `chat_sessions.vocab_entry_id` is `ON DELETE CASCADE` ([R5]: days
+   * are permanent, practice is not), so a merge can silently destroy eight turns
+   * of practice on the misspelling. The loss is roadmap policy; being quiet
+   * about it is not.
+   */
+  practiceLost: z.boolean(),
 });
 
 export const dismissCorrectionResponseSchema = z.object({
@@ -86,8 +149,6 @@ export const dismissCorrectionResponseSchema = z.object({
  * groups, with no status chips and no sort menu, so there is no `sort` or
  * `status` parameter to validate.
  */
-
-export const vocabStatusSchema = z.enum(["active", "mastered"]);
 
 /**
  * `GET /api/vocab` query string.
@@ -136,6 +197,19 @@ export const vocabDetailResponseSchema = vocabListItemSchema.extend({
    * that explains its absence.
    */
   carded: z.boolean(),
+  /**
+   * F14 D1, and the point of the plan. F3 §5 already said the suggestion "must
+   * survive an app close, a reload, and a navigation to the detail page" —
+   * only the last clause was never built, because `toDetail` did not carry the
+   * column and this schema had no field for it.
+   *
+   * Without it a stranded `genteell` keeps genteel's definition forever, is
+   * fully eligible for tomorrow's card (`selectCardCandidates` filters on
+   * `status = 'active'` and nothing else), and once carded can never be deleted
+   * or merged. Supersedes F4 §7.3, whose height budget is untouched in the
+   * default case: this is `null` for every word that was spelled correctly.
+   */
+  suggestedCorrection: z.string().nullable(),
 });
 
 /**
@@ -206,6 +280,15 @@ export const acceptSuggestionResponseSchema = z.object({
   enrichmentStatus: z.enum(["pending", "ready", "failed"]),
   /** A **success**: the term arrived between the suggestion and the tap. */
   alreadyExisted: z.boolean(),
+  /**
+   * F14 D7. The route's logic is unchanged — its re-check stays **exact only**,
+   * because the fold has already run against the whole collection in
+   * `lib/vocab/suggest.ts` and a collision here can therefore only be a race,
+   * which is an exact match. What changes is that the panel can now tell a
+   * mastered pre-existing row from an active one instead of adding a "Kept"
+   * chip for a word no card will ever show.
+   */
+  status: vocabStatusSchema,
 });
 
 /* ---------------------------------- Types ---------------------------------- */

@@ -70,6 +70,7 @@ export async function POST(req: Request): Promise<Response> {
       term: existing.term,
       enrichmentStatus: existing.enrichmentStatus,
       alreadyExisted: true,
+      status: existing.status,
     });
   }
 
@@ -91,6 +92,7 @@ export async function POST(req: Request): Promise<Response> {
         term: entry.term,
         enrichmentStatus: entry.enrichmentStatus,
         alreadyExisted: false,
+        status: entry.status,
       },
       201,
     );
@@ -109,6 +111,7 @@ export async function POST(req: Request): Promise<Response> {
         term: raced.term,
         enrichmentStatus: raced.enrichmentStatus,
         alreadyExisted: true,
+        status: raced.status,
       });
     }
 
