@@ -22,6 +22,13 @@ import { DESIGN_TARGET_PROJECTS } from "../../playwright.config";
  * The fixture serves a 21-character term and a 134-character definition on
  * every row, because the claim being tested is that no string can change a
  * row's height.
+ *
+ * F13 added a fourth job, at the other end of the file: proving that the badge
+ * dialog is genuinely outside the budget rather than merely believed to be. It
+ * is the one thing in the app that draws over a screen, and the argument for
+ * letting it — the top layer contributes zero document height — is exactly the
+ * kind of claim that is true until someone gives the panel a `position` and
+ * nothing throws.
  */
 
 const COUNTS = [0, 1, 3, 6] as const;
@@ -193,6 +200,91 @@ test("a long paste is clamped to three lines in the journal list", async ({ page
     measured.height,
     `the long entry occupies ${measured.height}px against a ${measured.lineHeight}px line box`,
   ).toBeLessThanOrEqual(measured.lineHeight * 3 + 1);
+});
+
+/**
+ * F13's badge dialog, and the claim that earns it its exemption from the layout
+ * budget.
+ *
+ * The roadmap says every feature must assume routes, and its strongest reason
+ * against a modal is that one "breaks fixed-height layout math when the URL bar
+ * collapses". A native `<dialog>` opened with `showModal()` inverts that: the
+ * top layer sits outside `.dw-screen`'s flex column and contributes zero height
+ * to the document. That is an assertion, not a belief, so it is asserted here —
+ * with the dialog OPEN, `/profile` must not have grown by a pixel.
+ *
+ * `?badge=` opens it on load. A Playwright click would work too, but it puts one
+ * more moving part between the assertion and the claim.
+ */
+for (const scheme of SCHEMES) {
+  test(`the badge dialog stays inside the viewport (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    // `tolkien` carries the longest gloss in `badge-meta.ts`. If any badge
+    // overruns the panel it is this one.
+    await page.goto("/kitchen-sink/profile?badge=tolkien");
+
+    const dialog = page.locator("dialog");
+    await expect(dialog).toBeVisible();
+    expect(
+      await dialog.evaluate((el: HTMLDialogElement) => el.open),
+      "the dialog is not in the modal top layer",
+    ).toBe(true);
+
+    // 1 — the top layer costs the document nothing. This is the whole exemption.
+    await pageDoesNotScroll(page);
+
+    // 2 — and it did not push the frame either.
+    await tabBarIsOnScreen(page);
+
+    // 3 — the panel is inside the viewport on all four edges. `toBeInViewport`
+    //     would pass on a partially visible element, and a gloss clipped at the
+    //     bottom is exactly the failure being ruled out.
+    const box = await dialog.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, left: r.left, bottom: r.bottom, right: r.right };
+    });
+    const viewport = page.viewportSize()!;
+    expect(box.top, "the panel is off the top").toBeGreaterThanOrEqual(-1);
+    expect(box.left, "the panel is off the left").toBeGreaterThanOrEqual(-1);
+    expect(box.bottom, "the panel is below the fold").toBeLessThanOrEqual(
+      viewport.height + 1,
+    );
+    expect(box.right, "the panel is off the right").toBeLessThanOrEqual(
+      viewport.width + 1,
+    );
+
+    // 4 — the UA focus trap is doing its job. Nothing in the app implements
+    //     this; if it stops being true, `showModal()` was not called.
+    expect(
+      await page.evaluate(() => document.querySelector("dialog")!.contains(document.activeElement)),
+      "focus escaped the dialog",
+      ).toBe(true);
+
+    // 5 — Escape closes it, and the shelf is still behind it. `onCancel` is
+    //     what keeps React state and DOM state from diverging here; without it
+    //     the element shuts and the component still believes it is open.
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Leap Year Lexicographer")).toBeVisible();
+  });
+}
+
+/**
+ * The panel scrolls its own body rather than clipping, and only when it must.
+ * At the design target the longest gloss fits outright; below it, the documented
+ * degradation takes over. Both halves matter — a panel that always scrolls has
+ * hidden the earned-on date from every user on every badge.
+ */
+test("the badge panel does not scroll internally at the design target", async ({ page }) => {
+  await page.goto("/kitchen-sink/profile?badge=tolkien");
+  await expect(page.locator("dialog")).toBeVisible();
+
+  const overflow = await page
+    .locator(".dw-badge-dialog-body")
+    .evaluate((el) => el.scrollHeight - el.clientHeight);
+
+  if (!DESIGN_TARGET_PROJECTS.includes(test.info().project.name)) return;
+  expect(overflow, "the badge panel scrolls at the design target").toBeLessThanOrEqual(1);
 });
 
 test("the journal list does not scroll sideways and keeps its tab bar", async ({ page }) => {

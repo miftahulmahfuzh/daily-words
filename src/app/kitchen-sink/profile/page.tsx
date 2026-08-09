@@ -20,6 +20,15 @@ import { formatLocalDateLong } from "@/lib/time/local-date";
  *   ?state=nowords  cards, zero manually added words ([R13]'s null level)
  *   ?state=empty    a brand-new user
  *
+ *   ?badge=<key>    opens F13's badge dialog on load
+ *
+ * `?badge=` is what makes the modal reviewable at 375px in both colour schemes
+ * without a session, and it is the target `tests/e2e/no-scroll.spec.ts` drives:
+ * a dialog that only opens on a tap cannot be asserted on before the tap, and a
+ * Playwright click is one more thing between the assertion and the claim.
+ * `?badge=leap_day` is unearned and `?badge=tolkien` is earned twice, which is
+ * both of the dialog's two states.
+ *
  * Gated off in production, like the rest of /kitchen-sink.
  */
 
@@ -48,14 +57,17 @@ function fixture(state: State): ProfileStats {
     };
   }
 
-  // Four earned badges, including the longest title in the catalog — the one
-  // that has to wrap without clipping at 375px.
+  // Five earned badges, including the longest title in the catalog — the one
+  // that has to wrap without clipping at 375px — and `tolkien`, whose gloss is
+  // the longest string in `badge-meta.ts` and therefore the one that decides
+  // whether the dialog needs its scrolling escape hatch.
   const badges: ProfileStats["badges"] = (
     [
       ["sunday", 18, "2026-05-03", "2026-09-13"],
       ["full_week", 3, "2026-06-07", "2026-09-06"],
       ["midnight_oil", 1, "2026-08-22", "2026-08-22"],
       ["first_card", 1, "2026-08-08", "2026-08-08"],
+      ["tolkien", 2, "2025-09-02", "2026-09-02"],
     ] as const
   ).map(([key, count, first, last]) => ({
     key,
@@ -85,11 +97,11 @@ function fixture(state: State): ProfileStats {
 export default async function KitchenSinkProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string }>;
+  searchParams: Promise<{ state?: string; badge?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
 
-  const { state } = await searchParams;
+  const { state, badge } = await searchParams;
   const stats = fixture((state as State) ?? "full");
 
   return (
@@ -117,7 +129,7 @@ export default async function KitchenSinkProfilePage({
           </>
         )}
 
-        <BadgeShelf badges={stats.badges} />
+        <BadgeShelf badges={stats.badges} initialBadgeKey={badge} />
       </ScreenBody>
     </Screen>
   );

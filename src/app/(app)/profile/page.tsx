@@ -24,7 +24,12 @@ import { StatsGrid } from "./stats-grid";
  * no unseen-badge dot. A long-time user should feel a record kept. A brand-new
  * one should find it inviting without being credited with anything they have not
  * done — which is why the counters vanish at zero cards rather than reading
- * "0 · 0", and why the badge shelf still shows all thirteen names.
+ * "0 · 0", and why the badge shelf still shows all fourteen names.
+ *
+ * F13 made those rows tappable. This page is unchanged by it — still a server
+ * component, still `force-dynamic`, still passing the same plain-JSON
+ * `EarnedBadge[]`. The dialog, its state and its client boundary all live inside
+ * `BadgeShelf`.
  */
 export const dynamic = "force-dynamic";
 

@@ -253,6 +253,95 @@ a:active {
   overscroll-behavior-y: contain;
 }
 
+/* F13's badge modal, and the only dialog in the app.
+
+   The scroll lock. `showModal()` blocks interaction with the document behind
+   it, but whether a touch-drag over an inner `overflow-y: auto` pane is blocked
+   is engine-dependent, and /profile's ScreenBody scrolls. This is the
+   deterministic belt.
+
+   PLACEMENT IS LOAD-BEARING. `.dw-pane-scroll` above is unlayered on purpose so
+   it beats utility classes; this rule must be unlayered too and must sit after
+   it. In `@layer base` it would lose to the unlayered rule above and silently do
+   nothing — the inverse of the trap CLAUDE.md documents, and the same trap.
+
+   `:has()` is Safari 15.4+, the same floor as `<dialog>` and `::backdrop`. In an
+   engine without it the rule is dropped and the behaviour is whatever
+   `showModal()` gives, which is the status quo everywhere else in the app. */
+body:has(dialog[open]) .dw-pane-scroll {
+  overflow: hidden;
+}
+
+/* The backdrop is a flat scrim, never a shadow: elevation in this design is
+   carried by surfaces and hairlines. Written with literal colours rather than
+   `var(--paper)` because `::backdrop` did not inherit custom properties from
+   :root in the engines at this feature's baseline. The three states mirror
+   tokens.css exactly — bare :root, system dark, explicit dark. */
+dialog::backdrop {
+  background: rgb(240 237 228 / 0.72);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) dialog::backdrop {
+    background: rgb(19 19 17 / 0.76);
+  }
+}
+
+:root[data-theme="dark"] dialog::backdrop {
+  background: rgb(19 19 17 / 0.76);
+}
+
+/* Sizing. The dialog is in the top layer, so it contributes zero height to the
+   screen budget — but "outside the budget" is not "unconstrained", and it still
+   has to fit the viewport. `margin: auto` centres it against the UA default. */
+/* `[open]` is load-bearing. The UA sheet hides a closed dialog with
+   `dialog:not([open]) { display: none }`, and a bare `display: flex` here beats
+   it — the closed element then sits in the page as an empty bordered box with a
+   card background, laid out and visible, with nothing throwing anywhere. */
+.dw-badge-dialog[open] {
+  max-height: calc(100dvh - var(--pad-top) - var(--pad-bottom) - 2 * var(--gutter));
+  border-radius: var(--r-card);
+  display: flex;
+  flex-direction: column;
+}
+
+/* The medal. `src/components/README.md`'s asset contract publishes ~220 css px
+   as the panel draw, and 220 is what a viewport with room for it gets. It is a
+   ceiling rather than a fixed height because it is measured, not assumed: at
+   375×667 — the design target — a 220px medal pushes the longest gloss in
+   `badge-meta.ts` 38px past the panel's max-height, and the first thing to
+   disappear under the fold is the earned-on date, which is the one line on the
+   panel a user cannot reconstruct from anywhere else. Trading 53px of picture
+   for it is the right way round. At 390×844 this resolves to 211px and nothing
+   moves. */
+.dw-badge-medal {
+  width: min(220px, 25dvh);
+  height: min(220px, 25dvh);
+}
+
+/* `min-height: 0` on the flex child is the whole mechanism. Without it a flex
+   item refuses to shrink below its content height, the panel overruns its own
+   max-height, and the gloss is clipped by the border radius with nothing
+   throwing anywhere. */
+.dw-badge-dialog > * {
+  min-height: 0;
+}
+
+/* The escape hatch. F13 §4.5 pinned this to `@media (max-height: 545px)`,
+   mirroring `.dw-pane-fixed`'s floor. Written as an overflow instead, for a
+   measured reason: that plan sized the panel around a 160px medal, and F12
+   shipped a 220px panel draw (the asset contract in src/components/README.md).
+   A fixed viewport breakpoint now guesses at the wrong height in both
+   directions — it clips a long gloss above 545px and it scrolls a short one
+   below. `auto` scrolls exactly when the content does not fit, on any viewport,
+   at any font size. The medal and the close button keep their size; only the
+   body between them gives. */
+.dw-badge-dialog-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
 /* A pane that has undertaken not to scroll — /today, and only /today. */
 .dw-pane-fixed {
   overflow: hidden;

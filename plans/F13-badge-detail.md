@@ -1,5 +1,85 @@
 # F13 — Badge detail: a clickable badge, a modal, and the fourteenth badge
 
+> ## AS BUILT — 2026-08-09
+>
+> Shipped, in one session, after F12. The brief's rule is that a plan's text is
+> corrected in the session that executes it, so: below is every place reality
+> disagreed with what is written further down. **Where this block contradicts
+> the body, this block wins.**
+>
+> **R5 and R6 were settled by the user, not assumed.** The title is
+> **"Sauron’s Favourite"** — en-GB spelling, typographic apostrophe, key
+> `tolkien`, D8 as recommended. And the roadmap's badge table **was** amended:
+> it has fourteen rows and a new **[R22]** recording where the fourteenth came
+> from, why the key names the trigger rather than the joke, and why appending
+> preserves `check-gamification.ts`'s index tuple.
+>
+> **§4.4 #7 and §7 step 11 are void, per the brief's [C3].** `BadgeMeta` has no
+> `art` field; `BadgeMedal` reads `BADGE_ART[key]` from F12's generated manifest.
+> There was never a "flip fourteen `art: null` values to paths" step, and §8.1's
+> `existsSync` assertion was not written — `npm run badges:check` already
+> verifies the files, the hashes and the style version, and `BADGE_ART`'s total
+> `Record` makes a missing key a `typecheck` error. §4.4's other requirements
+> were all met by F12 independently: one asset for both schemes, no alpha, a
+> self-carried cream plate, content-hashed filenames.
+>
+> **The art took one attempt.** `/generate-badge-art tolkien --reference
+> assets/badges/_anchor.png` with `_controls/README.md`'s parchment-drift
+> correction note; every hard band passed first time, no lettering anywhere in
+> the annulus. F12's drafted `- sauron:` scene line was moved inside
+> `<!-- SCENES -->` and renamed `tolkien`.
+>
+> **§4.5's arithmetic was wrong, and the fix is a measurement.** It estimated
+> ~434px of content from a **160px** medal; F12 then published **~220px** as the
+> panel draw. At 375×667 a flat 220 overran the panel by 38px and pushed the
+> earned-on date under the fold. The medal is now `min(220px, 25dvh)` — 167px at
+> the design target, 211px at 390×844 — and the longest gloss fits outright with
+> nothing scrolling. **The `@media (max-height: 545px)` escape hatch was replaced
+> by a plain `overflow-y: auto`** on the panel body: a fixed breakpoint guesses
+> wrong in both directions once the medal is variable, and `auto` engages exactly
+> when the content does not fit.
+>
+> **Two bugs the plan could not have predicted, both silent, both now in
+> `CLAUDE.md`:**
+>
+> - `.dw-badge-dialog { display: flex }` beats the UA's
+>   `dialog:not([open]) { display: none }`. A *closed* dialog rendered as an empty
+>   bordered card-coloured box on `/profile`. Caught by the new layout spec's
+>   `toBeHidden` after Escape. The fix is `[open]` in the selector.
+> - **§4.2's `autoFocus` recommendation is wrong and does the opposite of what it
+>   says.** React's `autoFocus` calls `.focus()` on *mount*, which is one commit
+>   before the effect runs `showModal()`, so the dialog records the Close button
+>   as its focus-restore target — and that button is unmounted on close, dropping
+>   focus to `<body>`. Measured on all three close paths and on both the pointer
+>   and keyboard routes. `showModal()` already focuses the first focusable
+>   descendant, which is that same button, so the prop is removed and the
+>   behaviour is unchanged except that focus now returns to the tapped row.
+>
+> **§8.1's own worked example had a bug.** It asserts `tolkien − 2026-08-02 → []`
+> as "right day, wrong month" — but 2026-08-02 is a **Sunday**, so the expectation
+> is `['sunday']` and the check fails on the wrong rule. Shipped as `2027-08-02`,
+> a Monday. Every other weekday in §8.1 was verified against `localDayOfWeek` and
+> was correct.
+>
+> **Three of §3's glosses were factually wrong or unsafe (R4) and were rewritten.**
+> `indonesia_independence` said the proclamation was made "in a borrowed house" —
+> it was read at Sukarno's own residence; the borrowed house (Admiral Maeda's) is
+> where the text was *drafted* overnight. `leap_day`'s "one day in every one
+> thousand four hundred and sixty-one" ignores the century rule; it is ~1 in 1506,
+> now written as "about one day in fifteen hundred, once the skipped centuries are
+> counted". `world_book_day` said Shakespeare and Cervantes were "both recorded as
+> dying on" 23 April — Cervantes was *buried* on the 23rd, having died on the 22nd.
+> The Friday-morning, 1911, 1928 and Tolkien claims were all verified and kept.
+>
+> **The backfill (§5.3, §7 step 10) has NOT been run.** It is a production act
+> whose safety mechanism is a human reading the dry run line by line, and it is
+> the user's to perform after this is deployed. R9 stands, unchanged.
+>
+> **Not done, and deliberately:** R1's before/after `npm run build` First Load JS
+> reading for `/profile` and `/today`, and §8.4's device passes (iOS Safari,
+> VoiceOver). The keyboard, Escape, backdrop and focus-restoration paths were all
+> measured in Chromium.
+
 Badges and achievements on `/profile` become tappable. Tapping one opens a centred
 dialog carrying the medal art, the badge's title, the condition that earns it, a
 short gloss on what the title is referring to, and — when it has been earned —

@@ -1,7 +1,7 @@
 import { localDayOfWeek, parseLocalDate, type LocalDate } from "@/lib/time/local-date";
 
 /**
- * The thirteen badges, and the one function that decides which of them a card
+ * The fourteen badges, and the one function that decides which of them a card
  * earns.
  *
  * **Pure. No database, no `new Date()`, no ambient clock.** This is the most
@@ -11,6 +11,16 @@ import { localDayOfWeek, parseLocalDate, type LocalDate } from "@/lib/time/local
  *
  * Keys and titles are ROADMAP_v0.1.0.md's badge table. The apostrophes are
  * typographic for the reason given at the top of `levels.ts`.
+ *
+ * `tolkien` is the fourteenth and post-dates v0.1.0 — see [R22]. The roadmap's
+ * table was amended rather than left at thirteen, so this file and it still
+ * agree; F13 §D8 is where the key, the title and the spelling were argued.
+ *
+ * **The prose lives next door.** Each badge's `condition` and `gloss` are in
+ * `badge-meta.ts`, deliberately not here: `reveal.ts` imports this module and
+ * ships it to every `/today` visit, and ~4.6 kB of explanation that only
+ * `/profile` renders has no business in that bundle (F13 D1). This file stays a
+ * pure array of keys and titles.
  */
 
 export const BADGE_CATALOG = [
@@ -32,6 +42,12 @@ export const BADGE_CATALOG = [
   { key: "christmas", title: "Ghost of Christmas Vocab" },
   { key: "year_end", title: "Last Word of the Year" },
   { key: "leap_day", title: "Leap Year Lexicographer" },
+  // Appended, and appended for a reason: catalog order is shelf order, toast
+  // order and evaluator return order, and `check-gamification.ts` asserts a
+  // specific index tuple. Adding at the end preserves every existing index.
+  // The key names the trigger, as every other key here does — `sauron` names a
+  // joke and would be unreadable in a `badges_awarded` row or a recompute diff.
+  { key: "tolkien", title: "Sauron’s Favourite" },
 ] as const;
 
 export type BadgeKey = (typeof BADGE_CATALOG)[number]["key"];
@@ -109,6 +125,12 @@ export function evaluateBadges(ctx: BadgeContext): BadgeKey[] {
 
   // No leap-year test: a non-leap year has no card dated 29 February.
   if (month === 2 && day === 29) earned.push("leap_day");
+
+  // J.R.R. Tolkien died on 2 September 1973, aged 81. No year test: the
+  // anniversary is the trigger, and 1973 itself qualifies. Note that this is
+  // (9, 2) and `leap_day` above is (2, 29) — a transposed comparison passes a
+  // single-date test and fails the pair `check-gamification.ts` runs.
+  if (month === 9 && day === 2) earned.push("tolkien");
 
   return earned;
 }

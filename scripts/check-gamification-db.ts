@@ -19,9 +19,16 @@
  *   4. **Recompute must be a fixed point.** Run it twice and the second run
  *      inserts nothing.
  *
- * Seeds a throwaway user and deletes it in a `finally`; deletion cascades. A
- * crashed run leaves at most one row set behind, findable by `@example.invalid`.
- * No LLM calls, no HTTP.
+ * F13 added a fifth, which is (1) and (4) pointed at a user-visible surface: the
+ * badge dialog draws `firstAwardedOn` and `lastAwardedOn`, so a `date` column
+ * arriving as a JS `Date` now shifts a sentence on screen rather than only a
+ * number in a cache. It also tests the backfill path end to end — the claim that
+ * a user who drew a card on a past 2 September gets the badge from a recompute,
+ * dated to the historic day.
+ *
+ * Seeds throwaway users and deletes them in a `finally`; deletion cascades. A
+ * crashed run leaves at most three row sets behind, findable by
+ * `@example.invalid`. No LLM calls, no HTTP.
  */
 import 'dotenv/config'
 import { eq } from 'drizzle-orm'
@@ -105,6 +112,7 @@ async function main() {
   const email = `f9-stats-check-${process.pid}@example.invalid`
   let userId: string | null = null
   let liveUserId: string | null = null
+  let backfillUserId: string | null = null
 
   try {
     const [user] = await db.insert(users).values({ email }).returning({ id: users.id })
@@ -199,6 +207,82 @@ async function main() {
     ])
     check('mastered words still count; suggested ones do not', await countManualWords(userId), 2)
 
+    /* ----------------------------------------------------------------- F13 */
+
+    section('§F13 — the fourteenth badge, live and backfilled')
+
+    // 2026-09-02 is a Wednesday and 14:00 is the afternoon, so `tolkien` fires
+    // alone. A Sunday or a 02:00 would prove less: the assertion is about one
+    // rule, and a second badge in the list would let a transposed comparison
+    // hide behind it.
+    const tolkienCard = await seedCard(userId, '2026-09-02', '14:00')
+    const tolkienRewards = await applyCardCreated(
+      eventFor(userId, tolkienCard, '2026-09-02', false),
+    )
+    check(
+      'the live award path fires tolkien, and badgeTitle resolves it',
+      tolkienRewards?.awardedBadges,
+      [{ key: 'tolkien', title: 'Sauron’s Favourite', awardedForDate: '2026-09-02' }],
+    )
+
+    // The §5.2 claim, tested: a user who drew a card before the rule existed
+    // gets it from `stats:recompute`, silently, dated to the historic day.
+    const [backfill] = await db
+      .insert(users)
+      .values({ email: `f13-backfill-check-${process.pid}@example.invalid` })
+      .returning({ id: users.id })
+    backfillUserId = backfill.id
+    await db.insert(profiles).values({ userId: backfill.id, timezone: TZ })
+
+    await seedCard(backfill.id, '2025-09-02', '11:00') // a Tuesday
+    await seedCard(backfill.id, '2026-09-02', '11:00') // a Wednesday
+    check(
+      'the historic cards carry no badge rows yet',
+      (await listBadgeAwards(backfill.id)).length,
+      0,
+    )
+
+    const replayed = await recomputeUserGamification(backfill.id)
+    check(
+      'the backfill inserts both, dated to the historic days',
+      replayed.badgesInserted
+        .filter((b) => b.key === 'tolkien')
+        .map((b) => `${b.key}@${b.awardedForDate}`)
+        .sort(),
+      ['tolkien@2025-09-02', 'tolkien@2026-09-02'],
+    )
+    check(
+      'and running it again inserts nothing',
+      (await recomputeUserGamification(backfill.id)).badgesInserted,
+      [],
+    )
+
+    // The three values F13's dialog puts on screen, read exactly as it reads
+    // them. `awarded_for_date` and never `created_at`: these rows were written
+    // by a recompute a moment ago, so their `created_at` is today, and rendering
+    // it would tell the user they earned this in whatever month the backfill was
+    // run. The strings matter as much as the numbers — §13.14's `Date`-instead-
+    // of-string failure now has a user-visible consequence for the first time.
+    const tolkienCount = (await getBadgeCounts(backfill.id)).find(
+      (c) => c.badgeKey === 'tolkien',
+    )
+    check('the modal reads a count of two', tolkienCount?.count, 2)
+    check('first awarded on', tolkienCount?.firstAwardedOn, '2025-09-02')
+    check('latest awarded on', tolkienCount?.lastAwardedOn, '2026-09-02')
+    check(
+      'both as YYYY-MM-DD strings, not Dates',
+      [
+        typeof tolkienCount?.firstAwardedOn,
+        (tolkienCount?.firstAwardedOn as unknown) instanceof Date,
+      ],
+      ['string', false],
+    )
+
+    // `--prune` is deliberately not exercised here. It has zero upside on an
+    // additive change and at least three ways to destroy data (F13 §5.4); the
+    // existing prune coverage below stands on its own, and nothing in this
+    // section should make pruning look like part of this feature's happy path.
+
     /* ------------------------------------------------------------------ 5 */
 
     section('§11 — recompute restores exactly what was there')
@@ -283,6 +367,7 @@ async function main() {
   } finally {
     if (userId) await db.delete(users).where(eq(users.id, userId))
     if (liveUserId) await db.delete(users).where(eq(users.id, liveUserId))
+    if (backfillUserId) await db.delete(users).where(eq(users.id, backfillUserId))
     await db.$client.end({ timeout: 5 })
   }
 }
