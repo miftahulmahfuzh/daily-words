@@ -50,6 +50,8 @@ npm run journal:db                       # F10's insight claim, edit rules and p
 npm run journal:dry-run -- --all         # the insight prompt against the live model, no writes
 npm run journal:similarity               # F15's 20-pair threshold corpus; real calls, no writes
 npm run journal:embed -- --all           # F15's backfill; --user=, --limit=, --retry-failed, --dry-run
+npm run share:check                      # F16's slug entropy, DTO allowlist, path predicate and claim cookie, offline
+npm run share:db                         # F16's CHECK constraint, anonymous read and cascade; -- --keep leaves a live link
 npm run badges:check                     # F12's badge-art manifest, files, hashes and key scan, offline
 npm run stats:check                      # F9's streaks, levels, badges and reveal queue, offline
 npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
@@ -90,6 +92,18 @@ literary line, a bleak one, and an injection attempt). One model call per line.
 Read the output against F10 §7's register rubric — no flattery, no second
 person, no exclamation, concrete situations — rather than trusting the exit
 code, which only reports transport.
+
+`npm run share:db -- --keep` leaves one live share behind and prints its URL.
+That is how the one manual pass F16 cannot automate gets something to look at:
+
+```bash
+npm run share:db -- --keep
+curl -i http://localhost:3200/s/<slug>       # expect 200, NOT 307 -> /signin
+```
+
+A `307` there means the middleware exemption or the route's placement outside the
+`(app)` group is wrong, and **the signed-in author sees a perfect page either
+way**. Clean up with `delete from users where email like 'f16-share-%@example.invalid';`
 
 ## Badge art and `OPENAI_API_KEY`
 
@@ -344,3 +358,55 @@ throwing. Each cost real time.
   `lib/db/queries/journal.ts` writes every timestamp with SQL `now()`, never
   `new Date()`: `edited` compares `updated_at` against a `created_at` the
   database wrote, and app-to-Neon clock skew silently decided the answer.
+- **A share is a snapshot addressed by a slug, and the slug is the capability.**
+  `lib/db/queries/shares.ts` holds **the one function in the application that
+  reads a row without a user id** — `getShareBySlug(slug)`, whose caller is a
+  stranger with no session. What replaces `userId` there is 80 bits of CSPRNG
+  output that exists only because the owner tapped Share ([S3]), and the second
+  half of the safety property is that it returns `payload`, a `jsonb` **snapshot
+  written by `lib/share/serialize.ts`, never a join**. A live read would be a
+  `select()` over `vocab_entries`, and the day someone adds a private column a
+  stranger sees it with nothing failing anywhere. `share:check` greps that file
+  for the names of user-owned tables; a hit is a bug, not a refactor. Every other
+  function there keeps `userId` first and in the WHERE clause, because creating
+  and revoking are authenticated acts.
+- **The public share route needs two exemptions, and either one missing kills the
+  feature invisibly.** `src/app/s/` is a **sibling of the `(app)` group**, like
+  `/onboarding` and `/signin` — inside it, `requireOnboardedUser()` sends every
+  stranger to `/signin`. And `src/middleware.ts` returns early on
+  `isPublicSharePath(pathname)`, a pure predicate in `lib/share/policy.ts` so
+  that what `share:check` asserts offline is the function that runs on the
+  request. **Never move that exemption into the matcher's negative lookahead**:
+  the alternation is prefix-matched, so `(?!api|s|…)` would also exempt
+  `/signin`, `/settings` and every future route starting with `s`. The trap in
+  all of this is that the author testing it is signed in, so a broken build
+  renders perfectly for them — `curl` with no cookie jar is the only proof, and
+  `npm run share:db -- --keep` exists to give it a URL.
+- Share URLs live in `lib/share/policy.ts` and **not** in `lib/vocab/links.ts`,
+  which is left untouched: `/s/[slug]` is polymorphic by design, and putting it
+  there would make F18 import the vocab links module to build a *journal* share
+  URL. `policy.ts` imports nothing at all — the Edge middleware, a client bundle
+  and an offline tsx process all read it — so `node:crypto` lives next door in
+  `slug.ts` and `intent.ts`. `share:check` asserts both halves.
+- `shares.vocab_entry_id` is `ON DELETE CASCADE`, **deliberately not** the
+  RESTRICT of `daily_card_items`. That rule protects a record of a day that
+  happened; a share is a link the user chose to hand out. RESTRICT would make a
+  shared word permanently undeletable and 500 [R1]'s typo-recovery path with a
+  raw 23503 no caller catches. Deleting the word revokes the share, and
+  `share:db` asserts it rather than reasoning about it. The `daily_card_id` and
+  `journal_entry_id` columns exist already, unused, so F18 needs no migration.
+- A revoked slug and a slug that never existed are **the same page, the same
+  404 and the same sentence**. Telling them apart tells a slug-guesser that their
+  guess used to be right. `/s/[slug]` is `force-dynamic` for the neighbouring
+  reason: a cached render outlives the row, and "I turned the link off and it
+  still works" is the one bug this feature cannot have.
+- The claim cookie is `dw_claim`, **signed**, and F16 ships its codec
+  (`lib/share/intent.ts`) even though nothing claims yet — the brief's [C1] gave
+  the shape to F17 and [C2] added the word index `w`, and retrofitting a field
+  into a signed payload costs more than carrying it. `SameSite=Lax`, never
+  `Strict`: the return from `accounts.google.com` is a cross-site top-level GET,
+  and `Strict` is a 100%-reproducible failure that looks like "the claim just
+  doesn't happen". `/s/[slug]/claim` is a GET that sets a cookie and redirects,
+  and it must stay that — F17 D5 puts the write in a server action, because a GET
+  render that mutates is prefetchable, replayable and invisible to Next's action
+  CSRF machinery.

@@ -10,6 +10,7 @@ import type {
   journalEntryEmbeddings,
   userStats,
   badgesAwarded,
+  shares,
 } from '@/lib/db/schema'
 
 export type { JournalInsight } from '@/lib/db/schema'
@@ -29,6 +30,8 @@ export type JournalEntryEmbedding = typeof journalEntryEmbeddings.$inferSelect
 export type NewJournalEntryEmbedding = typeof journalEntryEmbeddings.$inferInsert
 export type UserStats = typeof userStats.$inferSelect
 export type BadgeAward = typeof badgesAwarded.$inferSelect
+export type Share = typeof shares.$inferSelect
+export type NewShare = typeof shares.$inferInsert
 
 export type VocabSource = VocabEntry['source'] // 'manual' | 'suggested'
 export type VocabStatus = VocabEntry['status'] // 'active' | 'mastered'
@@ -38,3 +41,4 @@ export type ChatTone = NonNullable<Profile['chatTone']> // 'patient'|'blunt'|'pl
 export type ChatRole = ChatMessage['role'] // 'user' | 'assistant'
 export type ChatMessageKind = ChatMessage['kind'] // 'opener'|'reply'|'verdict'
 export type TimezoneSource = Profile['timezoneSource'] // 'detected' | 'manual'
+export type ShareEntityType = Share['entityType'] // 'vocab' | 'card' | 'journal'

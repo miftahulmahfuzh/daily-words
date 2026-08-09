@@ -34,6 +34,42 @@ written.** Everything below is designed against the following assumed interface.
 If F16 shipped something different, the *names* change and nothing else does;
 if F16 shipped less, F17 implements the missing piece where noted.
 
+> **F16 HAS NOW SHIPPED. Read this before the table below, which is a guess and
+> is wrong in four places.**
+>
+> | Assumed here | What is actually on disk |
+> |---|---|
+> | `src/app/(public)/s/[slug]/page.tsx` | `src/app/s/[slug]/page.tsx` — a plain sibling of `(app)`, no route group. The `src/middleware.ts` exemption exists and is `isPublicSharePath()` from `lib/share/policy.ts`; do not touch the matcher. |
+> | `src/lib/share/links.ts` with `shareHref(slug)` | `src/lib/share/policy.ts` — `shareHref`, `shareClaimHref`, the slug alphabet, `isPublicSharePath`, and the cookie name and options. It imports nothing at all, on purpose (Edge + client bundle + offline tsx), so put `CLAIM_PATH` there rather than in a new file. |
+> | a share row with `owner_user_id`, `kind`, `entity_id` | `shares` with `user_id`, `entity_type`, and **three nullable FK columns** (`vocab_entry_id`, `daily_card_id`, `journal_entry_id`) under one CHECK. F18's two types need no migration. |
+> | `≥128 bits` of slug entropy | **80 bits** — 16 Crockford-base32 characters. F16 D6 does the arithmetic; R7's "under 128 bits of entropy" sentence should be read against 80. |
+>
+> Three things F16 built that this plan expected to build itself:
+>
+> - **The claim cookie is already implemented**, as `dw_claim` with F17's own
+>   signed shape (brief [C1]) *and* [C2]'s `w` field, in
+>   `src/lib/share/intent.ts`: `encodeClaimIntent(intent, secret)` /
+>   `decodeClaimIntent(raw, secret)`, HMAC-SHA256, `timingSafeEqual`, `exp`
+>   enforced inside the signature, 10-minute TTL, `SameSite=Lax`. The secret is a
+>   parameter, not an import, so `claim:check` can drive it with no `.env`.
+>   `npm run share:check` already feeds it the hostile-input list from §7. **What
+>   is missing is `claim-cookie.ts`'s job of reading and clearing the jar**, and
+>   the fact that nothing consumes the cookie yet.
+> - **`/s/[slug]/claim` exists as a stub**: it validates the slug, confirms the
+>   share resolves, sets `dw_claim`, and redirects to `/signin`. It performs no
+>   write. It reads optional `?tz=` and `?w=` and validates both. F17 replaces its
+>   body — or supersedes it entirely with D2's `redirectTo: '/claim'` shape, in
+>   which case delete the route and repoint `shareClaimHref`; **either way that
+>   href is the one thing F16's public page links to.**
+> - **`getShareBySlug(slug)` returns a snapshot, not the entry.** F16 D3 chose
+>   snapshot-not-live for all three entity types, so `payload` carries
+>   `{ kind, term, pronunciation, partOfSpeech, definition, examples }` and **no
+>   entity uuid at all**. That is the "strictly better" option D8's last paragraph
+>   hoped for: the four enrichment fields are on the share row already, so a claim
+>   can copy them without reading the sharer's live entry, and they survive the
+>   owner deleting the word. `getShareTargetForClaim` still needs writing if F17
+>   wants the sharer's *live* row for anything — but D8's copy no longer needs it.
+
 | Assumed from F16 | Used by F17 for | If F16 did not ship it |
 |---|---|---|
 | `shares` table with an opaque high-entropy `slug` (≥128 bits, [S3]), `owner_user_id`, `kind` (`'vocab' \| 'card' \| 'journal'`), `entity_id`, and revoke-by-delete | resolving a claim | F17 cannot proceed. Stop and report. |

@@ -411,3 +411,115 @@ export const badgesAwarded = pgTable(
     index('badges_awarded_user_created_idx').on(t.userId, t.createdAt.desc()),
   ],
 )
+
+/* ---------------------------------- Shares ---------------------------------- */
+
+/**
+ * F16. Opt-in, token-addressed sharing. [S3]: a row exists only because the user
+ * tapped Share; the slug is the capability; revoking is deleting the row.
+ *
+ * Three nullable FK columns rather than a polymorphic (entity_type, entity_id)
+ * pair, because a polymorphic pair cannot carry a real foreign key and a share
+ * whose target was deleted would 500 in front of a stranger. F18's two extra
+ * types write into columns that already exist here — no second migration.
+ *
+ * CASCADE, not the RESTRICT of daily_card_items: that rule protects a record of
+ * a day that happened, and a share is not one. RESTRICT here would make a shared
+ * word permanently undeletable and break [R1]'s typo-recovery path —
+ * `deleteVocabEntry` would find no card items, issue the DELETE, and take a raw
+ * 23503 that no caller catches. Deleting the word revokes the share, which is
+ * also the only answer that keeps the user in control of their own data.
+ */
+export const shares = pgTable(
+  'shares',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    /** 16 chars of Crockford-style base32 = 80 bits. See F16 §1 D6. */
+    slug: text('slug').notNull(),
+
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    entityType: text('entity_type').$type<'vocab' | 'card' | 'journal'>().notNull(),
+
+    vocabEntryId: uuid('vocab_entry_id').references(() => vocabEntries.id, {
+      onDelete: 'cascade',
+    }),
+    /** F18. Created now, unused in F16. */
+    dailyCardId: uuid('daily_card_id').references(() => dailyCards.id, {
+      onDelete: 'cascade',
+    }),
+    /** F18. Created now, unused in F16. */
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntries.id, {
+      onDelete: 'cascade',
+    }),
+
+    /**
+     * The snapshot. What was shared, as it was when it was shared.
+     *
+     * Not a join: a live read against a user-owned table leaks any private
+     * column added to it later, silently — the public read would be a
+     * `select()` over a table that keeps gaining columns, and nothing in the
+     * type system or the check scripts would notice. This column is written by
+     * one allowlisting serializer (`lib/share/serialize.ts`), so "what a
+     * stranger can see" is decided in one file rather than by every future
+     * migration. See F16 §1 D3.
+     */
+    payload: jsonb('payload').notNull(),
+    payloadVersion: integer('payload_version').notNull().default(1),
+
+    createdAt: tsz('created_at').notNull().defaultNow(),
+    // No expires_at. There is no cron in this app ([R11]); a TTL with nothing to
+    // enforce it is a lie in the schema. Revocation is manual and immediate.
+  },
+  (t) => [
+    /** The public read path, and the only one that takes no user id. */
+    uniqueIndex('shares_slug_uniq').on(t.slug),
+
+    /**
+     * One live share per entity, which is what makes the Share button
+     * idempotent and revoke unambiguous. Partial because Postgres treats NULLs
+     * as distinct — a plain unique index on a nullable column would also work,
+     * but the partial one is smaller and says what it means.
+     */
+    uniqueIndex('shares_vocab_entry_uniq')
+      .on(t.vocabEntryId)
+      .where(sql`${t.vocabEntryId} is not null`),
+    uniqueIndex('shares_daily_card_uniq')
+      .on(t.dailyCardId)
+      .where(sql`${t.dailyCardId} is not null`),
+    uniqueIndex('shares_journal_entry_uniq')
+      .on(t.journalEntryId)
+      .where(sql`${t.journalEntryId} is not null`),
+
+    /**
+     * The only non-slug access path: listShares(userId), and the cascade from
+     * users.id, which without this is a sequential scan (Postgres does not index
+     * the referencing side of an FK).
+     */
+    index('shares_user_created_idx').on(t.userId, t.createdAt.desc()),
+
+    /**
+     * Exactly one entity id, and it agrees with entity_type. One constraint
+     * rather than three: `$type<>()` is a compile-time claim and this is the
+     * runtime one, and it is what makes the three columns behave as a
+     * discriminated union rather than as three independent nullable columns.
+     */
+    check(
+      'shares_entity_check',
+      sql`(
+        (${t.entityType} = 'vocab'
+           and ${t.vocabEntryId} is not null
+           and ${t.dailyCardId} is null and ${t.journalEntryId} is null)
+     or (${t.entityType} = 'card'
+           and ${t.dailyCardId} is not null
+           and ${t.vocabEntryId} is null and ${t.journalEntryId} is null)
+     or (${t.entityType} = 'journal'
+           and ${t.journalEntryId} is not null
+           and ${t.vocabEntryId} is null and ${t.dailyCardId} is null)
+      )`,
+    ),
+  ],
+)
