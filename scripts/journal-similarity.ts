@@ -5,6 +5,14 @@
  *   npm run journal:similarity                          # the whole corpus
  *   npm run journal:similarity -- --group=C             # one group
  *   npm run journal:similarity -- "line one" "line two" # an ad-hoc pair
+ *   npm run journal:similarity -- --model=text-embedding-3-large --dimensions=1536
+ *
+ * `--model` and `--dimensions` are how a candidate model is measured **before**
+ * anything is changed, which is what `CLAUDE.md` means by "re-run it before
+ * swapping the embedding model". `--dimensions` asks OpenAI to truncate and
+ * renormalise, so a larger model can be evaluated as a drop-in for the existing
+ * `vector(1536)` column — a model that needs a different width needs a migration
+ * and a full re-embed, and that is a different decision.
  *
  * A threshold decides whether a user is interrupted, and it cannot be chosen
  * from an armchair. This embeds a fixed corpus of pairs, prints the cosine
@@ -114,8 +122,19 @@ async function main() {
   const strings = [...new Set(pairs.flatMap((p) => [p.a, p.b]))]
   console.log(`Embedding ${strings.length} distinct strings across ${pairs.length} pairs…\n`)
 
+  const modelOverride = args.find((a) => a.startsWith('--model='))?.split('=')[1]
+  const dimsOverride = args.find((a) => a.startsWith('--dimensions='))?.split('=')[1]
+  // A candidate model is only interesting at a width the column already has;
+  // anything else is a migration and a full re-embed, not a swap.
+  const width = dimsOverride ? Number(dimsOverride) : EMBEDDING_DIMENSIONS
+
   // A generous budget: nothing is waiting on this, unlike the save path.
-  const result = await embed(strings, { timeoutMs: 60_000, dimensions: EMBEDDING_DIMENSIONS })
+  const result = await embed(strings, {
+    timeoutMs: 60_000,
+    dimensions: width,
+    ...(modelOverride ? { model: modelOverride } : {}),
+    ...(dimsOverride ? { requestDimensions: width } : {}),
+  })
   if (!result.ok) {
     console.error(`Transport failed: ${result.error.kind} — ${result.error.detail}`)
     process.exit(1)

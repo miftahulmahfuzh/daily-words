@@ -39,8 +39,16 @@ const schema = z.object({
    * normal use — nine calls a round at ~10.7k tokens means thirty rounds is a
    * heavy day — it is there so a stuck client cannot quietly burn the month's
    * free-tier quota overnight. Set it to 1 in .env.local to test the 429.
+   *
+   * Wrapped like the optional block below, and for a sharper reason: `z.coerce`
+   * turns `""` into **0**, not into an error, and `0` then fails `.positive()`.
+   * So `CHAT_MAX_NEW_ROUNDS_PER_DAY=` — a variable someone meant to leave at its
+   * default — refused to boot the application, and the message blamed a number
+   * nobody wrote.
    */
-  CHAT_MAX_NEW_ROUNDS_PER_DAY: z.coerce.number().int().positive().default(30),
+  CHAT_MAX_NEW_ROUNDS_PER_DAY: blankIsAbsent(
+    z.coerce.number().int().positive().default(30),
+  ),
 
   /**
    * F15's embedding provider, read by `lib/llm/embed.ts` and nothing else.
