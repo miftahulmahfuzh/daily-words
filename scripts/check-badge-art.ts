@@ -25,6 +25,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { inflateSync } from 'node:zlib'
 import { BADGE_ART, BADGE_ART_SIZE, BADGE_ART_SMALL_SIZE } from '../src/lib/gamification/badge-art'
 import { BADGE_CATALOG } from '../src/lib/gamification/badges'
 
@@ -79,6 +80,142 @@ check('no entry is "unknown" (its sidecar was lost in promotion)', versions.incl
 
 section('§3 the shipped file is the approved master')
 
+/**
+ * Python's rounding, which is round-half-to-even and not JavaScript's
+ * round-half-up. It matters for one input in about two hundred thousand — the
+ * channel means below are sums of ~198k bytes over the same count — and a
+ * one-level disagreement there would be a red run with no defect behind it,
+ * which is the worst kind of check. Three lines is cheaper than that debugging
+ * session.
+ */
+function roundHalfEven(value: number): number {
+  const floor = Math.floor(value)
+  const rest = value - floor
+  if (rest > 0.5) return floor + 1
+  if (rest < 0.5) return floor
+  return floor % 2 === 0 ? floor : floor + 1
+}
+
+/**
+ * A truecolour 8-bit PNG, decoded to raw RGB with nothing but `node:zlib`.
+ *
+ * `sharp` is not in this project and this script must stay offline and
+ * dependency-free like its neighbours, so the deck's own narrow shape is the
+ * decoder's scope: every master is 1024², bit depth 8, colour type 2, not
+ * interlaced (asserted below rather than assumed — the style contract's FULL
+ * BLEED rule is what makes an alpha channel impossible, and if one ever appears
+ * this should stop rather than average it in).
+ */
+function decodePng(png: Buffer): { width: number; height: number; rgb: Buffer } {
+  const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  if (!png.subarray(0, 8).equals(SIGNATURE)) throw new Error('not a PNG')
+
+  let width = 0
+  let height = 0
+  const idat: Buffer[] = []
+
+  for (let at = 8; at + 8 <= png.length; ) {
+    const length = png.readUInt32BE(at)
+    const type = png.toString('ascii', at + 4, at + 8)
+    const data = png.subarray(at + 8, at + 8 + length)
+    at += 12 + length // length + type + data + crc
+
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0)
+      height = data.readUInt32BE(4)
+      const [depth, colourType, , , interlace] = [data[8], data[9], data[10], data[11], data[12]]
+      if (depth !== 8 || colourType !== 2 || interlace !== 0) {
+        throw new Error(
+          `unsupported PNG: depth ${depth}, colour type ${colourType}, interlace ${interlace} ` +
+            `(this decoder handles the deck's own shape only: 8-bit truecolour, no alpha, not interlaced)`,
+        )
+      }
+    } else if (type === 'IDAT') {
+      idat.push(data)
+    } else if (type === 'IEND') {
+      break
+    }
+  }
+
+  const raw = inflateSync(Buffer.concat(idat))
+  const bpp = 3
+  const stride = width * bpp
+  const rgb = Buffer.alloc(height * stride)
+
+  // Un-filter. Every filter but None references the pixel to the left and/or the
+  // row above, which is why a decode cannot start at the frame and skip the
+  // middle: row N is only meaningful once row N-1 has been reconstructed.
+  for (let y = 0, at = 0; y < height; y++) {
+    const filter = raw[at++]
+    const line = raw.subarray(at, at + stride)
+    at += stride
+    const cur = rgb.subarray(y * stride, (y + 1) * stride)
+    const prev = y > 0 ? rgb.subarray((y - 1) * stride, y * stride) : null
+
+    for (let i = 0; i < stride; i++) {
+      const a = i >= bpp ? cur[i - bpp] : 0
+      const b = prev ? prev[i] : 0
+      const c = prev && i >= bpp ? prev[i - bpp] : 0
+      let value = line[i]
+      if (filter === 1) value += a
+      else if (filter === 2) value += b
+      else if (filter === 3) value += (a + b) >> 1
+      else if (filter === 4) {
+        const p = a + b - c
+        const pa = Math.abs(p - a)
+        const pb = Math.abs(p - b)
+        const pc = Math.abs(p - c)
+        value += pa <= pb && pa <= pc ? a : pb <= pc ? b : c
+      } else if (filter !== 0) {
+        throw new Error(`unknown PNG filter ${filter} on row ${y}`)
+      }
+      cur[i] = value & 0xff
+    }
+  }
+
+  return { width, height, rgb }
+}
+
+/**
+ * Mean RGB of the master's outer 5% frame, as `#rrggbb`.
+ *
+ * A deliberate second implementation of `tools/make_badge_assets.py`'s
+ * `plate_hex` — not a shared module, because there is no shared language here.
+ * The point of the assertion is that two independent readings of the same file
+ * agree; importing the producer's arithmetic into the checker would assert
+ * nothing at all.
+ *
+ * It takes the bytes rather than a path so that it reads exactly the buffer the
+ * SHA-256 above was taken over: one read, and both assertions provably describe
+ * the same bytes.
+ */
+function plateHex(png: Buffer): string {
+  const { width, height, rgb } = decodePng(png)
+  const band = Math.max(1, roundHalfEven(Math.min(width, height) * 0.05))
+  let r = 0
+  let g = 0
+  let b = 0
+  let n = 0
+
+  for (let y = 0; y < height; y++) {
+    const edgeRow = y < band || y >= height - band
+    for (let x = 0; x < width; x++) {
+      if (!(edgeRow || x < band || x >= width - band)) {
+        x = width - band - 1 // skip the interior; the loop's ++ lands on the right strip
+        continue
+      }
+      const i = (y * width + x) * 3
+      r += rgb[i]
+      g += rgb[i + 1]
+      b += rgb[i + 2]
+      n++
+    }
+  }
+
+  const hex = (total: number) => roundHalfEven(total / n).toString(16).padStart(2, '0')
+  return `#${hex(r)}${hex(g)}${hex(b)}`
+}
+
 for (const key of keys) {
   const art = BADGE_ART[key]
   const master = join(masterDir, `${key}.png`)
@@ -89,8 +226,16 @@ for (const key of keys) {
     continue
   }
 
-  const sha = createHash('sha256').update(readFileSync(master)).digest('hex')
+  const bytes = readFileSync(master)
+  const sha = createHash('sha256').update(bytes).digest('hex')
   check(`${key}: manifest sha256 equals the master’s`, art.sha256, sha)
+
+  // The same recomputation the hash assertion makes, for the same reason. The
+  // plate is a property of the master's bytes, so a hand-edit to the generated
+  // manifest — or a regenerated badge whose paper shifted and whose manifest was
+  // not rebuilt — is a red run rather than a seam somebody eventually notices
+  // beside the art in F21's hero.
+  check(`${key}: manifest plate equals the master’s`, art.plate, plateHex(bytes))
 
   const h8 = sha.slice(0, 8)
   check(`${key}: panel filename carries that hash`, art.src, `/badges/${key}.${h8}.webp`)
