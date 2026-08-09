@@ -16,6 +16,14 @@ const schema = z.object({
   LLM_BASE_URL: z.url(),
   LLM_MODEL: z.string().min(1),
   LLM_API_KEY: z.string().min(1),
+  /**
+   * F6's per-day ceiling on practice rounds. Optional, with a default, because
+   * it is a quota backstop rather than configuration: it is not there to ration
+   * normal use — nine calls a round at ~10.7k tokens means thirty rounds is a
+   * heavy day — it is there so a stuck client cannot quietly burn the month's
+   * free-tier quota overnight. Set it to 1 in .env.local to test the 429.
+   */
+  CHAT_MAX_NEW_ROUNDS_PER_DAY: z.coerce.number().int().positive().default(30),
 })
 
 const parsed = schema.safeParse(process.env)

@@ -35,7 +35,14 @@ npm run vocab:enrich -- "genteell"       # run the F3 prompt, no database writes
 npm run dates:check                      # F5's day-boundary + calendar assertions, offline
 npm run selection:check                  # 300 real draws; seeds and rolls back a fixture
 npm run profile:check                    # F7's prompt-context and timezone assertions, offline
+npm run chat:check                       # F6's turn policy, sanitiser and prompts, offline
+npm run chat:db                          # F6's turn cap and rounds; seeds and deletes a fixture user
+npm run chat:dry-run -- "genteel"        # the three chat prompts against the live model, no writes
 ```
+
+`npm run chat:dry-run` takes `--profile full|partial|empty`, `--round N` and
+`--reply "…"`. Four model calls per run; it is the tool for F6's prompt-tuning
+pass, and the prompts are the feature.
 
 `scripts/profile-peek.ts` is the F7 verification helper — `show`, `unonboard`,
 `onboard`, `tz <zone> [manual]`, `clear`, `delete`, `context`. Run it with
@@ -92,12 +99,17 @@ throwing. Each cost real time.
   read and written as `'YYYY-MM-DD'` strings, never as JS `Date`s. All of it goes
   through `lib/time/local-date.ts` — the only place `Intl.DateTimeFormat` is
   constructed, and the only file allowed to do date arithmetic. `grep toISOString`
-  should never find a new hit outside `lib/cards/serialize.ts`, where it
-  serialises an instant rather than a day.
+  should never find a new hit outside `lib/cards/serialize.ts` and
+  `lib/chat/serialize.ts`, where it serialises an instant rather than a day.
 - Reads may fall back to a default timezone; **writes may not**. `POST /api/cards`
   refuses with 409 rather than date a card by guesswork.
 - The daily card is created by `POST /api/cards` and by nothing else. No cron, no
   `revalidate`, no creation on page load.
+- The chat's 8-turn cap is a conditional `UPDATE … WHERE turn_count < 8` taken
+  **before** every model call, never after. `MAX_ASSISTANT_TURNS` lives in
+  `lib/chat/turn-policy.ts` and the literal `8` appears nowhere else. A second
+  opener in a round is refused by a partial unique index, not by application
+  code — see `npm run chat:db`.
 - `app/(app)/layout.tsx` calls `requireOnboardedUser()`, so **every** route inside
   that group is gated on `profiles.onboarded_at`. `/onboarding` is a sibling of
   the group, not a member: putting it inside makes the guard part of its own
