@@ -331,6 +331,45 @@ test("the badge hero bleeds to both edges of the panel", async ({ page }) => {
   expect(hero.h, "the hero is not 185px at the design target").toBeCloseTo(185.06, 0);
 });
 
+/**
+ * F22's level illustrations. /profile scrolls vertically by design
+ * (`ScreenBody scroll`), so the assertion is the other three: nothing scrolls
+ * sideways, the tab bar is still on screen, and both marks drew at their
+ * declared size. The sideways one is the real target — a 56px picture plus the
+ * longest level title in either table is the widest thing on the page at 375px,
+ * and `min-w-0` on the text column is the only thing keeping it on screen.
+ */
+test("the profile level marks do not push the page sideways", async ({ page }) => {
+  await page.goto("/kitchen-sink/profile?state=full");
+  await tabBarIsOnScreen(page);
+
+  const overflows = await page.evaluate(() => {
+    const el = document.scrollingElement!;
+    return el.scrollWidth > el.clientWidth + 1;
+  });
+  expect(overflows, "the profile page scrolls horizontally").toBe(false);
+
+  // Two, and exactly two: the streak block and the collection block.
+  const marks = page.locator(".dw-level-mark");
+  await expect(marks).toHaveCount(2);
+  for (const mark of await marks.all()) {
+    const r = (await mark.boundingBox())!;
+    expect(r.width, "the level mark is not 56px").toBeCloseTo(56, 0);
+    expect(r.height, "the level mark is not 56px").toBeCloseTo(56, 0);
+  }
+});
+
+/**
+ * [R13] and F22 D5, together: at zero manually added words there is no collector
+ * tier, so there is no picture. A "not started" illustration would be exactly
+ * the invented state the roadmap removed.
+ */
+test("the collection block draws no mark at zero words", async ({ page }) => {
+  await page.goto("/kitchen-sink/profile?state=nowords");
+  await expect(page.getByText("no words yet")).toBeVisible();
+  await expect(page.locator(".dw-level-mark")).toHaveCount(1);
+});
+
 test("the journal list does not scroll sideways and keeps its tab bar", async ({ page }) => {
   await page.goto("/kitchen-sink/journal");
 
