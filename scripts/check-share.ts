@@ -39,6 +39,7 @@ import {
   shareCardMetaTitle,
   shareClaimHref,
   sharedCardWordHref,
+  shareHandoff,
   shareHref,
   shareJournalMetaDescription,
   shareJournalMetaTitle,
@@ -1191,6 +1192,64 @@ check(
   'and knows nothing about shares, claims or destinations',
   /share|claim|dw_next|dw_claim/i.test(appLayout),
   false,
+)
+
+/* --------------------------------- Hand-off -------------------------------- */
+
+section('what leaves the app when the user taps Share')
+
+const HANDOFF_URL = `https://dword.site${shareHref('0123456789abcdef')}`
+const handoff = shareHandoff('genteel', HANDOFF_URL)
+
+/**
+ * The reported bug, as an assertion. F16 passed `text: title` as well, and iOS
+ * hands a payload with both a `text` and a `url` to plain-text targets — *Copy*
+ * included — concatenated, so the clipboard held `"genteel https://…"` and a
+ * paste into Safari's address bar searched instead of navigating.
+ */
+check('the sheet payload has exactly a title and a url', Object.keys(handoff.sheet), [
+  'title',
+  'url',
+])
+check("and no `text` field, which is what iOS concatenates", 'text' in handoff.sheet, false)
+check('the heading survives — the sheet is not going bare', handoff.sheet.title, 'genteel')
+
+/** The clipboard and the selectable field draw this one string. */
+check('the plain-text hand-off is the URL, exactly', handoff.text, HANDOFF_URL)
+check('with no term in front of it', handoff.text.includes('genteel'), false)
+check('and no whitespace anywhere in it', /\s/.test(handoff.text), false)
+check('so it is untrimmed-identical to what it was given', handoff.text, handoff.text.trim())
+check('and it is the same string the sheet gets as its url', handoff.text, handoff.sheet.url)
+// A term with spaces in it is the realistic version of the leak: it would have
+// arrived in the clipboard whitespace and all.
+check(
+  'a multi-word title still cannot reach the clipboard',
+  shareHandoff('in medias res', HANDOFF_URL).text,
+  HANDOFF_URL,
+)
+
+/**
+ * And the component must actually route through it. The bug was one object
+ * literal written at the call site, so what is asserted is that no such literal
+ * exists — a second one is how this regresses.
+ */
+const shareButton = stripComments(body.get('components/share/share-button.tsx') ?? '')
+check('the share button exists', shareButton.length > 0, true)
+check('it builds its payload through shareHandoff', shareButton.includes('shareHandoff('), true)
+check(
+  'and hands navigator.share no object literal of its own',
+  /navigator\.share\(\s*\{/.test(shareButton),
+  false,
+)
+check(
+  'the clipboard is written the hand-off text and nothing else',
+  /writeText\(\s*text\s*\)/.test(shareButton),
+  true,
+)
+check(
+  'and the selectable field draws the same string',
+  /value=\{payload\.text\}/.test(shareButton),
+  true,
 )
 
 /** Strips block and line comments, so a grep reads code rather than prose. */

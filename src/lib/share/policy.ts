@@ -99,6 +99,38 @@ export function sharedCardWordHref(slug: string, position: number): string {
   return `${shareHref(slug)}/${position}`
 }
 
+/* --------------------------------- Hand-off -------------------------------- */
+
+/**
+ * What leaves the app when the user taps Share, as one pure record.
+ *
+ * **`sheet` has a `title` and a `url` and deliberately no `text`.** F16 passed
+ * `text: title` as well, and on iOS that is the whole of a reported bug: a
+ * `navigator.share` payload carrying both a `text` and a `url` is handed to the
+ * sheet as a single item, so every plain-text target — *Copy*, Notes, the
+ * Messages compose field — receives them concatenated. The clipboard then held
+ * `"genteel https://…/s/…"`, which is not a URL and does not "paste and go" in
+ * Safari's address bar. `title` alone does not do this: Safari draws it as the
+ * sheet's heading and treats `url` as the item, which is why the heading is kept
+ * rather than the whole payload going bare.
+ *
+ * `text` here is the plain-text hand-off — the bare URL — and it is what both
+ * the clipboard and the always-drawn selectable field use. One string for both,
+ * so "what you copy is what you can select" is arithmetic rather than a
+ * convention two call sites happen to share. Nothing is trimmed or decorated on
+ * the way out: `url` arrives from `shareHref` behind `APP_URL` and any
+ * whitespace in it would already be a bug upstream.
+ *
+ * It lives here, with the other pure share decisions, because `share:check`
+ * drives it offline and this module imports nothing.
+ */
+export function shareHandoff(
+  title: string,
+  url: string,
+): { sheet: { title: string; url: string }; text: string } {
+  return { sheet: { title, url }, text: url }
+}
+
 /**
  * The middleware's exemption, as a predicate rather than as a regex edit.
  *
