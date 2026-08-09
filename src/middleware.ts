@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { isPublicSharePath } from '@/lib/share/policy'
 
 /**
  * Layer 1 of two: an optimistic, cookie-presence-only redirect.
@@ -32,6 +33,28 @@ export function middleware(req: NextRequest) {
     process.env.NODE_ENV !== 'production' &&
     pathname.startsWith(DEV_ONLY_PREFIX)
   ) {
+    return NextResponse.next()
+  }
+
+  /**
+   * F16's public share pages, exempted **here and not in the matcher**.
+   *
+   * This is the single highest-risk line in the feature, and it fails in the one
+   * way its author cannot see: without the exemption the stranger the whole
+   * feature exists for is bounced to /signin before the page renders, while the
+   * signed-in developer testing it gets a perfect render every time. The
+   * middleware is also the *second* gate — the first is that `src/app/s/` is a
+   * sibling of the `(app)` route group rather than a member of it.
+   *
+   * `isPublicSharePath` is a pure predicate in `lib/share/policy.ts` so that
+   * what `npm run share:check` asserts offline is literally the function that
+   * runs on the request. **Do not "simplify" it into the matcher's negative
+   * lookahead.** That alternation is prefix-matched, so `(?!api|s|…)` would also
+   * exempt `/signin` — and every future route beginning with `s`.
+   *
+   * Signed-in viewers fall through to the same page: everybody sees the share.
+   */
+  if (isPublicSharePath(pathname)) {
     return NextResponse.next()
   }
 

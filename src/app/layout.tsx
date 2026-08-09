@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Source_Serif_4, IBM_Plex_Mono } from "next/font/google";
+import { env } from "@/lib/env";
 import "./globals.css";
 
 /* Two faces, and the split is the design's central idea: the serif is for words
@@ -18,6 +19,15 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  /**
+   * Set once, here, for F16's share pages. Without it Next emits a relative
+   * `og:url` and warns — and WhatsApp will not follow a relative URL, so the
+   * unfurl the whole share feature depends on simply does not happen.
+   *
+   * `env.APP_URL` rather than the request's `Host`: a header a proxy can rewrite
+   * is not something to build a shared link out of.
+   */
+  metadataBase: new URL(env.APP_URL),
   title: "Daily Words",
   description: "Six words a day, on one card, in your pocket.",
   manifest: "/manifest.webmanifest",

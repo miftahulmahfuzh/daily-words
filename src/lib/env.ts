@@ -51,6 +51,30 @@ const schema = z.object({
   ),
 
   /**
+   * F16. The origin share links are built against: `metadataBase` for the root
+   * layout, and the absolute URL `POST /api/shares` hands the phone to put in a
+   * WhatsApp message.
+   *
+   * It has to be absolute and it has to be *right*, which is why it is here
+   * rather than derived per-request from a `Host` header — a header a proxy can
+   * rewrite is not something to build a link out of. Without `metadataBase` Next
+   * emits a relative `og:url` and warns, and WhatsApp will not follow one.
+   *
+   * The default reads Vercel's own production host so a deploy needs no
+   * configuration; `VERCEL_PROJECT_PRODUCTION_URL` carries no scheme, hence the
+   * template. Falls back to the only port this project uses. Wrapped like the
+   * optional block below because `APP_URL=` in a `.env` file is an empty string,
+   * and `z.url()` rejects `""` rather than treating it as absent.
+   */
+  APP_URL: blankIsAbsent(
+    z.url().default(
+      process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : 'http://localhost:3200',
+    ),
+  ),
+
+  /**
    * F15's embedding provider, read by `lib/llm/embed.ts` and nothing else.
    *
    * **This is deliberately not the badge-art key.** [S1] reserves that other

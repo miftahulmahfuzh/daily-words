@@ -43,6 +43,13 @@
       "when": 1786255250664,
       "tag": "0005_groovy_swarm",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786259477915,
+      "tag": "0006_glorious_greymalkin",
+      "breakpoints": true
     }
   ]
 }

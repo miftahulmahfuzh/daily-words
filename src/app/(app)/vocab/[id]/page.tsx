@@ -5,11 +5,15 @@ import { BackLink } from "@/components/layout/back-link";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Eyebrow, Meta, Prose } from "@/components/ui/text";
+import { ShareWordButton } from "@/components/share/share-word-button";
 import { CorrectionBanner } from "@/components/vocab/correction-banner";
 import { DeleteWordButton } from "@/components/vocab/delete-word-button";
 import { RetryEnrichmentButton } from "@/components/vocab/retry-enrichment-button";
 import { requireUser } from "@/lib/auth/session";
+import { getShareForEntity } from "@/lib/db/queries/shares";
 import { getVocabEntryDetail } from "@/lib/db/queries/vocab";
+import { env } from "@/lib/env";
+import { shareHref } from "@/lib/share/policy";
 import { enrichmentCopy, isStalePending } from "@/lib/vocab/display";
 import { termSizeClass } from "@/lib/vocab/format";
 import { backTarget, parseOrigin, vocabChatHref } from "@/lib/vocab/links";
@@ -57,6 +61,13 @@ export default async function WordPage({
   if (!entry) notFound();
 
   const ready = entry.enrichmentStatus === "ready";
+
+  /* F16. A third page-level read rather than a second feature's concern inside
+     `getVocabEntryDetail` — one indexed lookup on `shares_vocab_entry_uniq`,
+     issued only when the word is ready, because that is the only state in which
+     the control renders. It is what lets the button draw its shared state
+     without a round trip on open. */
+  const share = ready ? await getShareForEntity(user.id, "vocab", entry.id) : null;
   /**
    * A `pending` row older than two minutes is drawn as failed. The user closed
    * the app mid-enrichment and the request died with the page; nothing on the
@@ -172,6 +183,21 @@ export default async function WordPage({
         {!ready && <Meta className="block pt-2">Available once the word is ready</Meta>}
 
         <MasteredToggle id={entry.id} initial={entry.status === "mastered"} />
+
+        {/* F16. Below the practice and mastered controls, above Delete, which
+            stays last. Rendered only when the word is ready: sharing a word that
+            still says "finding it…" hands a stranger a page with a term and
+            nothing under it, and the page already prints one "Available once the
+            word is ready" line — a second would be noise, so this control simply
+            is not there yet. */}
+        {ready && (
+          <ShareWordButton
+            entryId={entry.id}
+            term={entry.term}
+            initialSlug={share?.slug ?? null}
+            initialUrl={share ? `${env.APP_URL}${shareHref(share.slug)}` : null}
+          />
+        )}
 
         {entry.carded ? (
           /* [R1], verbatim. A past card is a record of a day that happened, and

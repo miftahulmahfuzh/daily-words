@@ -441,18 +441,22 @@ A `callbackUrl` **will not survive**, for two independent reasons, and the secon
 1. `src/lib/auth/actions.ts` hardcodes `await signIn('google', { redirectTo: '/today' })`. F17 must thread a destination through it.
 2. Even threaded, a **brand-new** user is intercepted by `requireOnboardedUser()` → `/onboarding`, and `src/components/onboarding/onboarding-flow.tsx:128` ends with a hardcoded `router.replace("/today")`. **Onboarding destroys the callback URL.** And the stranger this entire feature exists for is, by definition, usually a new user — so *the only path that matters is precisely the path where a redirect-based approach loses the intent.*
 
-Therefore the intent lives in a **cookie**, and F16 fixes its shape so F17 is not inventing it:
+Therefore the intent lives in a **cookie**.
+
+> **AMENDED IN IMPLEMENTATION — the brief's [C1] and [C2] win over the table this section originally froze.** F16 had specified an unsigned `dw_share_intent` holding a bare slug. F17, written in parallel, designed a signed `dw_claim`, and the brief ruled for F17's on the merits: it is signed, so a hand-forged cookie cannot aim the claim at an arbitrary share; it carries a TTL *inside* the signed payload rather than trusting `Max-Age`; and it carries the detected timezone, which F17 needs because **writes may not fall back to a default timezone** and the claim performs a write. [C2] adds a word index `w` for F18's shared card and says F17 "should implement `w` from the start"; F16 went one better and shipped the whole codec, because retrofitting a field into a signed payload costs more than carrying it. Both designs already agreed on the two attributes that actually break the feature, and those are unchanged below.
 
 | Property | Value | Why |
 |---|---|---|
-| name | `dw_share_intent` | — |
-| value | the slug, 16 opaque chars | No PII, nothing to encode, nothing to sign. |
+| name | ~~`dw_share_intent`~~ **`dw_claim`** | [C1]. |
+| value | `v1.<base64url(slug\|w\|tz\|exp)>.<hmac-sha256 over AUTH_SECRET>` | Tamper-evident and self-expiring, and it carries the zone the claim's write needs. `w` is an index into a card, `1`–`6`, **never a vocab uuid** ([C2]); null for a vocab share, which is the only kind F16 mints. |
 | `httpOnly` | `true` | No script reads it. |
 | `secure` | `true` in production | — |
 | `sameSite` | **`'lax'`** | **Not `strict`.** A `strict` cookie is not sent on the top-level navigation *back* from Google, so the intent would be invisible at exactly the moment it is needed. This is the second thing F17 must not get wrong. |
 | `path` | `/` | It is read after onboarding, from a different subtree. |
-| `maxAge` | 30 minutes | Long enough for an OAuth round trip and five onboarding questions; short enough that a stale intent cannot hijack a later sign-in. |
-| lifecycle | deleted the moment it is consumed | One redirect, once. |
+| `maxAge` | ~~30 minutes~~ **10 minutes**, matching the signed `exp` | F17's number. A generous OAuth hop and a short replay window; `Max-Age` now only tells the browser to tidy up, because expiry is enforced inside the signature. |
+| lifecycle | deleted the moment it is consumed | One redirect, once. F17 owns the consumption. |
+
+The codec is `src/lib/share/intent.ts` — `encodeClaimIntent(intent, secret)` / `decodeClaimIntent(raw, secret)`. **The secret is a parameter rather than an import**, so `share:check` drives the whole thing offline against a fixture secret with no `.env` at all, and so the real secret has exactly one visible call site. `SHARE_CLAIM_COOKIE` and its options object live in `policy.ts`, which is what makes the `sameSite` assertion possible.
 
 **Where F17 consumes it:** after onboarding completes, which means the natural reader is `/today`'s render or the `(app)` layout — check the cookie, clear it, `redirect('/s/<slug>/claim')` once. The two files F17 must touch are `src/lib/auth/actions.ts` and `src/components/onboarding/onboarding-flow.tsx:128`.
 
@@ -521,8 +525,12 @@ No session, no tab bar, and a viewer who may never sign in.
   - true: `/s`, `/s/abc…`, `/s/abc…/claim`
   - **false: `/signin`, `/settings`, `/stats`, `/search`, `/s-omething`, `/today`, `/vocab/s/1`** — the `startsWith('/s')` prefix bug, caught offline, before it disables the auth gate for a route that does not exist yet.
 
-**The intent cookie contract**
-- `SHARE_INTENT_COOKIE === 'dw_share_intent'`; `sameSite === 'lax'` (with the comment explaining that `strict` breaks the OAuth return); `httpOnly === true`; `maxAge === 30 * 60`. Assertable because the options object is exported from `policy.ts` rather than constructed inline.
+**The intent cookie contract** — rewritten against `dw_claim`'s shape per [C1]:
+- `SHARE_CLAIM_COOKIE === 'dw_claim'`; `sameSite === 'lax'` (with the comment explaining that `strict` breaks the OAuth return); `httpOnly === true`; `path === '/'`; `maxAge === SHARE_CLAIM_TTL_SECONDS === 600`. Assertable because the options object is exported from `policy.ts` rather than constructed inline.
+- Round trip: an intent with a zone, an intent with a `w`, and an intent with neither.
+- `decodeClaimIntent` returns `null` for: a flipped payload byte, a flipped signature byte, a truncated signature, a signature computed with a different secret, a bumped version prefix, two parts, four parts, a 10 kB string, and `exp` at or before now. Plus the nine hostile strings F17 §7 lists (`//evil.com`, `/\evil.com`, `https://evil.com`, `javascript:alert(1)`, `%2f%2fevil.com`, a header injection, …) — none of which can reach a `Location` header here, because the claim stub's only redirect target is the literal `/signin`.
+- Field validation *inside* a validly signed payload: a non-slug slug, a `w` of 0 or 7, a non-numeric `exp`, an `exp` in scientific notation. The property is that `decodeClaimIntent` never hands its caller a slug it did not check.
+- An unresolvable or oversize timezone degrades the intent to `tz: null` — **never** to `FALLBACK_TIMEZONE`, and never to dropping the claim. `encodeClaimIntent` applies the same validation, so no oversize cookie is ever minted in the first place.
 
 ### `npm run share:db` — against real Postgres
 

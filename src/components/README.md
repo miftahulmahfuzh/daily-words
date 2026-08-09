@@ -145,6 +145,21 @@ Obligations F2 placed on the other features still stand:
   that does the same for `loading.tsx`, which cannot see `searchParams`. Nothing
   in the kit knows about origins — a `BackLink` still just renders the two
   strings it is handed.
+- **F16** — the public share page is a `Screen` with **no `tabs`, no
+  `ScreenHeader` and no `BackLink`**: the viewer arrived from WhatsApp with no
+  session, so four tabs that all bounce to `/signin` are a trap and a back link
+  has nowhere to go. It is the one screen whose single action sits **outside** the
+  scrolling pane, as the last row of the flex column with `var(--pad-bottom)` —
+  the same shape as F6's composer footer and for a related reason: "Practise this
+  word" is the only thing the page exists to offer, to someone who may not
+  scroll, and it was measured 150px under the fold at 320×568 before it was
+  pulled out. It adds no primitive; the body is `/vocab/[id]`'s type stack minus
+  everything that belongs to an owner. The Share affordance on `/vocab/[id]` is
+  drawn exactly like `DeleteWordButton` — `min-h-[44px]`, mono, uppercase,
+  `text-ink-3`, two taps to revoke — because it joins that same foot stack.
+  Reviewable without a session or a database at
+  `/kitchen-sink/share?state=short|long|noexamples`; the frame is asserted in
+  `tests/e2e/share-frame.spec.ts`.
 
 ### `Screen keyboardAware` — the one exception to `100dvh`
 

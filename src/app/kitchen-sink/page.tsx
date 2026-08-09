@@ -250,6 +250,9 @@ export default function KitchenSinkPage() {
           <Link href="/kitchen-sink/journal" className="text-base text-accent underline">
             F10 journal list and entry → /kitchen-sink/journal
           </Link>
+          <Link href="/kitchen-sink/share" className="text-base text-accent underline">
+            F16 public share page → /kitchen-sink/share
+          </Link>
         </Section>
       </ScreenBody>
     </Screen>
