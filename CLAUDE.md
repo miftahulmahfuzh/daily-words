@@ -47,6 +47,8 @@ npm run discover:dry-run                 # the suggestion prompt against the liv
 npm run journal:check                    # F10's schemas, cursor, grouping and prompt, offline
 npm run journal:db                       # F10's insight claim, edit rules and paging; seeds fixture users
 npm run journal:dry-run -- --all         # the insight prompt against the live model, no writes
+npm run journal:similarity               # F15's 20-pair threshold corpus; real calls, no writes
+npm run journal:embed -- --all           # F15's backfill; --user=, --limit=, --retry-failed, --dry-run
 npm run badges:check                     # F12's badge-art manifest, files, hashes and key scan, offline
 npm run stats:check                      # F9's streaks, levels, badges and reveal queue, offline
 npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
@@ -58,6 +60,14 @@ npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay bad
 and refuses to combine with `--all` without `--force`. Run it after any change to
 `lib/gamification/badges.ts`, and never on a schedule — there is no cron in
 v0.1.0.
+
+`npm run journal:similarity` is how `NEAR_DUPLICATE_MAX_DISTANCE` was chosen and
+the only way to change it: the numbers are the deliverable, read against F15
+§6.4's procedure. Re-run it before swapping the embedding model, and record the
+new `maxA`/`minC` in the comment beside the constant rather than editing the
+digits. `npm run journal:embed` takes `--all` or `--user=<uuid|email>`, plus
+`--limit=N`, `--retry-failed` and `--dry-run`; it is idempotent and
+interruptible, and a run in which every batch failed is the only non-zero exit.
 
 `npm run discover:dry-run` takes `--profile full|partial|empty|none`,
 `--avoid a,b,c`, `--count N` and `--runs N`. One model call per run. The words it
@@ -96,6 +106,16 @@ bill. It lives in `.env.local` and is read by `tools/gen_badge_art.py` **and by
 nothing else** — `src/lib/env.ts` has no entry, and `grep OPENAI_API_KEY src/`
 must stay empty. `npm run badges:check` asserts that emptiness, so the rule is
 checked rather than remembered.
+
+**It is also a different key from `EMBEDDING_API_KEY`**, which F15 reads at
+runtime for journal dedup and which is a *separate OpenAI project* key
+(`dword-embeddings`). Same provider, two keys, on purpose: it keeps that grep
+empty as a testable property rather than an honour-system claim, and it lets the
+offline tooling key and the runtime key be revoked independently. Do not paste
+one secret into both variables — that hollows out the rule while appearing to
+honour it. `npm run journal:check` asserts the grep too, over the whole of
+`src/`, including comments, so **the literal string must not appear even in prose
+under `src/`**; explain the distinction in `.env.example` instead.
 
 Three things drift-proof the deck, each by a different mechanism:
 
@@ -271,6 +291,35 @@ throwing. Each cost real time.
   `evaluateBadges` is pure for one reason: the live award path and
   `npm run stats:recompute` call it, and a replay that disagreed with what was
   awarded on the day would be unfixable.
+- **A journal near-duplicate warns; it never blocks and never loses a save**
+  ([S4]). `POST /api/journal` checks before it inserts and answers
+  `{ status: 'duplicate', match }` with **no row written**; "Keep it anyway"
+  re-POSTs with `force: true`, which skips the check and nothing else — not the
+  validation. There is still **no constraint on `(user_id, text)`** and there
+  must not be: the route's amended comment says why, and F10's original
+  paragraph is kept above the amendment rather than deleted. Two layers, and
+  they degrade in one direction only: Layer 1 is a normalised-text hash
+  (`lib/journal/similarity.ts`, free, no provider, catches the re-paste); Layer 2
+  is pgvector cosine distance and needs `EMBEDDING_API_KEY`. **Any** failure of
+  either — provider down, unconfigured, slow, an entry never embedded, a stale
+  vector — falls through to the INSERT and reports `unchecked`, never `unique`
+  and never `duplicate`. `journal:check` asserts that as a property over every
+  no-answer input. Under-warning is the correct failure mode, harder here than
+  for vocab: a missed duplicate is one swipe to delete, while a false warning
+  interrupts the app's single most frictionless action and is read once before
+  the user stops reading warnings at all.
+- `journal_entry_embeddings` is a **sibling table, never a column** on
+  `journal_entries`: every read there is `db.select().from(journalEntries)` with
+  no column list, so a `vector(1536)` would drag ~180 kB of float32 out of Neon
+  on every journal page to render text. **No verdict is ever stored** — "unique"
+  is a property of a collection that changes with the next save. What is stored
+  is `text_sha`, and because Postgres computes `sha256(text::bytea)` natively the
+  staleness check happens *inside* the search query: an edit invalidates both
+  layers by arithmetic, which is why `PATCH /api/journal/[id]` needed no change.
+  Extensions are invisible to drizzle's differ, so `CREATE EXTENSION` lives in a
+  `drizzle-kit generate --custom` migration ordered before the table —
+  **never run `db:push` on this schema**, it skips the journal and the extension
+  with it.
 - A journal insight is generated **once**, by an explicit tap, and never on page
   load or on save. The slot is taken by a conditional `UPDATE … WHERE status IN
   ('none','failed') OR (status='pending' AND requested_at < now() - 120s)` before

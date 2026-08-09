@@ -1,4 +1,5 @@
 export { llm, LLM_MODEL } from '@/lib/llm/client'
+export { embed, type EmbedResult, type EmbedOptions } from '@/lib/llm/embed'
 export { generateJson, runPrompt, extractJson, type LlmResult } from '@/lib/llm/json'
 export { generateText, type LlmMessage } from '@/lib/llm/text'
 export { type LlmError, type LlmErrorKind, USER_MESSAGES } from '@/lib/llm/errors'

@@ -1,7 +1,14 @@
 import type { JournalEntry } from "@/lib/db/types";
+import type { DuplicateMatchRow } from "@/lib/db/queries/journal-embeddings";
 import { toLocalDate } from "@/lib/time/local-date";
+import { excerptFor } from "@/lib/journal/format";
 import { INSIGHT_STALE_MS } from "@/lib/journal/limits";
-import { insightSchema, type Insight, type JournalEntryDto } from "@/lib/journal/schemas";
+import {
+  insightSchema,
+  type DuplicateMatchDto,
+  type Insight,
+  type JournalEntryDto,
+} from "@/lib/journal/schemas";
 
 /**
  * Row → wire.
@@ -91,6 +98,29 @@ export function toJournalEntryDto(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     edited: row.updatedAt.getTime() - row.createdAt.getTime() > EDITED_SLACK_MS,
+  };
+}
+
+/**
+ * The matched line → the wire, for F15's warning.
+ *
+ * Deliberately **not** `toJournalEntryDto`. The warning needs to answer one
+ * question — "is this the one you already kept?" — and everything a full entry
+ * DTO carries beyond that is either useless here (`insight`, `insightStatus`) or
+ * actively misleading (`edited`, which is a fact about the *entry* and would
+ * read as a fact about the line being saved). The text is an excerpt for the
+ * same reason. Asserted by absence in `journal:check`.
+ */
+export function toDuplicateMatchDto(
+  row: DuplicateMatchRow,
+  timezone: string,
+): DuplicateMatchDto {
+  return {
+    id: row.id,
+    excerpt: excerptFor(row.text),
+    sourceNote: row.sourceNote,
+    localDate: toLocalDate(row.createdAt, timezone),
+    createdAt: row.createdAt.toISOString(),
   };
 }
 

@@ -9,6 +9,7 @@ import { Composer, type SaveResult } from "@/components/journal/composer";
 import { EntryRow } from "@/components/journal/entry-row";
 import { listEntries, saveEntry } from "@/lib/journal/client";
 import { groupByDate } from "@/lib/journal/format";
+import { journalEntryHref } from "@/lib/journal/links";
 import type { JournalEntryDto } from "@/lib/journal/schemas";
 import type { LocalDate } from "@/lib/time/local-date";
 
@@ -37,7 +38,11 @@ export function JournalFeed({
   /** Only ever used to key optimistic rows; never sent anywhere. */
   const optimisticId = useRef(0);
 
-  async function handleSave(text: string, sourceNote: string | null): Promise<SaveResult> {
+  async function handleSave(
+    text: string,
+    sourceNote: string | null,
+    opts: { force: boolean },
+  ): Promise<SaveResult> {
     const tempId = `optimistic-${++optimisticId.current}`;
     const now = new Date().toISOString();
     const pending: JournalEntryDto = {
@@ -57,16 +62,26 @@ export function JournalFeed({
 
     setEntries((prev) => [pending, ...prev]);
 
-    const result = await saveEntry(text, sourceNote);
+    const result = await saveEntry(text, sourceNote, opts);
 
     if (!result.ok) {
       setEntries((prev) => prev.filter((e) => e.id !== tempId));
-      return { ok: false, message: result.message };
+      return { status: "failed", message: result.message };
+    }
+
+    // A duplicate is a 2xx, so it arrives here rather than above. No row was
+    // written, so the optimistic one has to be withdrawn — and only that one:
+    // the matched entry is somewhere in the list already and must not be
+    // touched, or the list flickers a second copy of a line the user kept
+    // weeks ago.
+    if (result.data.status === "duplicate") {
+      setEntries((prev) => prev.filter((e) => e.id !== tempId));
+      return { status: "duplicate", match: result.data.match };
     }
 
     const saved = result.data.entry;
     setEntries((prev) => prev.map((e) => (e.id === tempId ? saved : e)));
-    return { ok: true };
+    return { status: "saved" };
   }
 
   async function loadMore() {
@@ -123,7 +138,11 @@ export function JournalFeed({
                 // An optimistic row has no route yet. Rendering it without a
                 // link is the whole of the guard — a tap on it does nothing
                 // rather than landing on a 404.
-                href={entry.id.startsWith("optimistic-") ? undefined : `/journal/${entry.id}`}
+                href={
+                  entry.id.startsWith("optimistic-")
+                    ? undefined
+                    : journalEntryHref(entry.id)
+                }
               />
             ))}
           </div>

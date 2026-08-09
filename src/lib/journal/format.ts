@@ -3,8 +3,12 @@ import {
   formatLocalDateShort,
   type LocalDate,
 } from "@/lib/time/local-date";
-import { JOURNAL_COUNTER_FROM, JOURNAL_TEXT_MAX } from "@/lib/journal/limits";
-import type { JournalEntryDto } from "@/lib/journal/schemas";
+import {
+  DUPLICATE_EXCERPT_MAX,
+  JOURNAL_COUNTER_FROM,
+  JOURNAL_TEXT_MAX,
+} from "@/lib/journal/limits";
+import type { DuplicateMatchDto, JournalEntryDto } from "@/lib/journal/schemas";
 
 /**
  * Display helpers for the journal. Pure, and shared by the server render and
@@ -76,5 +80,45 @@ export function entryMeta(entry: JournalEntryDto): string {
   const parts = [formatLocalDateShort(entry.localDate)];
   if (entry.sourceNote) parts.unshift(entry.sourceNote);
   if (entry.edited) parts.push("edited");
+  return parts.join(" · ");
+}
+
+/* ------------------------------ F15: duplicates ---------------------------- */
+
+/**
+ * How far back from the cut a space still counts as the right place to break.
+ *
+ * Beyond this the excerpt cuts mid-word rather than losing a visible chunk of
+ * the line — a break that swallows thirty characters to avoid splitting one word
+ * is worse at answering "is this the one you mean?" than a split word is.
+ */
+const WORD_BOUNDARY_WINDOW = 20;
+
+/**
+ * The matched line, shortened to something that fits under the composer.
+ *
+ * Returned whole when it already fits, and with no ellipsis — an ellipsis on a
+ * complete proverb would say the line goes on when it does not.
+ */
+export function excerptFor(text: string): string {
+  if (text.length <= DUPLICATE_EXCERPT_MAX) return text;
+
+  const slice = text.slice(0, DUPLICATE_EXCERPT_MAX);
+  const space = slice.lastIndexOf(" ");
+  const cut = space >= DUPLICATE_EXCERPT_MAX - WORD_BOUNDARY_WINDOW ? space : DUPLICATE_EXCERPT_MAX;
+  return `${slice.slice(0, cut).trimEnd()}…`;
+}
+
+/**
+ * The meta line under the warning's excerpt.
+ *
+ * `entryMeta`'s shape, with "Saved" in front of the date because the question
+ * this block answers is *when did I keep this*, and without it the date reads as
+ * part of the quotation. `edited` is not drawn — it is a fact about an entry,
+ * and this is a line.
+ */
+export function duplicateMatchMeta(match: DuplicateMatchDto): string {
+  const parts = [`Saved ${formatLocalDateShort(match.localDate)}`];
+  if (match.sourceNote) parts.unshift(match.sourceNote);
   return parts.join(" · ");
 }

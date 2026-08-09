@@ -9,6 +9,14 @@ import { env } from '@/lib/env'
  * `/v1/messages` to baseURL and sends `x-api-key` + `anthropic-version`
  * automatically, so LLM_BASE_URL must NOT include `/v1` — that is the
  * number-one way to get a 404 here.
+ *
+ * **`lib/llm/embed.ts` is the second, and last, deliberate transport.** It is
+ * not an exception to the sentence above, which forbids a *feature* from
+ * building its own: `lib/llm/` is where transports live, and an embeddings call
+ * cannot go through this client because the Anthropic Messages API has no
+ * embeddings endpoint. It is a different provider on a different key
+ * (`EMBEDDING_API_KEY`), and it has no prompt, so nothing was added under
+ * `prompts/`. See F15 [D6].
  */
 export const llm = new Anthropic({
   apiKey: env.LLM_API_KEY,
