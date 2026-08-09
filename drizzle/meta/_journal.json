@@ -29,6 +29,20 @@
       "when": 1786237907147,
       "tag": "0003_warm_proudstar",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786255121211,
+      "tag": "0004_enable_pgvector",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786255250664,
+      "tag": "0005_groovy_swarm",
+      "breakpoints": true
     }
   ]
 }

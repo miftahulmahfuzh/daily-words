@@ -1,5 +1,6 @@
 import { request, type ApiResult } from "@/lib/api/client";
 import type {
+  CreateEntryResult,
   JournalEntryResponse,
   ListJournalResponse,
 } from "@/lib/journal/schemas";
@@ -14,11 +15,28 @@ import type {
 
 export type { ApiResult, ApiSuccess, ApiFailure } from "@/lib/api/client";
 
+/**
+ * Save a line, or be told it is already kept.
+ *
+ * Both arms are a 2xx and therefore an `ApiResult` **success** — the caller
+ * branches on `data.status`, not on `ok`. A duplicate is a choice offered to the
+ * user, not a failure: routed through the failure path it would surface as a red
+ * problem sentence under the composer, which is the opposite of what [S4] asked
+ * for.
+ *
+ * `force` is what "Keep it anyway" sends. It skips the duplicate check and
+ * nothing else.
+ */
 export function saveEntry(
   text: string,
   sourceNote: string | null,
-): Promise<ApiResult<JournalEntryResponse>> {
-  return request("/api/journal", "POST", { text, sourceNote });
+  opts: { force?: boolean } = {},
+): Promise<ApiResult<CreateEntryResult>> {
+  return request("/api/journal", "POST", {
+    text,
+    sourceNote,
+    force: opts.force ?? false,
+  });
 }
 
 /** The cursor is opaque here on purpose — held, returned, never read. */

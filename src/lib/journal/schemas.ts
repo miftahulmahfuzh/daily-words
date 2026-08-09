@@ -44,10 +44,20 @@ export const insightStatusSchema = z.enum(["none", "pending", "ready", "failed"]
 
 /* -------------------------------- Requests -------------------------------- */
 
-/** `POST /api/journal` */
+/**
+ * `POST /api/journal`
+ *
+ * `force` skips **the duplicate check and nothing else** (F15 [D1]). It is what
+ * "Keep it anyway" sends, and it is unconditional: it never re-checks, never
+ * rate-limits and never asks twice. It does not skip validation — a 1001-
+ * character line is still rejected with `force: true`, asserted in
+ * `journal:check`, because "force" is the kind of flag that accumulates
+ * meanings.
+ */
 export const createEntrySchema = z.object({
   text: journalTextSchema,
   sourceNote: sourceNoteSchema.nullable().optional(),
+  force: z.boolean().default(false),
 });
 
 /**
@@ -130,6 +140,43 @@ export const journalEntryResponseSchema = z.object({
   entry: journalEntryDtoSchema,
 });
 
+/**
+ * The line the user already has, as the warning draws it (F15).
+ *
+ * An **excerpt**, not the text, and no `insight` and no `updatedAt`: the warning
+ * shows a line, not an entry. Anything more is a second entry page rendered
+ * under the composer, on the screen whose premise is that nothing gets in the
+ * way. Asserted by absence in `journal:check`.
+ */
+export const duplicateMatchDtoSchema = z.strictObject({
+  id: z.uuid(),
+  /** Possibly shortened, with a trailing ellipsis when it was. */
+  excerpt: z.string(),
+  sourceNote: z.string().nullable(),
+  /** 'YYYY-MM-DD' in the user's timezone, like every other date on the wire. */
+  localDate: z.string(),
+  createdAt: z.iso.datetime(),
+});
+
+/**
+ * What `POST /api/journal` answers, in both arms.
+ *
+ * A discriminated union rather than a widened object, because `saved` and
+ * `duplicate` carry disjoint payloads and the composer branches on exactly this.
+ * `strictObject` is what makes a body carrying **both** `entry` and `match` a
+ * parse failure instead of a silently stripped key — the one malformation this
+ * shape exists to make impossible.
+ *
+ * Both arms are a 2xx: `201` for the row that landed, `200` for the warning.
+ * A duplicate is not an error, and returning one as a 4xx would put it through
+ * `lib/api/client`'s failure path, where the composer would render it as a
+ * problem sentence rather than as a choice.
+ */
+export const createEntryResultSchema = z.discriminatedUnion("status", [
+  z.strictObject({ status: z.literal("saved"), entry: journalEntryDtoSchema }),
+  z.strictObject({ status: z.literal("duplicate"), match: duplicateMatchDtoSchema }),
+]);
+
 /* ---------------------------------- Types --------------------------------- */
 
 export type Insight = z.infer<typeof insightSchema>;
@@ -138,5 +185,7 @@ export type CreateEntryInput = z.infer<typeof createEntrySchema>;
 export type PatchEntryInput = z.infer<typeof patchEntrySchema>;
 export type ListJournalQuery = z.infer<typeof listJournalQuerySchema>;
 export type JournalEntryDto = z.infer<typeof journalEntryDtoSchema>;
+export type DuplicateMatchDto = z.infer<typeof duplicateMatchDtoSchema>;
+export type CreateEntryResult = z.infer<typeof createEntryResultSchema>;
 export type ListJournalResponse = z.infer<typeof listJournalResponseSchema>;
 export type JournalEntryResponse = z.infer<typeof journalEntryResponseSchema>;

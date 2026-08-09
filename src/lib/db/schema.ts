@@ -11,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  vector,
 } from 'drizzle-orm/pg-core'
 import type { AdapterAccountType } from 'next-auth/adapters'
 
@@ -311,6 +312,70 @@ export const journalEntries = pgTable(
     updatedAt: tsz('updated_at').notNull().defaultNow(),
   },
   (t) => [index('journal_entries_user_created_idx').on(t.userId, t.createdAt.desc())],
+)
+
+/**
+ * F15: one embedding per journal entry, in a table of its own.
+ *
+ * Deliberately NOT a column on `journal_entries`. Every read in
+ * `lib/db/queries/journal.ts` is `db.select().from(journalEntries)` with no
+ * column list, so a vector(1536) — 6 148 bytes — would ride along on all thirty
+ * rows of every journal page to render text. See F15 §2.2.
+ *
+ * `user_id` is denormalised so the search filters by owner without touching
+ * `journal_entries`; the FK to `users` mirrors `journal_entries` so a deleted
+ * user cascades from both directions.
+ *
+ * `text_sha` is sha256 of the exact text that was embedded. Postgres computes
+ * `sha256(text::bytea)` natively (PG 11+; this instance is 18.4), so a stale
+ * vector is detected inside the search query itself and an edit needs no
+ * invalidation write anywhere — which is why `PATCH /api/journal/[id]` gained
+ * nothing in F15. `norm_sha` is sha256 of `normalizeForCompare()` output and is
+ * Layer 1, the free duplicate check that needs no provider at all.
+ *
+ * No verdict is ever stored. "Unique" is a property of a *collection*, and the
+ * collection changes with the next save; what is stored is only whether a
+ * current vector exists for this row's current text.
+ */
+export const journalEntryEmbeddings = pgTable(
+  'journal_entry_embeddings',
+  {
+    entryId: uuid('entry_id')
+      .primaryKey()
+      .references(() => journalEntries.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 'ready' | 'failed'. The absence of a row is the third state: never tried. */
+    status: text('status').$type<'ready' | 'failed'>().notNull(),
+    /** sha256 hex of the exact text embedded. Stale when it != sha256(entry.text). */
+    textSha: text('text_sha').notNull(),
+    /** sha256 hex of normalizeForCompare(text). Layer 1, and it needs no provider. */
+    normSha: text('norm_sha').notNull(),
+    /** Which model produced it. A model change invalidates by value, not by DDL. */
+    model: text('model'),
+    /** Null on 'failed'. pgvector skips NULLs in the index. */
+    embedding: vector('embedding', { dimensions: 1536 }),
+    attempts: integer('attempts').notNull().default(0),
+    /** Server-log detail for a 'failed' row. Never rendered. */
+    failedReason: text('failed_reason'),
+    createdAt: tsz('created_at').notNull().defaultNow(),
+    updatedAt: tsz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    // Layer 1. The only index the feature strictly needs.
+    index('journal_entry_embeddings_norm_idx').on(t.userId, t.normSha),
+    // Drives the backfill's "what is missing" scan and the coverage count.
+    index('journal_entry_embeddings_user_status_idx').on(t.userId, t.status),
+    // Layer 2. Built on an empty table because that is the only moment it is
+    // free; correctness does not rest on it. At this scale the planner prefers a
+    // filtered exact scan, which has perfect recall — see F15 §3.3 and the
+    // comment on `findNearest` for the trigger to revisit that.
+    index('journal_entry_embeddings_hnsw_idx').using(
+      'hnsw',
+      t.embedding.op('vector_cosine_ops'),
+    ),
+  ],
 )
 
 /* ------------------------------- Gamification -------------------------------- */

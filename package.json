@@ -35,6 +35,8 @@
     "journal:check": "tsx --conditions=react-server scripts/check-journal.ts",
     "journal:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-journal-db.ts",
     "journal:dry-run": "tsx --conditions=react-server --env-file=.env.local scripts/journal-dry-run.ts",
+    "journal:similarity": "tsx --conditions=react-server --env-file=.env.local scripts/journal-similarity.ts",
+    "journal:embed": "tsx --conditions=react-server --env-file=.env.local scripts/embed-journal.ts",
     "badges:check": "tsx scripts/check-badge-art.ts",
     "stats:check": "tsx scripts/check-gamification.ts",
     "stats:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-gamification-db.ts",

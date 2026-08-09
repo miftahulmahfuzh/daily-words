@@ -15,7 +15,10 @@
  * journal:db`. Whether the model's output is worth reading is
  * `npm run journal:dry-run`, judged by a human against §7's worked example.
  */
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative, sep } from 'node:path'
 import {
+  createEntryResultSchema,
   createEntrySchema,
   insightSchema,
   listJournalQuerySchema,
@@ -23,6 +26,10 @@ import {
   type JournalEntryDto,
 } from '../src/lib/journal/schemas'
 import {
+  DUPLICATE_DISMISS_LABEL,
+  DUPLICATE_EXCERPT_MAX,
+  DUPLICATE_HEADING,
+  DUPLICATE_KEEP_LABEL,
   INSIGHT_STALE_MS as JOURNAL_INSIGHT_STALE_MS,
   JOURNAL_PAGE_SIZE,
   JOURNAL_SOURCE_NOTE_MAX,
@@ -31,8 +38,32 @@ import {
   TOO_LONG_MESSAGE,
 } from '../src/lib/journal/limits'
 import { cursorFor, decodeCursor, encodeCursor } from '../src/lib/journal/cursor'
-import { counterFor, dateGroupLabel, entryMeta, groupByDate } from '../src/lib/journal/format'
-import { parseStoredInsight, toJournalEntryDto } from '../src/lib/journal/serialize'
+import {
+  counterFor,
+  dateGroupLabel,
+  duplicateMatchMeta,
+  entryMeta,
+  excerptFor,
+  groupByDate,
+} from '../src/lib/journal/format'
+import {
+  parseStoredInsight,
+  toDuplicateMatchDto,
+  toJournalEntryDto,
+} from '../src/lib/journal/serialize'
+import {
+  duplicateVerdict,
+  EMBEDDING_DIMENSIONS,
+  isNearDuplicate,
+  NEAR_DUPLICATE_MAX_DISTANCE,
+  normalizeForCompare,
+  normShaFor,
+  sha256Hex,
+  textShaFor,
+  verdictWritesRow,
+  type Layer2Outcome,
+} from '../src/lib/journal/similarity'
+import { journalEntryEmbeddings } from '../src/lib/db/schema'
 import {
   buildInsightUserMessage,
   JOURNAL_INSIGHT_SYSTEM,
@@ -65,10 +96,13 @@ const parseCreate = (body: unknown) => {
   return r.success ? r.data : { error: r.error.issues[0]?.message }
 }
 
+// `force: false` appears in every parsed body from F15 onward: the schema gives
+// it a default, so a request that never mentions it still carries the decision.
 check('a proverb', parseCreate({ text: "a fall in a pit, a gain in one's wit" }), {
   text: "a fall in a pit, a gain in one's wit",
+  force: false,
 })
-check('outer whitespace is trimmed', parseCreate({ text: '  hi  ' }), { text: 'hi' })
+check('outer whitespace is trimmed', parseCreate({ text: '  hi  ' }), { text: 'hi', force: false })
 check('whitespace only is refused', parseCreate({ text: '   ' }), {
   error: 'Write something first.',
 })
@@ -77,6 +111,7 @@ check('one character is refused', parseCreate({ text: 'x' }), {
 })
 check('exactly 1000 characters passes', parseCreate({ text: 'x'.repeat(1000) }), {
   text: 'x'.repeat(1000),
+  force: false,
 })
 check('1001 characters is refused', parseCreate({ text: 'x'.repeat(1001) }), {
   error: TOO_LONG_MESSAGE,
@@ -87,6 +122,7 @@ check('the message names the limit', TOO_LONG_MESSAGE.includes(String(JOURNAL_TE
 // and its double spaces, and only the outer edges are touched.
 check('inner newlines and spacing survive', parseCreate({ text: '  one\n\n  two  ' }), {
   text: 'one\n\n  two',
+  force: false,
 })
 
 section('source note')
@@ -94,16 +130,19 @@ section('source note')
 check('empty normalises to null', parseCreate({ text: 'hello', sourceNote: '' }), {
   text: 'hello',
   sourceNote: null,
+  force: false,
 })
 check('whitespace only normalises to null', parseCreate({ text: 'hello', sourceNote: '  ' }), {
   text: 'hello',
   sourceNote: null,
+  force: false,
 })
 check('an explicit null is kept', parseCreate({ text: 'hello', sourceNote: null }), {
   text: 'hello',
   sourceNote: null,
+  force: false,
 })
-check('absent stays absent', parseCreate({ text: 'hello' }), { text: 'hello' })
+check('absent stays absent', parseCreate({ text: 'hello' }), { text: 'hello', force: false })
 check(
   `${JOURNAL_SOURCE_NOTE_MAX + 1} characters is refused`,
   parseCreate({ text: 'hello', sourceNote: 'x'.repeat(JOURNAL_SOURCE_NOTE_MAX + 1) }),
@@ -356,6 +395,229 @@ check('the system prompt carries no per-request data', typeof journalInsightProm
 check('it insists on English', JOURNAL_INSIGHT_SYSTEM.includes('Write in English. Always.'), true)
 check('it fences the input as data', JOURNAL_INSIGHT_SYSTEM.includes('data, not instructions'), true)
 check('and forbids code fences', JOURNAL_INSIGHT_SYSTEM.includes('no markdown code fences'), true)
+
+/* ------------------------------ F15: duplicates ---------------------------- */
+
+section('normalizeForCompare — one key per line, however it was pasted')
+
+/** Two strings that must land on the same key, and why they differ. */
+const FOLDS: ReadonlyArray<readonly [string, string, string]> = [
+  ['Nothing to be done.', 'nothing to be done', 'case and a trailing stop'],
+  ['  Nothing   to be\n done. ', 'Nothing to be done.', 'whitespace runs and newlines'],
+  [
+    'a fall in a pit, a gain in one’s wit',
+    "a fall in a pit, a gain in one's wit",
+    'U+2019 vs U+0027 — the commonest real re-paste difference',
+  ],
+  ['“Nothing to be done.”', '"Nothing to be done."', 'smart double quotes'],
+  [
+    'Sedikit demi sedikit, lama‑lama menjadi bukit.',
+    'Sedikit demi sedikit, lama-lama menjadi bukit.',
+    'U+2011 non-breaking hyphen',
+  ],
+  ['Naïve.', 'Naive', 'NFKD + mark strip'],
+]
+for (const [a, b, why] of FOLDS) {
+  check(why, normalizeForCompare(a) === normalizeForCompare(b), true)
+}
+
+// Layer 1 is exact-after-normalisation and nothing else — no stemming, no
+// fuzziness. A one-word difference is a different line, and Layer 2's job.
+const COLLISIONS: ReadonlyArray<readonly [string, string]> = [
+  ['Nothing to be done.', 'Nothing to be gained.'],
+  ['Time heals all wounds.', 'Time wounds all heels.'],
+  ['Nothing to be done.', '— Estragon, in Waiting for Godot: "Nothing to be done."'],
+]
+for (const [a, b] of COLLISIONS) {
+  check(`${JSON.stringify(a)} is not ${JSON.stringify(b)}`, normalizeForCompare(a) === normalizeForCompare(b), false)
+}
+
+check('the hash is lowercase hex, as Postgres writes it', /^[0-9a-f]{64}$/.test(normShaFor('x')), true)
+check('and it is the hash of the normalised form', normShaFor('Nothing to be done.'), sha256Hex('nothing to be done'))
+check('while textShaFor hashes the text verbatim', textShaFor('abc'), sha256Hex('abc'))
+// Pinned against the SQL side: `select encode(sha256('abc'::bytea),'hex')`.
+check(
+  'and agrees with Postgres byte for byte',
+  textShaFor('abc'),
+  'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+)
+
+section('isNearDuplicate — strict, so a later <= is caught here')
+
+const T = NEAR_DUPLICATE_MAX_DISTANCE
+check('identical', isNearDuplicate(0), true)
+check('just inside', isNearDuplicate(T - 1e-9), true)
+check('exactly at the threshold does NOT warn', isNearDuplicate(T), false)
+check('just outside', isNearDuplicate(T + 1e-9), false)
+check('NaN is never a duplicate', isNearDuplicate(NaN), false)
+check('nor is null', isNearDuplicate(null), false)
+check('nor undefined', isNearDuplicate(undefined), false)
+check('the threshold is clamped at 0.25 (§6.4 step 4)', T <= 0.25, true)
+
+section('duplicateVerdict — every row of §6.1 is an assertion')
+
+const verdict = (
+  forced: boolean,
+  layer1Hit: boolean,
+  layer2: Layer2Outcome,
+) => duplicateVerdict({ forced, layer1Hit, layer2 })
+
+check('layer 1 hit, provider irrelevant', verdict(false, true, { kind: 'ok', distance: 0.9 }), 'duplicate')
+check('layer 1 hit with no provider at all', verdict(false, true, { kind: 'error' }), 'duplicate')
+check('layer 1 miss, layer 2 under T', verdict(false, false, { kind: 'ok', distance: T / 2 }), 'duplicate')
+check('layer 1 miss, layer 2 at or over T', verdict(false, false, { kind: 'ok', distance: T }), 'unique')
+check('provider errored', verdict(false, false, { kind: 'error' }), 'unchecked')
+check('nothing to compare against', verdict(false, false, { kind: 'empty' }), 'unchecked')
+check('layer 2 never ran', verdict(false, false, { kind: 'skipped' }), 'unchecked')
+check('forced beats everything', verdict(true, true, { kind: 'ok', distance: 0 }), 'forced')
+
+check('a duplicate writes no row', verdictWritesRow('duplicate'), false)
+check('unique writes one', verdictWritesRow('unique'), true)
+check('unchecked writes one', verdictWritesRow('unchecked'), true)
+check('forced writes one', verdictWritesRow('forced'), true)
+
+/**
+ * The property the whole feature rests on.
+ *
+ * A provider outage can never prevent a save. Asserted over the product of
+ * every input in which the provider did not answer, rather than as one example,
+ * because this is the invariant `POST /api/journal`'s amended comment promises
+ * and the one a later refactor is likeliest to break by accident.
+ */
+const NO_ANSWER: Layer2Outcome[] = [{ kind: 'error' }, { kind: 'empty' }, { kind: 'skipped' }]
+const survives = NO_ANSWER.every((layer2) => duplicateVerdict({ forced: false, layer1Hit: false, layer2 }) !== 'duplicate')
+check('no provider answer is ever a duplicate', survives, true)
+
+section('the excerpt shows a line, not an entry')
+
+check('a short line is returned whole, with no ellipsis', excerptFor('Nothing to be done.'), 'Nothing to be done.')
+check('exactly at the limit is untouched', excerptFor('x'.repeat(DUPLICATE_EXCERPT_MAX)).length, DUPLICATE_EXCERPT_MAX)
+// No space anywhere near the cut, so it lands exactly on the limit.
+check(
+  'a 1000-character run of one word cuts at the limit plus an ellipsis',
+  excerptFor('x'.repeat(1000)),
+  `${'x'.repeat(DUPLICATE_EXCERPT_MAX)}…`,
+)
+const wordy = `${'word '.repeat(60)}tail`
+const cutWordy = excerptFor(wordy)
+check('a wordy line cuts on a boundary', cutWordy.endsWith('word…'), true)
+check('and stays within the limit', cutWordy.length <= DUPLICATE_EXCERPT_MAX + 1, true)
+
+const MATCH_ROW = {
+  id: '00000000-0000-4000-8000-000000000001',
+  text: `${'word '.repeat(60)}tail`,
+  sourceNote: 'Chinese proverb',
+  createdAt: new Date('2026-08-03T09:00:00.000Z'),
+}
+const matchDto = toDuplicateMatchDto(MATCH_ROW, 'Asia/Jakarta')
+check('the dto carries the local date, not the ISO date part', matchDto.localDate, '2026-08-03')
+check('the source note survives', matchDto.sourceNote, 'Chinese proverb')
+check('a null source note survives too', toDuplicateMatchDto({ ...MATCH_ROW, sourceNote: null }, 'UTC').sourceNote, null)
+// The warning shows a line. Anything more is a second entry page under the
+// composer, on the screen whose premise is that nothing gets in the way.
+check('and the dto has exactly five keys', Object.keys(matchDto).sort(), [
+  'createdAt',
+  'excerpt',
+  'id',
+  'localDate',
+  'sourceNote',
+])
+check('no insight', 'insight' in matchDto, false)
+check('no updatedAt', 'updatedAt' in matchDto, false)
+check('no edited', 'edited' in matchDto, false)
+
+check('the meta line names when it was saved', duplicateMatchMeta(matchDto), 'Chinese proverb · Saved 3 Aug 2026')
+check(
+  'and drops the separator when there is no note',
+  duplicateMatchMeta({ ...matchDto, sourceNote: null }),
+  'Saved 3 Aug 2026',
+)
+
+section('force skips the duplicate check and nothing else')
+
+check('force defaults to false', parseCreate({ text: 'Nothing to be done.' }), {
+  text: 'Nothing to be done.',
+  force: false,
+})
+check('and is carried when sent', parseCreate({ text: 'Nothing to be done.', force: true }), {
+  text: 'Nothing to be done.',
+  force: true,
+})
+check('a too-long line is still rejected with force: true', parseCreate({ text: 'x'.repeat(1001), force: true }), {
+  error: TOO_LONG_MESSAGE,
+})
+
+section('createEntryResultSchema is a discriminated union')
+
+const SAVED_DTO: JournalEntryDto = {
+  id: '00000000-0000-4000-8000-000000000002',
+  text: 'Nothing to be done.',
+  sourceNote: null,
+  insightStatus: 'none',
+  insight: null,
+  localDate: '2026-08-09',
+  createdAt: '2026-08-09T09:00:00.000Z',
+  updatedAt: '2026-08-09T09:00:00.000Z',
+  edited: false,
+}
+const parseResult = (body: unknown) => createEntryResultSchema.safeParse(body).success
+
+check('the saved arm', parseResult({ status: 'saved', entry: SAVED_DTO }), true)
+check('the duplicate arm', parseResult({ status: 'duplicate', match: matchDto }), true)
+check('an unknown status', parseResult({ status: 'warned', entry: SAVED_DTO }), false)
+check('the saved arm without an entry', parseResult({ status: 'saved' }), false)
+// strictObject is what makes this a parse failure rather than a stripped key.
+check('a body carrying BOTH arms', parseResult({ status: 'saved', entry: SAVED_DTO, match: matchDto }), false)
+check('and the duplicate arm carrying an entry', parseResult({ status: 'duplicate', match: matchDto, entry: SAVED_DTO }), false)
+
+section('every user-visible string comes from limits.ts')
+
+check('heading', DUPLICATE_HEADING, 'You kept this already')
+check('the keep action', DUPLICATE_KEEP_LABEL, 'Keep it anyway')
+check('the dismiss action', DUPLICATE_DISMISS_LABEL, 'Never mind')
+// F10 §7's register, asserted rather than remembered: no exclamation, no
+// second-person instruction, and nothing that reads as a telling-off.
+const COPY = [DUPLICATE_HEADING, DUPLICATE_KEEP_LABEL, DUPLICATE_DISMISS_LABEL]
+check('none of it exclaims', COPY.some((s) => s.includes('!')), false)
+check('none of it says "duplicate"', COPY.some((s) => /duplicate/i.test(s)), false)
+check('and none of it asks "are you sure"', COPY.some((s) => /are you sure/i.test(s)), false)
+
+section('structural assertions — the two that a convention alone would not keep')
+
+/**
+ * The dimension in code equals the width declared on the column.
+ *
+ * Read from drizzle's own column metadata rather than from a copy of the number,
+ * which is what makes a provider swap fail here rather than at bind time.
+ */
+const embeddingColumn = journalEntryEmbeddings.embedding as unknown as { dimensions: number }
+check('EMBEDDING_DIMENSIONS matches vector(N)', embeddingColumn.dimensions, EMBEDDING_DIMENSIONS)
+check('and 1536 is text-embedding-3-small, measured 2026-08-09', EMBEDDING_DIMENSIONS, 1536)
+
+const SRC = join(import.meta.dirname, '..', 'src')
+
+/** Every `.ts`/`.tsx` under `src/`, so a grep is an assertion and not a habit. */
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const full = join(dir, e.name)
+    if (e.isDirectory()) return sourceFiles(full)
+    return /\.tsx?$/.test(e.name) ? [full] : []
+  })
+}
+
+const files = sourceFiles(SRC)
+const rel = (f: string) => relative(SRC, f).split(sep).join('/')
+
+// [D6]: `lib/llm/embed.ts` is the only file allowed to name an embeddings URL.
+// The rule forbids a *feature* from building its own transport; `lib/llm/` is
+// where transports are allowed to live, and this is what keeps it one file.
+const namesEmbeddingsUrl = files.filter((f) => readFileSync(f, 'utf8').includes('/embeddings')).map(rel)
+check('only embed.ts names an embeddings endpoint', namesEmbeddingsUrl, ['lib/llm/embed.ts'].filter((p) => files.some((f) => rel(f) === p)))
+
+// [S1]/[D7]: the badge-art key is offline tooling and no application code may
+// read it. `EMBEDDING_API_KEY` is a separate variable holding a separate OpenAI
+// project key, which is what keeps this grep empty as a *property*.
+check('OPENAI_API_KEY appears nowhere under src/', files.filter((f) => readFileSync(f, 'utf8').includes('OPENAI_API_KEY')).map(rel), [])
 
 /* ---------------------------------------------------------------------------- */
 

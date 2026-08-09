@@ -7,6 +7,7 @@ import type {
   chatSessions,
   chatMessages,
   journalEntries,
+  journalEntryEmbeddings,
   userStats,
   badgesAwarded,
 } from '@/lib/db/schema'
@@ -24,6 +25,8 @@ export type ChatSession = typeof chatSessions.$inferSelect
 export type ChatMessage = typeof chatMessages.$inferSelect
 export type JournalEntry = typeof journalEntries.$inferSelect
 export type NewJournalEntry = typeof journalEntries.$inferInsert
+export type JournalEntryEmbedding = typeof journalEntryEmbeddings.$inferSelect
+export type NewJournalEntryEmbedding = typeof journalEntryEmbeddings.$inferInsert
 export type UserStats = typeof userStats.$inferSelect
 export type BadgeAward = typeof badgesAwarded.$inferSelect
 

@@ -44,6 +44,48 @@ export const INSIGHT_STALE_MS = 120_000;
 export const TOO_LONG_MESSAGE = `Too long — trim to ${JOURNAL_TEXT_MAX} characters.`;
 export const SOURCE_NOTE_TOO_LONG_MESSAGE = `Source note is too long — ${JOURNAL_SOURCE_NOTE_MAX} characters maximum.`;
 
+/* ------------------------------ F15: duplicates ---------------------------- */
+
+/**
+ * The whole budget a save may spend asking "have I kept this already?".
+ *
+ * Enforced with `AbortSignal.timeout`, and **any** outcome other than a vector
+ * inside it falls straight through to the INSERT. The worst case a user can
+ * experience is a save that took 2.5 s and worked — never a save that failed
+ * because of this feature.
+ *
+ * It is not on the critical path in the way the number suggests: the optimistic
+ * row is on screen before the request is sent, so what this bounds is how long a
+ * *warning* can take to appear, not how long the tap takes to be acknowledged.
+ */
+export const EMBED_TIMEOUT_MS = 2500;
+
+/**
+ * How much of the matched line the warning shows.
+ *
+ * Roughly the three clamped lines `EntryRow` gives an entry in the list, because
+ * the warning is answering "is this the one you mean?" and not "read it again".
+ * The full text is one tap away on the entry page.
+ */
+export const DUPLICATE_EXCERPT_MAX = 180;
+
+/**
+ * The warning's copy, in one place because the register is the feature.
+ *
+ * It must not scold. **Not** "Duplicate detected", **not** "Are you sure?", and
+ * **not** a modal — the app has exactly one of those and it is F13's badge
+ * dialog. This is a block under the composer, where the counter and the error
+ * already appear, so the screen's one-column rhythm is unbroken.
+ *
+ * `Keep it anyway` is the accented action and it is deliberately the easy one:
+ * [S4] softened the user's "forbid" to a warning precisely so that a save is
+ * never lost, and an interruption the user cannot wave away in one tap would be
+ * the worst trade on this screen.
+ */
+export const DUPLICATE_HEADING = "You kept this already";
+export const DUPLICATE_KEEP_LABEL = "Keep it anyway";
+export const DUPLICATE_DISMISS_LABEL = "Never mind";
+
 /**
  * Where an in-progress paste lives between mounts.
  *
