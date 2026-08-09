@@ -3,7 +3,7 @@ model:          gpt-image-2
 style version:  v1
 reference:      assets/badges/_anchor.png
 size / quality: 1024x1024 / high
-image sha256:   8808d5c526954dd43ee68ff28ffa8be889189a69ea0e975530dda498f73b988b
+image sha256:   b8dcc74d51b15b9f3f69f4c6ac1837873bc7923ae6bb5cc9e5038f5456bdf343
 
 --- prompt as sent ---
 A single printed keepsake ticket, square, in the manner of a nineteenth-century
@@ -66,6 +66,6 @@ whole set; what sits inside the ring belongs to this badge alone. Do not fall
 back on an open book, a quill, a wreath or a star as a default centre. Thirteen
 badges built from the same object is the way this set fails.
 
-SUBJECT FOR THIS BADGE: A plain helmet of beaten metal standing upright and alone on a bare rule, turned firmly three quarters away so that the face is seen at an angle and strongly foreshortened, one narrow eye slot running the width of the face and a short narrow opening dropping a little below the middle of it, the whole surface smooth and unadorned and built entirely from engraved contour and cross-hatch. VERMILION: one small dent above the brow, struck a little off register from the green.
+SUBJECT FOR THIS BADGE: A plain steel sallet standing upright and alone on a bare rule, seen nearly in profile with its rounded skull toward the left and its long tapered tail sweeping back and down to the right, a low medial ridge running front to back over the crown, the single vision slit foreshortened to one short unbroken horizontal line at the brow with clear hammered metal above it and below it, the form built entirely from firm engraved contour with dense parallel cross-hatch under the tail and along the far side and stipple where the crown turns. VERMILION: one small dent low on the tail, struck a little off register from the green.
 
-CORRECTION FOR THIS ATTEMPT: The stock is clean fresh cream index-card paper, clearly the palest tone in the image, with a fine tooth and no toning and no age in it. Build the helmet entirely from engraved line — firm contour, cross-hatch on the shaded side, stipple where it turns — with the lit side left as bare paper, the way a banknote vignette is built. Keep it large and centred so the outline alone identifies it at small size.
+CORRECTION FOR THIS ATTEMPT: The stock is BRIGHT: a near-white warm cream, noticeably paler than the reference sheet, about 95 percent luminance, the palest thing in the image by a wide margin, fresh stock printed this morning with a fine tooth and no toning and no age in it. The sheet is lit flat and evenly, one continuous tone from edge to edge and corner to corner. THE SEAL: its outer rule encloses about 82 percent of the image width, with a quiet margin of bare paper around it. THE TAIL IS SHORT AND BROAD: it sweeps back and down from the skull in one wide curve and ends in a broad blunt rounded edge, its length about equal to the width of the skull, so that the whole helmet reads as a compact rounded object. Cut it the way a dictionary plate is cut: the shaded flank of the skull and the underside of the tail are dense fields of individual parallel engraved lines that stay separately countable where they curve, the crown's turn is stipple, the lit side is bare paper carrying a few firm contour lines, and a few small rivets sit along the lower edge. The sallet stands directly on the bare rule with clean empty paper beneath it. The vermilion dent low on the tail is a small but clearly visible oval of brick red, struck a little off register from the green.

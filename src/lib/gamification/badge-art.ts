@@ -154,10 +154,10 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     styleVersion: "v1",
   },
   thirty_day_streak: {
-    src: "/badges/thirty_day_streak.8808d5c5.webp",
-    small: "/badges/thirty_day_streak.8808d5c5.sm.webp",
-    sha256: "8808d5c526954dd43ee68ff28ffa8be889189a69ea0e975530dda498f73b988b",
-    plate: "#ece8d8",
+    src: "/badges/thirty_day_streak.b8dcc74d.webp",
+    small: "/badges/thirty_day_streak.b8dcc74d.sm.webp",
+    sha256: "b8dcc74d51b15b9f3f69f4c6ac1837873bc7923ae6bb5cc9e5038f5456bdf343",
+    plate: "#f1edde",
     styleVersion: "v1",
   },
   dumbledore: {
