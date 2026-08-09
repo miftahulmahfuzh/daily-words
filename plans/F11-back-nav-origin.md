@@ -91,6 +91,21 @@ Two consequences worth stating because they are easy to break later:
 - `vocabDetailHref(id, origin?)` types `origin` as `WordOrigin | null | undefined`,
   never `string`. A component cannot accidentally pass user input through it —
   that is a type error.
+- **A repeated `?from=` is sampled, not discarded — measured 2026-08-09, and
+  this plan said otherwise.** §4 below claims "a repeated param arrives as an
+  array and is discarded rather than sampled — one `from` or none". On Next
+  15.5.23 that is false: `?from=today&from=discover` reaches the page as the
+  string `"today"` and renders `TODAY`; `?from=discover&from=today` renders
+  `DISCOVER`. First occurrence wins, and `useSearchParams().get()` agrees.
+  `parseOrigin`'s array branch is therefore unreachable from both callers.
+  Recorded rather than corrected in place, because the next person to reason
+  about duplicated params should find the measurement.
+
+  **This costs nothing, and that is the point of the whitelist.** Whichever
+  occurrence Next picks still has to be a union member, so a repeated param can
+  only choose between two legitimate origins — it cannot smuggle a third thing
+  past `backTarget`. Rejecting duplicates would mean reading the raw query
+  string through `headers()` for a purely cosmetic guarantee. Not taken.
 - The whitelist must be probed with `Object.hasOwn`, a `Set`, or a `Map`, not
   with a bare `origins[value]` index. `("toString" in {})` is `true` and
   `({})["constructor"]` is a function; a naive lookup would treat `?from=toString`
@@ -504,8 +519,11 @@ Run with `npm run dev` on 3200, in an iOS Safari viewport (375×667), signed in.
    the query and repeat: `COLLECTION`.
 8. **Hostile URLs, by hand**, because seeing them is worth more than reading an
    assertion: `?from=https://example.com`, `?from=//example.com`, `?from=/today`,
-   `?from=toString`, `?from=today&from=discover`. All five render `COLLECTION`
-   pointing at `/vocab`; none renders an off-site link; none 500s.
+   `?from=toString`. All four render `COLLECTION` pointing at `/vocab`; none
+   renders an off-site link; none 500s.
+   **`?from=today&from=discover` renders `TODAY`, not `COLLECTION`** — see D2's
+   measured note. Both values are union members, so the page picks a legitimate
+   origin either way; this is the expectation that was wrong, not the code.
 9. **A word that is still enriching**, opened from Today: the "Practise this
    word" button is disabled, back still says `TODAY`. Then let it finish, open
    the chat, and use the not-ready `EmptyState` path by opening

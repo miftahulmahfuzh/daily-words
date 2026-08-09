@@ -70,9 +70,22 @@ export function isWordOrigin(value: unknown): value is WordOrigin {
 /**
  * A `?from=` value from the wire, narrowed or discarded.
  *
- * Takes what Next hands a page: `string | string[] | undefined`. A repeated
- * param arrives as an array and is discarded rather than sampled — one `from`
- * or none.
+ * Takes what Next hands a page: `string | string[] | undefined`.
+ *
+ * **Measured on Next 15.5.23, 2026-08-09.** F11 D2 asserted that a repeated
+ * param "arrives as an array and is discarded rather than sampled — one `from`
+ * or none". That is false here: `?from=today&from=discover` reaches the page as
+ * the string `"today"`, first occurrence wins, and `?from=discover&from=today`
+ * renders Discover. `useSearchParams().get()` behaves the same way. So the
+ * array branch below is unreachable from both current callers.
+ *
+ * It stays, for two reasons: it is the correct handling *if* an array ever does
+ * arrive (a different Next version, a different caller), and the alternative —
+ * reading the raw query string to reject a duplicated key — would buy nothing.
+ * Sampling is harmless here precisely because the sampled value still has to be
+ * a union member: whichever occurrence Next picks, the answer is one of four
+ * legitimate origins or the Collection. A repeated param cannot smuggle
+ * anything past the whitelist, it can only pick between two safe answers.
  */
 export function parseOrigin(
   value: string | string[] | undefined,
