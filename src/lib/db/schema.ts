@@ -127,7 +127,20 @@ export const vocabEntries = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     term: text('term').notNull(),
-    source: text('source').$type<'manual' | 'suggested'>().notNull(),
+    /**
+     * How the word got here. `'shared'` is F17's, and it is a third value on a
+     * plain `text` column rather than a pgEnum — the same TypeScript-level
+     * refinement `status` and `enrichment_status` use — so widening it emits no
+     * DDL and needs no migration.
+     *
+     * It exists because reusing `'manual'` would silently redefine eight badge
+     * titles: F9's collector level counts manually added words, and a stranger
+     * who claims one shared word would become a "Word Picker" with no code
+     * change anywhere near `lib/gamification/`. `'suggested'` was wrong for a
+     * neighbouring reason — `listKeptFromDiscover` renders exactly those rows
+     * under a heading naming a feature the claimer has never opened. See F17 D7.
+     */
+    source: text('source').$type<'manual' | 'suggested' | 'shared'>().notNull(),
     status: text('status').$type<'active' | 'mastered'>().notNull().default('active'),
     partOfSpeech: text('part_of_speech'),
     pronunciation: text('pronunciation'),
@@ -161,6 +174,12 @@ export const vocabEntries = pgTable(
      * /profile read. Neither index above can serve that filter: the unique one
      * is on `lower(term)` and the other on `created_at`. Additive, and approved
      * as one of the set in [R8]–[R10].
+     *
+     * It serves all three values of `source` equally, which is *why* F17 could
+     * add `'shared'` without touching anything here: `queries/stats.ts`'s
+     * `= 'manual'` count and `queries/vocab-suggestions.ts`'s `= 'suggested'`
+     * list both keep their index scan **and** both keep meaning what they say,
+     * so a claimed word does not inflate the collector level.
      */
     index('vocab_entries_user_source_idx').on(t.userId, t.source),
   ],

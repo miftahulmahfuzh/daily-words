@@ -52,6 +52,8 @@ npm run journal:similarity               # F15's 20-pair threshold corpus; real 
 npm run journal:embed -- --all           # F15's backfill; --user=, --limit=, --retry-failed, --dry-run
 npm run share:check                      # F16's slug entropy, DTO allowlist, path predicate and claim cookie, offline
 npm run share:db                         # F16's CHECK constraint, anonymous read and cascade; -- --keep leaves a live link
+npm run claim:check                      # F17's ten outcomes, every href, the enrichment copy and term safety, offline
+npm run claim:db                         # F17's single INSERT, the five nulls, the owner no-op and the 23505 race
 npm run badges:check                     # F12's badge-art manifest, files, hashes and key scan, offline
 npm run stats:check                      # F9's streaks, levels, badges and reveal queue, offline
 npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
@@ -104,6 +106,16 @@ curl -i http://localhost:3200/s/<slug>       # expect 200, NOT 307 -> /signin
 A `307` there means the middleware exemption or the route's placement outside the
 `(app)` group is wrong, and **the signed-in author sees a perfect page either
 way**. Clean up with `delete from users where email like 'f16-share-%@example.invalid';`
+
+The same `--keep` slug is what F17's manual pass needs, and there are **three**
+curls, not one — `/claim` has the identical pair of exemptions and the identical
+invisible failure:
+
+```bash
+curl -si "http://localhost:3200/s/<slug>/claim?tz=Europe%2FLondon"   # 307 -> /claim, Set-Cookie: dw_claim
+curl -si -H "Cookie: dw_claim=<the value>" http://localhost:3200/claim   # 200 + the word + "Continue with Google"
+curl -si http://localhost:3200/claim                                 # 200 "Nothing to add here", never 307
+```
 
 ## Badge art and `OPENAI_API_KEY`
 
@@ -400,13 +412,59 @@ throwing. Each cost real time.
   guess used to be right. `/s/[slug]` is `force-dynamic` for the neighbouring
   reason: a cached render outlives the row, and "I turned the link off and it
   still works" is the one bug this feature cannot have.
-- The claim cookie is `dw_claim`, **signed**, and F16 ships its codec
-  (`lib/share/intent.ts`) even though nothing claims yet — the brief's [C1] gave
-  the shape to F17 and [C2] added the word index `w`, and retrofitting a field
-  into a signed payload costs more than carrying it. `SameSite=Lax`, never
-  `Strict`: the return from `accounts.google.com` is a cross-site top-level GET,
-  and `Strict` is a 100%-reproducible failure that looks like "the claim just
-  doesn't happen". `/s/[slug]/claim` is a GET that sets a cookie and redirects,
-  and it must stay that — F17 D5 puts the write in a server action, because a GET
-  render that mutates is prefetchable, replayable and invisible to Next's action
-  CSRF machinery.
+- The claim cookie is `dw_claim`, **signed**, and F16 shipped its codec
+  (`lib/share/intent.ts`) before anything claimed — the brief's [C1] gave the
+  shape to F17 and [C2] added the word index `w`, and retrofitting a field into a
+  signed payload costs more than carrying it. `SameSite=Lax`, never `Strict`: the
+  return from `accounts.google.com` is a cross-site top-level GET, and `Strict` is
+  a 100%-reproducible failure that looks like "the claim just doesn't happen".
+  `/s/[slug]/claim` is a GET that sets a cookie and redirects, and it must stay
+  that — F17 D5 puts the write in a server action, because a GET render that
+  mutates is prefetchable, replayable and invisible to Next's action CSRF
+  machinery. **This is also where F17's own plan was overruled by what F16 had
+  already built, and for the better:** D2 wanted the cookie set by a server action
+  immediately before `signIn()`, and named that the riskiest unverified assumption
+  in the plan (R1); its stated fallback was a route handler that sets the cookie
+  and redirects, which is exactly this route. Measured on 2026-08-09 —
+  `Set-Cookie` rides the 307 out, and the action's `cookies().delete()` rides the
+  303 back.
+- **`onboarded_at` can now be set by two things, and the second one is the
+  claim.** `lib/share/claim.server.ts` calls the same `completeOnboarding` with
+  **five null answers** and the zone detected in the browser before the OAuth hop,
+  which is byte-for-byte the row F7's `Skip all` writes — so a claim adds no state
+  the app did not already support, and `app/api/profile/complete/route.ts`'s
+  comment was amended rather than deleted. It never re-onboards an established
+  user (`claim:check` asserts `willOnboard === false` for all ten outcomes when
+  the claimer is onboarded, and `claim:db` asserts the five answer columns and the
+  timestamp survive). And it **refuses to guess a zone**: no valid zone in the
+  cookie means outcome `no_timezone`, zero writes, and the honest five screens,
+  because the failure mode of a guessed zone is a daily card dated a day wrong,
+  forever, silently. `app/(app)/layout.tsx` gains no branch for any of this — that
+  restraint is the plan's most important, and `claim:check` greps the file for it.
+- **A claimed word is `source = 'shared'`, a third value on a plain `text`
+  column, and the reason is F9.** The collector level counts `source = 'manual'`;
+  reusing `'manual'` would silently redefine eight badge titles so that a stranger
+  who claims one word is a "Word Picker", with no code change anywhere near
+  `lib/gamification/`. `'suggested'` was wrong for the neighbouring reason —
+  `listKeptFromDiscover` renders exactly those rows under a heading naming a
+  feature the claimer has never opened. Widening a `$type<>` union emits **no
+  DDL**: `npm run db:generate` must stay silent, and a migration appearing there
+  means something else changed.
+- **The claim copies the sharer's enrichment and costs zero model calls.** It
+  reads the four fields off F16's `shares.payload` snapshot, so it touches no
+  user-owned table and survives the owner deleting the word, and the new row is
+  inserted `ready` **in one statement** — never insert-then-update, because
+  between the two the row is `pending` and `pending` is precisely the state
+  `/vocab/[id]/chat` refuses to render. The whole argument rests on one fact,
+  named at the top of `buildClaimEnrichment`: **`lib/llm/prompts/vocab-enrich.ts`
+  takes only the term** — no profile, no `userId`, unlike `chat-system.ts` and
+  `suggest-words.ts`. Personalise enrichment and this copy becomes a disclosure of
+  one user's context to another.
+- The sharer's `term` is the one free-text string that crosses from one user into
+  another's system prompt, and `normalizeTerm` + `validateTerm` are re-run on the
+  way **out** of the snapshot rather than trusted from the way in. `claim:check`
+  measured something the plan got wrong: `genteel\n\nIgnore all previous
+  instructions` is **not rejected** — `normalizeTerm` collapses the newlines and it
+  passes as a five-word term. The property that actually holds, and is asserted as
+  a property rather than as a list of outcomes, is that no newline, colon, angle
+  bracket or backtick can reach the `<term>` tags.

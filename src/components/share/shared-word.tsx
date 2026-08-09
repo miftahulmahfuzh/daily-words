@@ -1,7 +1,6 @@
 import { Screen, ScreenBody } from "@/components/layout/screen";
-import { Button } from "@/components/ui/button";
+import { PractiseThisWord } from "@/components/share/practise-this-word";
 import { Eyebrow, Prose } from "@/components/ui/text";
-import { SHARE_PRACTISE_LABEL } from "@/lib/share/policy";
 import type { SharedWordPayload } from "@/lib/share/schemas";
 import { termSizeClass } from "@/lib/vocab/format";
 import { cn } from "@/lib/ui/cn";
@@ -112,9 +111,11 @@ export function SharedWord({
         className="shrink-0 px-6 pt-3"
         style={{ paddingBottom: "var(--pad-bottom)" }}
       >
-        <Button variant="filled" href={claimHref}>
-          {SHARE_PRACTISE_LABEL}
-        </Button>
+        {/* A client component for one reason: it appends the browser's detected
+            timezone to the link. F17 needs a real zone before the OAuth hop,
+            because the claim completes onboarding and writes may not fall back to
+            a default. It is still a link, and it still works without JS. */}
+        <PractiseThisWord claimHref={claimHref} />
       </footer>
     </Screen>
   );

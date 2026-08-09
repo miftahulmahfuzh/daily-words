@@ -5,6 +5,8 @@ import { encodeClaimIntent } from '@/lib/share/intent'
 import {
   isShareSlug,
   isShareWordIndex,
+  shareHref,
+  CLAIM_PATH,
   SHARE_CLAIM_COOKIE,
   SHARE_CLAIM_COOKIE_OPTIONS,
 } from '@/lib/share/policy'
@@ -13,18 +15,27 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
- * **F16 ships this as a stub. F17 replaces its body, not its URL.**
+ * **F16 shipped this as a stub; F17 kept its body and repointed it.**
  *
- * What F16 owes F17 is the seam, and the seam is three things: a path the button
+ * What F16 owed F17 was the seam, and the seam is three things: a path the button
  * can point at that never 404s, a cookie whose shape is already frozen, and an
  * exemption in `src/middleware.ts` — the visitor here has no session, which is
  * the entire point.
  *
- * What it does today: validate the slug, confirm the share still resolves, set
- * the signed `dw_claim` cookie, and send the visitor to `/signin`. **It performs
- * no write and claims nothing** — F17 owns everything after the OAuth round
- * trip, and until it lands the cookie simply expires unused, because
- * `signInWithGoogle` still targets `/today`.
+ * What it does: validate the slug, confirm the share still resolves, set the
+ * signed `dw_claim` cookie, and send the visitor to `/claim`. **It performs no
+ * write and claims nothing.** The claim itself is a server action reached from
+ * `/claim`, after the OAuth round trip.
+ *
+ * **This is also where F17 D2 landed differently from its own plan, and on
+ * purpose.** F17 designed the cookie to be set by a server action on the public
+ * page, immediately before `signIn()`, and flagged that as the single riskiest
+ * unverified assumption in the plan (its R1) — the fallback it named was "set the
+ * cookie from a plain route handler, then redirect", which is exactly what F16
+ * had already built here. So the risk is not taken: a `Set-Cookie` on a 307 from a
+ * route handler is not a thing that can silently fail. `startShareClaim` still
+ * exists and still calls `signIn` with the frozen literal; it just no longer has
+ * to carry a cookie across a redirect it does not control.
  *
  * The cookie's shape is F17's `dw_claim` rather than F16 §5's own
  * `dw_share_intent`, on the brief's ruling [C1]: signed, so a hand-forged cookie
@@ -47,16 +58,25 @@ export async function GET(
 ): Promise<Response> {
   const { slug } = await params
 
-  // A slug that is not one never reaches the database, and it never reaches the
-  // cookie either: `decodeClaimIntent` would reject it on the way back out, so
-  // minting it would only produce a claim that silently does nothing.
-  if (!isShareSlug(slug)) return NextResponse.redirect(new URL('/signin', req.url))
+  /**
+   * A slug that is not one never reaches the database, and it never reaches the
+   * cookie either: `decodeClaimIntent` would reject it on the way back out, so
+   * minting it would only produce a claim that silently does nothing.
+   *
+   * `/claim` with no cookie says "nothing to add here", which is exactly true.
+   * The redirect target is a literal — the rejected slug is not interpolated into
+   * anything, here or anywhere else.
+   */
+  if (!isShareSlug(slug)) return NextResponse.redirect(new URL(CLAIM_PATH, req.url))
 
-  // Revoked between the render and the tap. Nothing to aim a claim at, so the
-  // visitor is sent to sign-in without a cookie rather than through an OAuth hop
-  // that ends in a shrug.
+  /**
+   * Revoked between the render and the tap. The visitor goes back to the share
+   * page, which is where the honest sentence for a link that is not available
+   * already lives — and which says the same thing for a revoked slug and a slug
+   * that never existed. No cookie is set, so no OAuth hop is spent on a shrug.
+   */
   const share = await getShareBySlug(slug)
-  if (!share) return NextResponse.redirect(new URL('/signin', req.url))
+  if (!share) return NextResponse.redirect(new URL(shareHref(slug), req.url))
 
   /**
    * `tz` and `w` are read from the query string, validated, and discarded when
@@ -81,7 +101,7 @@ export async function GET(
     tz: query.get('tz'),
   }
 
-  const res = NextResponse.redirect(new URL('/signin', req.url))
+  const res = NextResponse.redirect(new URL(CLAIM_PATH, req.url))
   res.cookies.set(SHARE_CLAIM_COOKIE, encodeClaimIntent(intent, env.AUTH_SECRET), {
     ...SHARE_CLAIM_COOKIE_OPTIONS,
     secure: process.env.NODE_ENV === 'production',

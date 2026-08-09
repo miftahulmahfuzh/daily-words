@@ -115,6 +115,49 @@ export function isPublicSharePath(pathname: string): boolean {
   return parts.length === 3 || parts[3] === 'claim'
 }
 
+/* ---------------------------- The claim interstitial ------------------------- */
+
+/**
+ * `/claim` — where the visitor lands after the OAuth round trip, and the only
+ * screen that performs the claim.
+ *
+ * **A frozen literal with nothing concatenated onto it, ever.** It is what
+ * `signIn('google', { redirectTo: CLAIM_PATH })` is handed, and the classic
+ * version of this feature puts the share in a `?next=` on that call — which is
+ * an open redirect wearing a feature's clothes. Auth.js's default `redirect`
+ * callback would validate it, but its relative-URL branch (`startsWith('/')`)
+ * accepts `//evil.com` and `/\evil.com`, and browsers normalise `\` to `/` in
+ * the authority position. F17 D2 removes the class structurally instead: the
+ * payload rides in the signed `dw_claim` cookie, and no user-derived string is
+ * concatenated into a redirect target anywhere in the feature.
+ *
+ * It lives here, beside `shareHref`, because the middleware needs it (`/claim`
+ * is reached by a visitor who may not have signed in yet) and this is the module
+ * the Edge runtime can import.
+ */
+export const CLAIM_PATH = '/claim'
+
+/**
+ * The middleware's second exemption, and **exact-match on purpose**.
+ *
+ * `startsWith(CLAIM_PATH)` would exempt `/claims`, `/claim-anything` and every
+ * future route beginning with those five letters — the same prefix-matching
+ * mistake `isPublicSharePath`'s comment warns about for `/s`. There is exactly
+ * one page under this path and it decides for itself what to show a visitor with
+ * no session: the sign-in CTA. Nothing privileged is read without
+ * `getSessionUser()`, and the claim write itself is behind `requireUser()` in a
+ * server action, so exempting the *render* costs nothing.
+ *
+ * Why it needs exempting at all: a stranger arrives here with the intent cookie
+ * and no session. Bounced to `/signin`, they would sign in against
+ * `signInWithGoogle`'s hardcoded `redirectTo: '/today'`, land in `/onboarding`,
+ * and the intent would expire unread — the failure is silent and looks like
+ * "the claim just doesn't happen".
+ */
+export function isClaimPath(pathname: string): boolean {
+  return pathname === CLAIM_PATH || pathname === `${CLAIM_PATH}/`
+}
+
 /* --------------------------------- Payload --------------------------------- */
 
 /**

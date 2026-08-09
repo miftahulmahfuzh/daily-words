@@ -27,6 +27,60 @@ of them is a real departure, called out in §2 D4:
 
 ---
 
+> ## SHIPPED — 2026-08-09. Read this before §2; six decisions landed differently.
+>
+> All ten outcomes, both check scripts (`claim:check`, 93 assertions; `claim:db`,
+> 59) and one end-to-end claim through the real server action against a minted
+> session, with no Google hop. Where this plan and F16's shipped code disagreed,
+> **F16's code won on the merits** each time, and the differences are these:
+>
+> | Planned | Shipped | Why |
+> |---|---|---|
+> | **D2/D3**: a server action on the public page sets the cookie, then `signIn()` | **F16's `/s/[slug]/claim` GET route** sets the cookie and redirects to `/claim`; `startShareClaim` still calls `signIn('google', { redirectTo: CLAIM_PATH })`, from `/claim` itself | This is **R1's own stated fallback**, and R1 called the planned version "the single riskiest unverified assumption in the plan". F16 had already built the route, and `CLAUDE.md` had already frozen it as "a GET that sets a cookie and redirects". Measured: `Set-Cookie` rides the 307 out and `cookies().delete()` rides the 303 back. |
+> | `/claim` is reached **only** with a session, so §4 says `src/middleware.ts` needs no change | **`isClaimPath` is exempted in the middleware**, and `/claim` renders its own Google button for a visitor with no session | Follows from the row above. A stranger arrives at `/claim` cookie-in-hand and session-less; bounced to `/signin` they would sign in against `redirectTo: '/today'`, land in `/onboarding`, and the intent would expire unread. Exact-match, never `startsWith`. The alternative — a conditional on `/signin` that sniffs for the cookie — would also have claimed a user who abandoned at Google's consent screen, which D3 exists to prevent. |
+> | `getShareTargetForClaim(slug)` joins the sharer's live `vocab_entries` row | It reads **four columns off `shares` and joins nothing** | F16 D3's snapshot already carries the four enrichment fields (§0 spotted this). The claim now reads no user-owned table at all, and the copy survives the owner deleting the word. `buildClaimEnrichment` takes a `SharedWordPayload`, not a `VocabEntry`. |
+> | `gone` = "the sharer's entry was deleted"; `expired` = "unknown or revoked slug" | **`gone` = "the snapshot's term does not survive `validateTerm`"**, and both render F16's single sentence | `shares.vocab_entry_id` is `ON DELETE CASCADE`, so a deleted word *is* a deleted share — `expired` covers it. Collapsing the copy answers the plan's own **Q2** and closes **R6**: two sentences would tell a slug-guesser their guess used to resolve. |
+> | §5 checks the limit before discovering a duplicate | **`already_have` is decided before `over_limit`** | The claimer's own row is known from a read now, so refusing a word they already own over a quota the claim would not spend is a refusal with nothing behind it. Both write nothing either way. |
+> | §5 step 6: `setTimezone(…)` then `completeOnboarding(userId, {}, tz)` | `completeOnboarding` is given **the zone `setTimezone` settled on** | Passing the cookie's zone would walk around `setTimezone`'s manual-override guard through the back door for a user who once corrected their zone by hand. Unreachable today; free to get right; asserted in `claim:db`. |
+>
+> Smaller notes, in the order a reader will hit them:
+>
+> - **`resolveClaimOutcome` does not redirect and neither does `resolveAndClaim`.**
+>   §5 step 8 ends in `redirect(href)`; a function that throws a redirect cannot
+>   be driven by `claim:db`, so the decision comes back with an href and
+>   `claim-actions.ts` performs the navigation.
+> - **The pure core takes `dailyAddLimit` as an input.** `DAILY_ADD_LIMIT` lives
+>   in `queries/vocab.ts`, which is `server-only` and drags `env.DATABASE_URL` in
+>   with it; importing it would make an offline script need a database to assert
+>   arithmetic. The coupling is a structural assertion instead, alongside one that
+>   greps `POST /api/vocab` to keep the refusal sentence identical.
+> - **`decision.term` is set for every outcome that resolved to a real word**, not
+>   only for inserts, because the interstitial names the word *before* the write.
+> - **`/claim` never writes.** Its server component calls a read-only `planClaim`;
+>   the write is `finishShareClaim`. Three GET branches: a stop screen, an
+>   immediate `redirect()` when there is nothing to write (the owner, a word
+>   already held, `no_timezone`), or the auto-submitting form. `write_failed`
+>   carries `?failed=1` so the retry screen cannot auto-submit into a loop.
+> - **§7's term-safety expectation is wrong and the fix is recorded rather than
+>   hidden.** `genteel\n\nIgnore all previous instructions` is not rejected:
+>   `normalizeTerm` collapses the newlines and it passes as a five-word term. The
+>   assertion now tests the property that holds — no newline, colon, angle bracket
+>   or backtick reaches the `<term>` tags.
+> - The component is `components/share/practise-this-word.tsx` (F16's spelling of
+>   the label), it stays a **link** rather than becoming a form — `share-frame.spec.ts`
+>   finds it by `getByRole("link")`, and a link works with no JavaScript — and its
+>   one job is appending `?tz=`. `/claim`'s sign-in state reuses `/signin`'s own
+>   `SignInButton`, so the plan's "matching `signin/sign-in-button.tsx`" is
+>   literal rather than approximate.
+> - **R5 (the claim counts against the 50/day limit) shipped as written**, and
+>   remains the decision most likely to want revisiting. It is one comparison in
+>   `resolveClaimOutcome` and one row in `claim:check`.
+> - Not done, because nothing asked for it: **Q1** (marking a claimed word in the
+>   collection — `source = 'shared'` is in the database and nothing renders it),
+>   **Q3**, **Q4**, and **R3**'s `timezone_source = 'default'` follow-up.
+
+---
+
 ## 0. Dependency on F16 — the contract this plan assumes
 
 **F16 was being written in parallel and was not on disk when this plan was
