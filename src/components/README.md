@@ -330,18 +330,41 @@ nothing failing anywhere.
 **If you add a `--text-*` token whose name is not a t-shirt size, add it to the
 `font-size` group in `src/lib/ui/cn.ts`.** Same for `--tracking-*`.
 
-## The badge asset contract (F12)
+## The badge and level asset contract (F12, F22)
 
-Badges are the one place this kit draws a raster. Everything else on screen is a
-rule, a dot or a word ([R18]), and badge medals are the deliberate exception:
-fourteen engraved letterpress seals, generated offline by `/generate-badge-art`.
+Generated art is the one place this kit draws a raster. Everything else on screen
+is a rule, a dot or a word ([R18]), and these are the deliberate exception:
+**two decks from one offline pipeline**, both engraved letterpress on the same
+cream stock in the same two inks.
 
-**Two sizes ship, and a component must draw at or below them:**
+- **Badges** — fourteen circular **seals**, one per `BADGE_CATALOG` key,
+  contracted by `style.md`.
+- **Levels** — seventeen rectangular **panels**, one per band in `STREAK_LEVELS`
+  and `COLLECTOR_LEVELS`, contracted by `levels.md` and generated with
+  `--kind level`.
+
+**The two forms are the design, not drift** (F22 D3). A badge is an award
+*stamped* on a day that happened; a level is the grade *printed* on the card.
+They sit on one screen, so art that could not tell them apart would make the
+picture beside "Keeper of the Pocket" read as a fifteenth badge, and no caption
+fixes a picture that says the wrong thing. Same press, same paper, same green.
+
+**Four sizes ship, and a component must draw at or below them:**
 
 | Field | Intrinsic | Draw at | Where |
 |---|---|---|---|
 | `BADGE_ART[key].src` | 768×768 | **the hero band's height** — 185px at 375, 190px at the 340px dialog cap; ~220 remains the ceiling | the badge modal (F13, F21) |
 | `BADGE_ART[key].small` | 192×192 | **~40 css px** | the shelf mark on `/profile` |
+| `LEVEL_ART[key].src` | 768×768 | the same hero band, the same component | the level arm of the same modal (F22) |
+| `LEVEL_ART[key].small` | 192×192 | **56 css px**, a constant | the level mark on `/profile` |
+
+**`LevelMark` has no unearned state, by construction** (F22 D5). `BadgeMedal`
+takes `earned` because the shelf deliberately draws every unearned badge at
+`opacity-40`; `LevelMark` takes no such prop because the key it draws came out of
+`levelArtKey(kind, level.index)`, and a tier the user does not hold has no index
+to produce one. `/profile` has never listed the tiers and this does not start.
+`.dw-level-mark` is a flat 56px rather than a `dvh` clamp, because it lives in a
+`ScreenBody` that scrolls rather than in a dialog competing for a fixed budget.
 
 **~220 is a ceiling, and `BadgeMedal` draws it as `min(220px, 25dvh)`.** Measured:
 at 375×667 a flat 220 pushes the longest gloss in `badge-meta.ts` 38px past the
@@ -357,10 +380,13 @@ fixed `16 / 9` ratio and from nothing else — 185.06px at 375, 154.06 at 320,
 twice and make the plate margins a different width on every phone. `BadgeMedal`
 is unchanged and still the right component for a sized square medal.
 
-Import them from `src/lib/gamification/badge-art.ts` — a **generated** file, never
-edited by hand — together with `BADGE_ART_SIZE` and `BADGE_ART_SMALL_SIZE` so a
-component never restates the numbers. It is plain data with no `import
-"server-only"`, so a client component may import it.
+Import them from `src/lib/gamification/badge-art.ts` and
+`src/lib/gamification/level-art.ts` — **generated** files, never edited by hand —
+together with `BADGE_ART_SIZE` / `BADGE_ART_SMALL_SIZE` and `LEVEL_ART_SIZE` /
+`LEVEL_ART_SMALL_SIZE`, so a component never restates the numbers. Both are plain
+data with no `import "server-only"`, so a client component may import either.
+Both are **total** `Record`s, which is what makes a key with no art a
+`npm run typecheck` error rather than a missing picture.
 
 Five properties the art already guarantees, so no component should re-implement
 them:
@@ -380,18 +406,25 @@ them:
   need padding, and a `--r-card` radius clips only that margin.
 - **Filenames are content-hashed** and served `immutable` for a year. Never add a
   cache-busting query string; regenerating a badge changes the filename.
-- **Each master carries its plate colour as data.** `BADGE_ART[key].plate` is the
-  art's own paper as `#rrggbb`, the mean of the master's outer 5% frame —
-  generated, and recomputed from the master by `npm run badges:check` exactly as
-  `sha256` is, because it is a property of the master's bytes rather than an
-  editorial choice. The deck spans `#eae6d7`…`#f1ede1`, so a single constant
-  would seam; and `tools/check_badge_art.py` check 3 holds the four edge strips
-  to an inter-strip spread of 4.0 luminance points, which is what licenses a flat
-  fill sitting beside the art with no visible step.
+- **Each master carries its plate colour as data.** `BADGE_ART[key].plate` and
+  `LEVEL_ART[key].plate` are the art's own paper as `#rrggbb`, the mean of the
+  master's outer 5% frame — generated, and recomputed from the master by
+  `npm run badges:check` exactly as `sha256` is, because it is a property of the
+  master's bytes rather than an editorial choice. The badge deck spans
+  `#eae6d7`…`#f1ede1` and the level deck `#ede6ca`…`#f5efd3`, so a single
+  constant would seam on both; and `tools/check_badge_art.py` check 3 holds the
+  four edge strips to an inter-strip spread of 4.0 luminance points, which is
+  what licenses a flat fill sitting beside the art with no visible step.
+- **Both decks live under their own directory**, `public/badges/` and
+  `public/levels/`, and that is not tidiness. The orphan sweeps in
+  `tools/make_badge_assets.py` and in `badges:check` each compute "expected
+  filenames" from *one* key set; a shared directory makes both correct only
+  against the union, which is how a stale file survives a regeneration
+  unnoticed.
 
-Titles are drawn by the app, never by the picture — the style contract forbids
-lettering inside the seal, which is why a badge needs its title beside it to name
-the occasion.
+Titles are drawn by the app, never by the picture — both style contracts forbid
+lettering inside the frame, which is why a badge or a level needs its title
+beside it to name the occasion.
 
 ## Checking your work
 
