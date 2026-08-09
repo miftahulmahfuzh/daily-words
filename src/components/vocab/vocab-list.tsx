@@ -1,25 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListRow } from "@/components/ui/list-row";
 import { Eyebrow, Meta } from "@/components/ui/text";
-import { listEntries } from "@/lib/vocab/client";
 import { groupByLetter, listGloss } from "@/lib/vocab/format";
-import { vocabDetailHref, vocabListHref } from "@/lib/vocab/links";
+import { vocabDetailHref } from "@/lib/vocab/links";
 import type { VocabListItem } from "@/lib/vocab/schemas";
 
 /**
- * The collection, A–Z, in pages.
+ * The collection, A–Z, in pages. Presentational: it draws exactly the rows it is
+ * given and asks its parent for more.
  *
- * Page 1 arrives as a prop from the server render, so the first paint carries
- * fifty real rows and no fetch. Everything after it is appended from
- * `GET /api/vocab` as the user reaches the bottom.
+ * Page 1 arrives from the server render inside `MineClient`'s props, so the
+ * first paint carries real rows and no fetch. What "more" means is the parent's
+ * business and differs by mode — a wider slice of an array the browser already
+ * holds, or another `GET /api/vocab` page — and keeping that decision out of
+ * here is what let the search stop being a navigation.
  *
- * The parent re-keys this component on the search term, which is what resets
- * the accumulated pages when the query changes — cheaper and harder to get
- * wrong than reconciling a cursor against a filter that moved underneath it.
+ * **Never sorts.** The rows arrive in the database's `lower(term)` order and
+ * `groupByLetter` requires it; re-sorting here would silently disagree with the
+ * cursor's ordering and make the seam between two server pages wrong.
  *
  * No virtualisation library, and no `content-visibility` either. F4 §7.1 called
  * for `content-visibility: auto; contain-intrinsic-size: 0 64px` on every row,
@@ -31,60 +33,49 @@ import type { VocabListItem } from "@/lib/vocab/schemas";
  * scale the list is fast without it.
  */
 export function VocabList({
-  initialItems,
-  initialCursor,
+  items,
   q,
   total,
+  matchCount,
+  onMore,
+  onClear,
+  problem,
 }: {
-  initialItems: VocabListItem[];
-  initialCursor: string | null;
+  /** Exactly the rows to draw, in the database's order. */
+  items: VocabListItem[];
   /** The active search, or "". Drives which empty state is right. */
   q: string;
   /** Size of the whole collection, ignoring the search. */
   total: number;
+  /** How many rows match `q` in all. `items.length` is only what is drawn. */
+  matchCount: number;
+  /** Null when there is nothing further to show. */
+  onMore: (() => void) | null;
+  onClear: () => void;
+  /** A failed fetch, in server mode. Null in local mode, which cannot fail. */
+  problem: string | null;
 }) {
-  const [items, setItems] = useState(initialItems);
-  const [cursor, setCursor] = useState(initialCursor);
-  const [problem, setProblem] = useState<string | null>(null);
   const sentinel = useRef<HTMLDivElement>(null);
-  /** A ref, not state: the observer fires again before a re-render lands. */
-  const busy = useRef(false);
-
-  const loadMore = useCallback(async () => {
-    if (busy.current || !cursor) return;
-    busy.current = true;
-    setProblem(null);
-
-    const result = await listEntries({ q: q || undefined, cursor });
-    busy.current = false;
-
-    if (!result.ok) {
-      // Stop auto-loading and leave the button. Retrying a failing fetch every
-      // time the sentinel re-enters the viewport is a scroll-driven spin.
-      setProblem(result.message);
-      return;
-    }
-
-    setItems((prev) => [...prev, ...result.data.items]);
-    setCursor(result.data.nextCursor);
-  }, [cursor, q]);
 
   useEffect(() => {
     const node = sentinel.current;
-    if (!node || !cursor || problem) return;
+    if (!node || !onMore || problem) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) void loadMore();
+      if (entries.some((e) => e.isIntersecting)) onMore();
     });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [cursor, problem, loadMore]);
+  }, [onMore, problem]);
 
   if (items.length === 0) {
     return q ? (
       <EmptyState
         title="Nothing matches"
         body={`No word or meaning contains “${q}”.`}
-        action={{ label: "Clear search", href: vocabListHref() }}
+        /* A callback, not a link to /vocab: in local mode a navigation here
+           would be a server round trip to clear a text field, on the one control
+           that exists to recover from a bad search. */
+        action={{ label: "Clear search", onClick: onClear }}
       />
     ) : (
       <EmptyState
@@ -125,17 +116,17 @@ export function VocabList({
 
       {q && (
         <Meta className="py-3">
-          {items.length} {items.length === 1 ? "match" : "matches"} of {total}
+          {matchCount} {matchCount === 1 ? "match" : "matches"} of {total}
         </Meta>
       )}
 
-      {cursor && (
+      {onMore && (
         <div ref={sentinel} className="flex flex-col items-center gap-2 py-4">
           {/* The button is not a fallback for slow networks — it is the whole
               affordance when IntersectionObserver never fires, which is the
               case in reduced-capability browsers and in a screen reader's
               virtual cursor. */}
-          <Button size="sm" fullWidth={false} onClick={() => void loadMore()}>
+          <Button size="sm" fullWidth={false} onClick={onMore}>
             Load more
           </Button>
           {problem && <Meta className="text-red">{problem}</Meta>}
