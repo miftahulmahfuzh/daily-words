@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { BadgeDialog, type BadgeSelection } from "@/components/gamification/badge-dialog";
 import { BadgeRow } from "@/components/ui/badge-row";
 import { Eyebrow } from "@/components/ui/text";
 import { BADGE_CATALOG } from "@/lib/gamification/badges";
 import type { EarnedBadge } from "@/lib/gamification/schemas";
+import { badgeSelection } from "./panel-selection";
+import { useOpenPanel } from "./profile-panels";
 
 /**
  * The shelf: what has been earned, then what is still out there.
@@ -41,38 +41,17 @@ import type { EarnedBadge } from "@/lib/gamification/schemas";
  * payload on every request instead of into one cacheable chunk. `EarnedBadge` is
  * imported as a **type** — a value import of `earnedBadgeSchema` here is the
  * 73 kB mistake CLAUDE.md documents.
+ *
+ * **F22 moved the dialog out of here** and up into `ProfilePanels`, because the
+ * level rows open the same panel and two instances would have put two
+ * `<dialog>` elements on the page. The argument is the one this file already
+ * made one level down — one dialog, its content driven by the selection — and
+ * it is now made one level up as well.
  */
-export function BadgeShelf({
-  badges,
-  initialBadgeKey,
-}: {
-  badges: EarnedBadge[];
-  /** /kitchen-sink only: opens one badge on load so the panel is reviewable. */
-  initialBadgeKey?: string;
-}) {
+export function BadgeShelf({ badges }: { badges: EarnedBadge[] }) {
   const earnedByKey = new Map(badges.map((b) => [b.key, b]));
   const unearned = BADGE_CATALOG.filter((b) => !earnedByKey.has(b.key));
-
-  const select = (key: string): BadgeSelection | null => {
-    const entry = BADGE_CATALOG.find((b) => b.key === key);
-    if (!entry) return null;
-    const earned = earnedByKey.get(entry.key);
-    return {
-      key: entry.key,
-      title: entry.title,
-      earned: earned
-        ? {
-            count: earned.count,
-            firstAwardedOn: earned.firstAwardedOn,
-            lastAwardedOn: earned.lastAwardedOn,
-          }
-        : null,
-    };
-  };
-
-  const [selection, setSelection] = useState<BadgeSelection | null>(() =>
-    initialBadgeKey ? select(initialBadgeKey) : null,
-  );
+  const open = useOpenPanel();
 
   return (
     <>
@@ -91,7 +70,7 @@ export function BadgeShelf({
               aria-label={`${badge.title}, earned ${badge.count} ${
                 badge.count === 1 ? "time" : "times"
               }`}
-              onClick={() => setSelection(select(badge.key))}
+              onClick={() => open(badgeSelection(badges, badge.key))}
             >
               <BadgeRow label={badge.title} count={badge.count} />
             </button>
@@ -103,19 +82,13 @@ export function BadgeShelf({
               type="button"
               className="w-full text-left"
               aria-label={`${badge.title}, not yet earned`}
-              onClick={() => setSelection(select(badge.key))}
+              onClick={() => open(badgeSelection(badges, badge.key))}
             >
               <BadgeRow label={badge.title} />
             </button>
           </li>
         ))}
       </ul>
-
-      {/* One dialog instance, its content driven by the selected key — not
-          fourteen, one per badge. Fourteen would put fourteen <img> elements in
-          /profile's DOM whose fetch behaviour under `display: none` differs by
-          engine. */}
-      <BadgeDialog selection={selection} onClose={() => setSelection(null)} />
     </>
   );
 }

@@ -112,7 +112,23 @@ export const config = {
      * F16–F18 serve public share pages to strangers with no session at all, and
      * a medal that redirects to a sign-in page is the same mistake as putting a
      * public route inside the `(app)` group, one layer down.
+     *
+     * `levels` joined it with F22, on the same terms and for the same class of
+     * failure. Two honest notes about it:
+     *
+     *  - **It is not load-bearing today.** No signed-out page draws level art;
+     *    /profile is inside the `(app)` group. It is added now because the
+     *    failure is invisible on the day it becomes load-bearing, and F18 found
+     *    the identical class of bug in `isPublicSharePath`, where every row of a
+     *    shared card bounced a stranger to /signin while rendering perfectly for
+     *    the signed-in author.
+     *  - **This alternation is PREFIX-matched.** `badges` and `levels` here also
+     *    exempt any future route whose path merely begins with those letters —
+     *    the same latent hazard `icons` already carries, and the reason CLAUDE.md
+     *    forbids moving the share exemption into this lookahead. It is not left
+     *    to memory: `npm run badges:check` §12 fails if any directory under
+     *    `src/app` starts with either word.
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|badges|icons|manifest.webmanifest|apple-icon|icon).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|badges|levels|icons|manifest.webmanifest|apple-icon|icon).*)',
   ],
 }

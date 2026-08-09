@@ -27,10 +27,13 @@ import {
   type BadgeKey,
 } from '../src/lib/gamification/badges'
 import { BADGE_META, badgeMeta } from '../src/lib/gamification/badge-meta'
+import { LEVEL_GLOSS } from '../src/lib/gamification/level-meta'
 import {
   COLLECTOR_LEVELS,
   STREAK_LEVELS,
+  levelArtKey,
   levelCaption,
+  levelCondition,
   resolveCollectorLevel,
   resolveStreakLevel,
 } from '../src/lib/gamification/levels'
@@ -184,6 +187,68 @@ check('longest 900 → still the top band', resolveStreakLevel(900).title, 'Dick
 check('words 24 → 1 more word', levelCaption(resolveCollectorLevel(24)!, 'collector'), '1 more word → Shelf of Odds')
 check('words 1 → 9 more words', levelCaption(resolveCollectorLevel(1)!, 'collector'), '9 more words → Jam Jar of Words')
 check('words 1000 → top band', resolveCollectorLevel(1000)?.progress, 1)
+
+/* ------------------- §F22 — the level tier keys and conditions --------------- */
+
+section('§F22 level tier keys — the identity F22 art filenames carry')
+
+/**
+ * A level has no `badges_awarded` row, so its key was invented (F22 D2) and is
+ * load-bearing in exactly one place a type cannot see: the filename under
+ * `public/levels/`, served `immutable` for a year. `npm run badges:check` owns
+ * the disk; this owns the tables.
+ */
+{
+  const allKeys = [...STREAK_LEVELS, ...COLLECTOR_LEVELS].map((b) => b.key)
+  check('seventeen tiers', allKeys.length, 17)
+  check('every key is unique', new Set(allKeys).size, allKeys.length)
+  check(
+    'every key is snake_case and names its kind',
+    allKeys.filter((k) => !/^(streak|collector)_[a-z0-9_]+$/.test(k)),
+    [],
+  )
+  check(
+    'streak keys all carry the streak prefix',
+    STREAK_LEVELS.filter((b) => !b.key.startsWith('streak_')).length,
+    0,
+  )
+  check(
+    'collector keys all carry the collector prefix',
+    COLLECTOR_LEVELS.filter((b) => !b.key.startsWith('collector_')).length,
+    0,
+  )
+
+  // The round trip the profile page depends on: the index `resolve()` returns
+  // selects the art for the band it resolved, and nothing else. A positional key
+  // would pass every assertion above and fail this one the moment a band moved.
+  check(
+    'levelArtKey round-trips every streak band',
+    STREAK_LEVELS.map((b) => levelArtKey('streak', resolveStreakLevel(b.min).index)),
+    STREAK_LEVELS.map((b) => b.key),
+  )
+  check(
+    'levelArtKey round-trips every collector band',
+    COLLECTOR_LEVELS.map((b) => levelArtKey('collector', resolveCollectorLevel(b.min)!.index)),
+    COLLECTOR_LEVELS.map((b) => b.key),
+  )
+  check('an out-of-range index draws nothing rather than throwing', levelArtKey('streak', 99), null)
+
+  check(
+    'the condition names the band’s own threshold',
+    [
+      levelCondition('streak', 0),
+      levelCondition('streak', 4),
+      levelCondition('collector', 0),
+      levelCondition('collector', 7),
+    ],
+    [
+      'Held until a streak reaches 3 days.',
+      'A longest streak of 30 days.',
+      '1 word added by hand.',
+      '1000 words added by hand.',
+    ],
+  )
+}
 
 /* ------------------------------ §8 — the badges ----------------------------- */
 
@@ -454,6 +519,13 @@ section('§14 the tone check — no loss aversion anywhere in this feature')
     ...STREAK_LEVELS.map((l) => l.title),
     ...COLLECTOR_LEVELS.map((l) => l.title),
     ...meta,
+    // F22's seventeen glosses and seventeen conditions ride the SAME list
+    // rather than a second one. The register is the feature's, not the badge
+    // deck's, and a level gloss is written in exactly the place a
+    // congratulation would arrive disguised as copy.
+    ...Object.values(LEVEL_GLOSS),
+    ...STREAK_LEVELS.map((_, i) => levelCondition('streak', i)),
+    ...COLLECTOR_LEVELS.map((_, i) => levelCondition('collector', i)),
   ]
   check('no nagging phrases', copy.filter((c) => banned.some((b) => b.test(c))), [])
   check('no exclamation marks', copy.filter((c) => c.includes('!')), [])
@@ -470,6 +542,17 @@ section('§14 the tone check — no loss aversion anywhere in this feature')
   // straight quote beside a typographic one in the same serif reads as a typo.
   // This would have caught "Sauron's Favourite" as first typed.
   check('no straight apostrophes', copy.filter((c) => c.includes("'")), [])
+
+  // The same cap `badge-meta.ts`'s gloss carries, for the same reason: past it
+  // the dialog reaches for its scrolling escape hatch on a 375×667 screen,
+  // which is the documented degradation rather than the intended state.
+  check(
+    'every level gloss is ≤ 320 characters',
+    Object.entries(LEVEL_GLOSS)
+      .filter(([, g]) => g.length > 320)
+      .map(([k, g]) => `${k} (${g.length})`),
+    [],
+  )
 }
 
 console.log(

@@ -54,8 +54,8 @@ npm run share:check                      # F16+F18: slug entropy, three DTO allo
 npm run share:db                         # F16+F18: CHECK constraint, anonymous read, cascade, card positions, revoke-on-edit, F15's dedup scope; -- --keep leaves three live links
 npm run claim:check                      # F17's ten outcomes, every href, the enrichment copy and term safety, offline
 npm run claim:db                         # F17's single INSERT, the five nulls, the owner no-op and the 23505 race
-npm run badges:check                     # F12's badge-art manifest, files, hashes and key scan, offline
-npm run stats:check                      # F9's streaks, levels, badges and reveal queue, offline
+npm run badges:check                     # F12's badge-art and F22's level-art manifests, files, hashes and key scan, offline
+npm run stats:check                      # F9's streaks, levels, badges and reveal queue, plus F22's tier keys, offline
 npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
 npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay badges
 ```
@@ -121,7 +121,7 @@ curl -si -H "Cookie: dw_claim=<the value>" http://localhost:3200/claim   # 200 +
 curl -si http://localhost:3200/claim                                 # 200 "Nothing to add here", never 307
 ```
 
-## Badge art and `OPENAI_API_KEY`
+## Badge and level art, and `OPENAI_API_KEY`
 
 Badge medals are raster art generated offline by the `/generate-badge-art` skill
 (`.claude/skills/generate-badge-art/`). The style contract and the fourteen scene
@@ -129,19 +129,44 @@ lines live in that skill's `style.md`, which `tools/gen_badge_art.py` **parses**
 the `<!-- STYLE BLOCK vN -->` and `<!-- SCENES -->` markers are an interface, and
 a marker only counts when it is alone on its own line.
 
+**F22 added a second deck from the same pipeline**: seventeen level
+illustrations, one per band in `STREAK_LEVELS` and `COLLECTOR_LEVELS`. Its
+contract is `levels.md` in the same skill directory, parsed the same way by the
+same two regexes, and **`--kind level` is what selects it** — the flag picks the
+whole tuple of contract file, parity source, master directory and subject label,
+and nothing else in the generator knows which deck it is running. The badge deck
+is circular **seals**; the level deck is rectangular **panels**, and the two
+version markers are independent series that happen to both read `v1`.
+
 ```bash
 python3 tools/gen_badge_art.py --dry-run --all      # assemble every prompt; no key, no network, no file
+python3 tools/gen_badge_art.py --dry-run --all --kind level   # the same, for the level deck
 python3 tools/gen_badge_art.py <key> --reference assets/badges/_anchor.png
+python3 tools/gen_badge_art.py <key> --kind level --reference assets/levels/_anchor.png
 python3 tools/check_badge_art.py <candidate.png>    # 9 measurements + the 3 crops to look at
-python3 tools/make_badge_assets.py                  # promote masters → public/badges/** + the manifest
+python3 tools/check_badge_art.py <candidate.png> --anchor assets/levels/_anchor.png
+python3 tools/make_badge_assets.py                  # promote BOTH decks → public/** + both manifests
 ```
+
+**Read the prompts before generating.** `--dry-run --all --kind level` costs
+nothing and is the last free moment: it is what caught a scene line hanging keys
+on "a ring" while the style block three paragraphs above said *no ring anywhere
+in this image*, which the model would have resolved arbitrarily.
+
+**Aim a new deck's anchor high on paper luminance.** The `/v1/images/edits`
+endpoint drifts the paper 2–5 points darker than its reference, and no prompt
+holds it — measured, and it cost four regenerations. `levels.md` records the
+distribution.
 
 **`OPENAI_API_KEY` is a different key from `LLM_API_KEY`.** The app's model access
 is GLM via z.ai; this is OpenAI's image API, a different provider and a different
 bill. It lives in `.env.local` and is read by `tools/gen_badge_art.py` **and by
 nothing else** — `src/lib/env.ts` has no entry, and `grep OPENAI_API_KEY src/`
 must stay empty. `npm run badges:check` asserts that emptiness, so the rule is
-checked rather than remembered.
+checked rather than remembered. **One key for both decks**: F22 added seventeen
+images, no runtime model call, no environment variable and no entry anywhere, and
+its three new files under `src/` are covered by that scan for free because it
+walks the tree rather than a list.
 
 **It is also a different key from `EMBEDDING_API_KEY`**, which F15 reads at
 runtime for journal dedup and which is a *separate OpenAI project* key
@@ -157,16 +182,28 @@ Three things drift-proof the deck, each by a different mechanism:
 
 | Drift | Caught by |
 |---|---|
-| A badge key with no art | `npm run typecheck` — `BADGE_ART` is a total `Record<BadgeKey, BadgeArt>`, never `Partial<>` |
-| Art with no badge key, a stale hash, a lost style version | `npm run badges:check` |
-| A scene line with no key, or a key with no scene line | `gen_badge_art.py` refuses to start |
+| A badge key **or a level tier** with no art | `npm run typecheck` — `BADGE_ART` and `LEVEL_ART` are total `Record`s, never `Partial<>` |
+| Art with no badge key **or no level tier**, a stale hash, a lost style version | `npm run badges:check` |
+| A scene line with no key, or a key with no scene line | `gen_badge_art.py` refuses to start, **against `badges.ts` or `levels.ts` depending on `--kind`** |
 
-`public/badges/*` filenames carry the first 8 hex of the master's SHA-256. That is
-the **only** reason `next.config.ts` may serve them `immutable` for a year:
-regenerating a badge changes the bytes, the hash and the filename, so every cache
-misses correctly. Do not extend that header to a path whose names are not
-content-hashed. `src/middleware.ts` excludes `badges` from the auth matcher —
-badge art is committed art, not user data, and F16–F18 serve it to strangers.
+`public/badges/*` and `public/levels/*` filenames carry the first 8 hex of the
+master's SHA-256. That is the **only** reason `next.config.ts` may serve them
+`immutable` for a year: regenerating an image changes the bytes, the hash and the
+filename, so every cache misses correctly. Do not extend that header to a path
+whose names are not content-hashed. `src/middleware.ts` excludes `badges` and
+`levels` from the auth matcher — this is committed art, not user data, and
+F16–F18 serve it to strangers. The header and the exclusion were extended
+**together**, and they have to be: a file that is `immutable` but 307s to
+`/signin` for a signed-out reader is a feature that works perfectly for its
+author. **`/levels` must never become a route** — that lookahead is
+prefix-matched, so `levels` there would exempt `/levels-explained` too;
+`badges:check` §12 fails if any directory under `src/app` starts with either
+word.
+
+**Two separate public directories, deliberately.** The orphan sweeps in
+`make_badge_assets.py` and in `badges:check` each compute "expected filenames"
+from one key set, and a shared directory makes both correct only against the
+union — which is exactly how a stale file survives a regeneration unnoticed.
 
 `BADGE_ART[key].plate` is the art's own paper (`#rrggbb`, the mean of the
 master's outer 5% frame), and it is **generated for the same reason `sha256`
@@ -189,10 +226,42 @@ on `badge-art.ts` and `badge-meta.ts` — that is both parity guards firing, not
 mistake. Badge #14 (`tolkien`) was added exactly this way and is the worked
 example.
 
+**Adding a level tier**: add the band *with its `key`* to `STREAK_LEVELS` or
+`COLLECTOR_LEVELS`, add one `- <key>: <scene>` line inside `<!-- SCENES -->` in
+`levels.md`, add its gloss to `src/lib/gamification/level-meta.ts`, generate
+against `assets/levels/_anchor.png`, promote **both** the `.png` and its `.txt`,
+then `python3 tools/make_badge_assets.py`. Between adding the band and promoting
+the art, `npm run typecheck` is red on `level-art.ts` and `level-meta.ts` — both
+parity guards firing, not a mistake. **The key is frozen once art exists**: it is
+what the filename carries, that directory is `immutable` for a year, and renaming
+it is a regeneration rather than a refactor. Semantic, never positional —
+`streak_5` looks stable and is not.
+
+**And there is one step badges do not have.** Inserting a tier in the *middle*
+shifts every `LevelProgress.index` above it, so `scripts/check-gamification.ts`'s
+band assertions move too, and the `levelUp` comparison in `on-card-created.ts` —
+between two `resolveStreakLevel` results — starts firing somewhere else. Nothing
+needs replaying, because a level is derived rather than awarded and
+`stats:recompute` does not touch it; but re-read it before assuming so.
+
 ## There is exactly one modal in the app
 
 `src/components/gamification/badge-dialog.tsx`, on `/profile`, opened by tapping a
-badge row. A native `<dialog>` + `showModal()`, so the focus trap, Escape, the
+badge row **or a level row**. F22 widened its selection into a discriminated
+union rather than adding a second `<dialog>`: the focus trap, Escape, the
+backdrop and focus restoration are the UA's, and there is nothing to be gained
+from owning two of them. The file name still says "badge"; the component is the
+app's one detail panel.
+
+**One element, not just one component.** The level blocks and the badge shelf
+are two client islands with the stats grid between them, so the single instance
+lives in `profile-panels.tsx` — a provider that takes the server tree as
+`children` and hands the two islands an `open()` through context. Mounting a
+`<BadgeDialog>` inside each island instead put two `<dialog>` elements on the
+page, one of them permanently empty; `npm run test:layout`'s `locator("dialog")`
+resolved to two and that is how it was caught.
+
+A native `<dialog>` + `showModal()`, so the focus trap, Escape, the
 backdrop and focus restoration are the UA's rather than the app's. It is in the
 **top layer** — outside `.dw-screen`'s flex column and its `overflow: hidden` —
 which is what exempts it from [R19]'s height budget, and
@@ -206,8 +275,18 @@ Two things bite here and neither throws:
 - **No React `autoFocus` inside a `<dialog>`.** React focuses on *mount*, one
   commit before the effect calls `showModal()`, so the dialog records a child of
   its own as the element to restore focus to — and that child is unmounted on
-  close, dropping focus to `<body>`. `showModal()` already focuses the first
-  focusable descendant.
+  close, dropping focus to `<body>`. Focusing a child *after* `showModal()` in
+  the same effect is the correct form and is what the dialog now does.
+- **`showModal()` picks the first *focusable area*, not the first tab stop, and
+  Chromium makes a scroll container one.** `.dw-badge-dialog-body` carries
+  `overflow-y: auto`, so it won that race ahead of the Close button: the panel
+  opened with a 2px accent ring drawn across its full width and announced a
+  scrollable region instead of its content. Latent since F13 and only visible
+  once F22's shorter level content changed which element came first. **`tabIndex={-1}`
+  makes it worse, not better** — an explicit tabindex is still a focusable area,
+  so it wins every time. The fix is to name the target: `el.querySelector("button")
+  ?.focus()` after `showModal()`, which is unambiguous because Close is the only
+  control in the panel and nothing focusable may go in the hero band.
 - **A full-bleed child needs `overflow: clip` on the dialog.**
   `.dw-badge-dialog[open]` carries `border-radius: var(--r-card)` and no
   overflow, which was invisible while `p-5` kept every child off the corners.

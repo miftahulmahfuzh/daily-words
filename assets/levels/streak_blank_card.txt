@@ -1,0 +1,72 @@
+level:          streak_blank_card
+model:          gpt-image-2
+style version:  v1
+reference:      assets/levels/_anchor.png
+size / quality: 1024x1024 / high
+image sha256:   5618e2f460828788466724b17e2a898a42e5c25af21ff1991e64e76e08ce9d93
+
+--- prompt as sent ---
+A single printed keepsake ticket, square, in the manner of a nineteenth-century
+letterpress ration coupon.
+
+FULL BLEED — THIS IS THE MOST IMPORTANT RULE. The ticket's own paper fills the
+entire image, edge to edge and corner to corner. Do not render a photograph of a
+ticket. No table, no desk, no background surface, no mat, no border of empty
+space, no drop shadow, no rounded corners, no torn or deckled edge, no curl, no
+white or black margin on any side. The image IS the paper.
+
+NO TEXT ANYWHERE. No title, no motto, no date, no year, no numeral, no initial,
+no monogram, no signature, no watermark, no line of lettering along any rule, no
+glyph or mark that could be read as writing in any alphabet. The application
+prints the title beside the picture. Any text is an automatic rejection.
+
+PAPER: flat, evenly toned cream stock, warm and very slightly grey — the colour
+of a clean index card, about 92 percent luminance, a touch of yellow in it,
+never bleached to pure white. A very fine paper tooth and nothing else: no
+stain, no foxing, no ring marks, no sepia, no tea-brown ageing, no scorched
+edge. This is fresh stock, printed this morning.
+
+THE PANEL: one rectangular frame, centred, inset about twelve percent from every
+edge, with a quiet margin of bare paper all around it. Its rule is a double
+rule — one heavier line and one hair line — and its corners are plain right
+angles. The frame carries no ornament: no band, no repeating chain, no lozenges,
+no corner flourish and never any lettering. Inside the frame the picture stands
+on a single plain ground rule that runs the full width of the frame, with
+generous space above it. THIS SET IS RECTANGULAR. There is no circular seal, no
+roundel, no disc, no medallion and no ring anywhere in this image; that shape
+belongs to a different set and its appearance here is an automatic rejection.
+
+INK: exactly two inks, the way a small press runs them.
+The first ink is a deep pine green, desaturated and quiet, near #2F5D50. It
+draws everything — the rules, the frame, the ground, the subject, all of it.
+The second ink is a dull brick vermilion, near #8A3324, and it appears once and
+once only: a single small mark sitting very slightly off register from the
+green, the fingerprint of a second pass through the press. It never colours the
+subject and it never outlines anything.
+No third colour appears anywhere. Green ink, one vermilion mark, cream paper.
+
+RENDERING: line engraving. Every tone is built from engraved line — contour,
+cross-hatch, stipple — the way a dictionary plate or a banknote vignette is
+built, the ink sitting on the paper and biting very slightly into it. Even
+weight throughout, nothing darker than a firm mid-tone. No painting, no wash, no
+soft gradient, no airbrush, no glow, no bevel, no embossing, no metallic sheen,
+no three-dimensional rendering, no photographic realism, and no shadow anywhere
+inside the frame beyond what the ground rule itself carries.
+
+TONE: quiet, dry, matter-of-fact, fond without sentiment. A clerk's object and a
+working desk, not an award. This set is the grade PRINTED on a card, not the
+stamp pressed onto it. The vocabulary is engraved line, plain rules, and
+ordinary things that have been used. It contains no ribbons, no rosettes, no
+laurel wreaths, no stars, no trophies, no cups, no crowns and no ticks.
+
+READ AT FIFTY-SIX PIXELS. The application draws this fifty-six pixels wide in a
+row and about two hundred and twenty in a panel. One clear silhouette, generous
+internal spacing, heavy enough line to survive the reduction, and no detail that
+exists only at full resolution.
+
+ONE SCENE, ITS OWN SCENE. The paper, the frame and the two inks belong to the
+whole set; what stands inside the frame belongs to this level alone. Do not fall
+back on an open book, a quill, a wreath or a star as a default centre. Seventeen
+levels built from the same object is the way this set fails.
+
+SUBJECT FOR THIS LEVEL: A compositor's type case pulled out onto a bench, every one of its small compartments empty and clean, the case's lay of divisions running in even engraved rules to the frame's edge. VERMILION: a dab of ink dried on the case's front rail where a thumb rests.

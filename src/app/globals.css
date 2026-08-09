@@ -330,6 +330,19 @@ dialog::backdrop {
   height: min(220px, 25dvh);
 }
 
+/* F22's level mark. A constant, not a `dvh` clamp like `.dw-badge-medal` — that
+   one is clamped because it sits inside a dialog competing with a gloss for a
+   fixed height budget. This sits in /profile's ScreenBody, which scrolls, so
+   56px is 56px on every viewport. It also clears LAYOUT.touchMin's 44 in both
+   axes, which is what lets the block become a button without growing.
+
+   56 and not 40: the level deck's style contract says READ AT FIFTY-SIX PIXELS
+   in as many words, and the 192² asset covers it past 3×. */
+.dw-level-mark {
+  width: 56px;
+  height: 56px;
+}
+
 /* F21's hero band. The badge's own paper, edge to edge, with the square plate
    laid on top of it — never cropped: measured over the deck, ink runs from 6.2%
    to 95.7% of the image height (ibu's tassel hangs out of the seal ring), which
