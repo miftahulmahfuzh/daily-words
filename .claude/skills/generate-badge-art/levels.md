@@ -155,7 +155,7 @@ never shows the watch.
 - streak_pocket_fuzz: A coat pocket turned inside out and hanging, its lining puckered along the seam, with a small drift of pocket lint, one bent pin and a worn-blank ticket stub fallen onto the ground rule beneath it. VERMILION: the head of the bent pin.
 - streak_small_scribe: A child's school desk seen from the side, its lid propped open on one hinge, a steel-nibbed pen lying in the pen groove and a round inkwell sunk in its hole at the corner. VERMILION: the ink standing in the well.
 - streak_margin_scribbler: A closed book lying flat, a carpenter's pencil laid along its fore-edge, and four narrow paper slips tipped in at different depths so their ends stand proud of the leaves at uneven lengths. VERMILION: the end of the middle slip.
-- streak_keeper_of_the_pocket: A waistcoat hung front-on from a plain hook, a watch chain swagged between its two pockets, and a ring of four small flat keys hanging from the chain's bar. VERMILION: the ribbon threaded through the key ring.
+- streak_keeper_of_the_pocket: A waistcoat hung front-on from a plain hook, a watch chain swagged between its two pockets, and four small flat keys hanging from the chain's bar on a short wire loop. VERMILION: the ribbon knotted to that wire loop.
 - streak_uncles_apprentice: A shop counter with a brass balance standing on it, its pans level and empty, a canvas apron on a hook behind, and a bolt of cloth stood on end at the counter's far side. VERMILION: the single small weight sitting beside the balance.
 - streak_lexicon_smuggler: A flat travelling case open on the ground rule, its false bottom lifted and propped upright, the cavity beneath lined with folded packing paper and entirely empty. VERMILION: the broken wax seal on the case's strap.
 - streak_walking_errata: A printer's composing stick lying empty on a bare stone, a proof slip folded once beside it, and a loupe standing on its own rim behind them. VERMILION: a single struck mark on the folded slip's edge.
@@ -204,6 +204,16 @@ back in:
 - **`streak_walking_errata` does not show a proof mark.** A caret, a delete-dele
   or a stet is a written symbol and the model will resolve it into letters. The
   vermilion is a plain struck mark on an edge.
+- **`streak_keeper_of_the_pocket` hangs its keys on a "short wire loop", not on
+  a "key ring".** Found in the free dry-run read of the assembled prompt, before
+  anything was generated: the style block above says *no ring anywhere in this
+  image* in the paragraph that separates this deck from the seals, and the scene
+  line as first drafted said *a ring of four small flat keys*. A prompt that
+  contradicts itself in two paragraphs is resolved arbitrarily by the model —
+  either a circular medallion in a deck whose whole point is that it has none,
+  or no keys at all. `loop` says the same thing about the object and nothing
+  about the composition. This is what task 4's "read all seventeen prompts"
+  step is for, and it cost one free minute rather than three paid attempts.
 
 ### The anchor
 

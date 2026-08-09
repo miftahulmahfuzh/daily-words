@@ -1,15 +1,33 @@
 #!/usr/bin/env python3
-"""Generate one badge medal image for Daily Words via the OpenAI image API.
+"""Generate one badge medal or level panel for Daily Words via the OpenAI image API.
 
     python3 tools/gen_badge_art.py first_card
     python3 tools/gen_badge_art.py ibu --reference assets/badges/_anchor.png
     python3 tools/gen_badge_art.py sunday --note "the mug is floating; set it on the base rule"
     python3 tools/gen_badge_art.py --dry-run --all
 
-Design record: plans/F12-badge-art-skill.md (D4, D8, §10).
-Style contract: .claude/skills/generate-badge-art/style.md — a file a human
-edits and this script reads, so the prompt that was sent can never drift from
-the prompt that is documented.
+    python3 tools/gen_badge_art.py --dry-run --all --kind level
+    python3 tools/gen_badge_art.py collector_jam_jar_of_words --kind level
+    python3 tools/gen_badge_art.py streak_pocket_fuzz --kind level \\
+        --reference assets/levels/_anchor.png
+
+Design record: plans/F12-badge-art-skill.md (D4, D8, §10) and
+plans/F22-level-art.md (D3, D4).
+
+TWO DECKS, ONE TOOL (F22 D4). `--kind badge` (the default) is F12's fourteen
+circular seals, contracted by `style.md` and keyed on `BADGE_CATALOG`.
+`--kind level` is F22's seventeen rectangular panels, contracted by `levels.md`
+and keyed on `STREAK_LEVELS` + `COLLECTOR_LEVELS`. The flag selects the whole
+tuple — contract file, parity source, master directory, subject label — and
+nothing else in this file knows which deck it is working on. A second copy of
+this script was rejected outright: its hard-won parts are the `.env.local`-
+before-environment key order and its printed source, the hand-built multipart
+body, the `RES_OPTIONS` line, the attempt numbering and the sidecar, and those
+are exactly the parts a copy diverges on first.
+
+Style contracts: `.claude/skills/generate-badge-art/{style,levels}.md` — files a
+human edits and this script reads, so the prompt that was sent can never drift
+from the prompt that is documented.
 
 stdlib + PIL only, on purpose (F12 D8). This machine has PIL and has neither
 `requests` nor `httpx` nor the `openai` package; one POST and a hand-built
@@ -44,9 +62,30 @@ from pathlib import Path
 os.environ.setdefault("RES_OPTIONS", "no-aaaa")
 
 ROOT = Path(__file__).resolve().parent.parent
-STYLE_MD = ROOT / ".claude" / "skills" / "generate-badge-art" / "style.md"
-BADGES_TS = ROOT / "src" / "lib" / "gamification" / "badges.ts"
-CANDIDATES = ROOT / "assets" / "badges" / "_candidates"
+SKILL = ROOT / ".claude" / "skills" / "generate-badge-art"
+
+# The whole of what `--kind` selects. Adding a third deck is a row here, not a
+# branch anywhere below.
+KINDS = {
+    "badge": {
+        "contract": SKILL / "style.md",
+        "source": ROOT / "src" / "lib" / "gamification" / "badges.ts",
+        "masters": ROOT / "assets" / "badges",
+        "subject": "SUBJECT FOR THIS BADGE",
+        "noun": "badge",
+        # The name of the thing in `source` the parity error should tell the
+        # user to look at.
+        "table": "BADGE_CATALOG",
+    },
+    "level": {
+        "contract": SKILL / "levels.md",
+        "source": ROOT / "src" / "lib" / "gamification" / "levels.ts",
+        "masters": ROOT / "assets" / "levels",
+        "subject": "SUBJECT FOR THIS LEVEL",
+        "noun": "level",
+        "table": "STREAK_LEVELS + COLLECTOR_LEVELS",
+    },
+}
 
 API_BASE = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-image-2"
@@ -58,9 +97,10 @@ QUALITY = "high"
 # The style contract
 # --------------------------------------------------------------------------- #
 
-# Markers only count when they are alone on their own line. style.md quotes both
-# markers inline in its interface table, and a non-greedy match that did not
-# anchor started at the table and returned zero scenes rather than an error.
+# Markers only count when they are alone on their own line. Both contract files
+# quote both markers inline in their interface tables, and a non-greedy match
+# that did not anchor started at the table and returned zero scenes rather than
+# an error.
 STYLE_RE = re.compile(
     r"^<!-- STYLE BLOCK (v\d+) -->$\n(.*?)^<!-- /STYLE BLOCK -->$",
     re.S | re.M,
@@ -69,34 +109,42 @@ SCENES_RE = re.compile(r"^<!-- SCENES -->$\n(.*?)^<!-- /SCENES -->$", re.S | re.
 SCENE_LINE_RE = re.compile(r"^- ([a-z0-9_]+): (.+)$", re.M)
 
 
-def load_style():
-    """(version, style_block, [(key, scene), ...]) from style.md."""
-    if not STYLE_MD.exists():
-        die(f"no style contract at {rel(STYLE_MD)}")
-    text = STYLE_MD.read_text(encoding="utf-8")
+def load_style(contract):
+    """(version, style_block, [(key, scene), ...]) from a contract file.
+
+    Reused verbatim across both decks — F22 D4's whole argument for giving
+    `levels.md` the identical marker vocabulary rather than inventing a
+    `LEVEL STYLE BLOCK` marker and a second pair of regexes.
+    """
+    name = contract.name
+    if not contract.exists():
+        die(f"no style contract at {rel(contract)}")
+    text = contract.read_text(encoding="utf-8")
 
     m = STYLE_RE.search(text)
     if not m:
-        die("style.md has no `<!-- STYLE BLOCK vN -->` … `<!-- /STYLE BLOCK -->` "
+        die(f"{name} has no `<!-- STYLE BLOCK vN -->` … `<!-- /STYLE BLOCK -->` "
             "region with each marker alone on its own line")
     version, block = m.group(1), m.group(2).strip()
 
     s = SCENES_RE.search(text)
     if not s:
-        die("style.md has no `<!-- SCENES -->` … `<!-- /SCENES -->` region with "
+        die(f"{name} has no `<!-- SCENES -->` … `<!-- /SCENES -->` region with "
             "each marker alone on its own line")
     scenes = SCENE_LINE_RE.findall(s.group(1))
     if not scenes:
-        die("style.md's SCENES region holds no `- <key>: <scene>` lines")
+        die(f"{name}'s SCENES region holds no `- <key>: <scene>` lines")
 
     return version, block, scenes
 
 
 CATALOG_RE = re.compile(r"BADGE_CATALOG\s*=\s*\[(.*?)\]\s*as const", re.S)
+STREAK_RE = re.compile(r"STREAK_LEVELS\s*=\s*\[(.*?)\]\s*as const", re.S)
+COLLECTOR_RE = re.compile(r"COLLECTOR_LEVELS\s*=\s*\[(.*?)\]\s*as const", re.S)
 KEY_RE = re.compile(r'key:\s*"([a-z0-9_]+)"')
 
 
-def load_catalog_keys():
+def load_catalog_keys(source):
     """Badge keys in BADGE_CATALOG order, read out of badges.ts.
 
     Read rather than hardcoded, and this is the difference between this tool and
@@ -105,52 +153,80 @@ def load_catalog_keys():
     fixed — F12 exists because the user said "we will keep adding badges" — so a
     hardcoded 13 is a line that would need editing in a fourth file every time.
     """
-    if not BADGES_TS.exists():
-        die(f"no badge catalog at {rel(BADGES_TS)}")
-    m = CATALOG_RE.search(BADGES_TS.read_text(encoding="utf-8"))
+    if not source.exists():
+        die(f"no badge catalog at {rel(source)}")
+    m = CATALOG_RE.search(source.read_text(encoding="utf-8"))
     if not m:
-        die(f"could not find `BADGE_CATALOG = [...] as const` in {rel(BADGES_TS)}")
+        die(f"could not find `BADGE_CATALOG = [...] as const` in {rel(source)}")
     keys = KEY_RE.findall(m.group(1))
     if not keys:
-        die(f"BADGE_CATALOG in {rel(BADGES_TS)} parsed to zero keys")
+        die(f"BADGE_CATALOG in {rel(source)} parsed to zero keys")
     return keys
 
 
-def assert_parity(scene_keys, catalog_keys):
-    """Refuse to start on any disagreement between style.md and badges.ts.
+def load_level_keys(source):
+    """Level tier keys in table order (streak, then collector), from levels.ts.
+
+    Read rather than hardcoded for the same reason `load_catalog_keys` is: the
+    bands are a tuning decision and the set is explicitly not fixed.
+
+    The parity guard this feeds is the only one of F22's three drift mechanisms
+    that fires BEFORE money is spent. The other two are `npm run typecheck` (a
+    tier with no art) and `npm run badges:check` (art with no tier).
+    """
+    if not source.exists():
+        die(f"no level tables at {rel(source)}")
+    text = source.read_text(encoding="utf-8")
+    keys = []
+    for rx, name in ((STREAK_RE, "STREAK_LEVELS"), (COLLECTOR_RE, "COLLECTOR_LEVELS")):
+        m = rx.search(text)
+        if not m:
+            die(f"could not find `{name} = [...] as const` in {rel(source)}")
+        found = KEY_RE.findall(m.group(1))
+        if not found:
+            die(f"{name} in {rel(source)} parsed to zero keys")
+        keys.extend(found)
+    return keys
+
+
+def assert_parity(scene_keys, source_keys, kind):
+    """Refuse to start on any disagreement between the contract and the source.
 
     One of the three drift mechanisms in F12 §10, and the only one that has to
-    fire before money is spent. The other two are `npm run typecheck` (a badge
-    key with no art) and `npm run badges:check` (art with no badge key).
+    fire before money is spent. The other two are `npm run typecheck` (a key
+    with no art) and `npm run badges:check` (art with no key).
     """
-    missing = [k for k in catalog_keys if k not in scene_keys]
-    orphan = [k for k in scene_keys if k not in catalog_keys]
+    contract = kind["contract"].name
+    source = rel(kind["source"])
+    table = kind["table"]
+    missing = [k for k in source_keys if k not in scene_keys]
+    orphan = [k for k in scene_keys if k not in source_keys]
     if missing or orphan:
-        lines = ["style.md and BADGE_CATALOG disagree:"]
+        lines = [f"{contract} and {table} disagree:"]
         if missing:
-            lines.append(f"  in badges.ts, no scene line: {', '.join(missing)}")
-            lines.append("  → add `- <key>: <scene>` inside <!-- SCENES --> in style.md")
+            lines.append(f"  in {source}, no scene line: {', '.join(missing)}")
+            lines.append(f"  → add `- <key>: <scene>` inside <!-- SCENES --> in {contract}")
         if orphan:
-            lines.append(f"  scene line, not in badges.ts: {', '.join(orphan)}")
+            lines.append(f"  scene line, not in {source}: {', '.join(orphan)}")
             lines.append("  → the key was renamed or removed, or the scene is a draft "
                          "that belongs outside <!-- SCENES -->")
         die("\n".join(lines))
-    if scene_keys != catalog_keys:
+    if scene_keys != source_keys:
         # Not fatal. Order is a readability property of a generated diff, not a
         # correctness one, and failing a paid run over it would be absurd.
-        warn("style.md's scene order differs from BADGE_CATALOG's; the two files "
-             "read more easily in the same order")
+        warn(f"{contract}'s scene order differs from {table}'s; the two files "
+             f"read more easily in the same order")
 
 
 # --------------------------------------------------------------------------- #
 # Prompt assembly
 # --------------------------------------------------------------------------- #
 
-def build_prompt(style_block, scene, note=None):
-    parts = [style_block, "", f"SUBJECT FOR THIS BADGE: {scene}"]
+def build_prompt(style_block, scene, subject, note=None):
+    parts = [style_block, "", f"{subject}: {scene}"]
     if note:
         # After the scene line, so a correction is read as a refinement of this
-        # badge rather than as an amendment to the deck's style.
+        # image rather than as an amendment to the deck's style.
         parts += ["", f"CORRECTION FOR THIS ATTEMPT: {note}"]
     return "\n".join(parts)
 
@@ -284,17 +360,17 @@ def send(req):
 # Output
 # --------------------------------------------------------------------------- #
 
-def next_attempt_path(key):
-    CANDIDATES.mkdir(parents=True, exist_ok=True)
+def next_attempt_path(candidates, key):
+    candidates.mkdir(parents=True, exist_ok=True)
     used = {
         int(m.group(1))
-        for p in CANDIDATES.glob(f"{key}.a*.png")
+        for p in candidates.glob(f"{key}.a*.png")
         if (m := re.fullmatch(rf"{re.escape(key)}\.a(\d+)\.png", p.name))
     }
-    return CANDIDATES / f"{key}.a{(max(used) + 1) if used else 1:02d}.png"
+    return candidates / f"{key}.a{(max(used) + 1) if used else 1:02d}.png"
 
 
-def write_sidecar(png_path, key, model, version, reference, prompt):
+def write_sidecar(png_path, noun, key, model, version, reference, prompt):
     """The exact prompt beside the exact image.
 
     This is what lets a candidate you like six weeks from now be explained, and
@@ -304,7 +380,10 @@ def write_sidecar(png_path, key, model, version, reference, prompt):
     sidecar = png_path.with_suffix(".txt")
     sidecar.write_text(
         "\n".join([
-            f"badge:          {key}",
+            # `badge:` or `level:` — both six characters, so the column stays
+            # put. Only `style version:` below is ever parsed
+            # (`make_badge_assets.py`); the rest is for a human six weeks later.
+            f"{noun + ':':<16}{key}",
             f"model:          {model}",
             f"style version:  {version}",
             f"reference:      {rel(reference) if reference else '(none — anchor run)'}",
@@ -340,48 +419,63 @@ def warn(message):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate one badge medal image for Daily Words.",
+        description="Generate one badge medal or level panel image for Daily Words.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="The style contract is .claude/skills/generate-badge-art/style.md.",
+        epilog="The style contracts are .claude/skills/generate-badge-art/"
+               "{style,levels}.md — style.md for --kind badge, levels.md for "
+               "--kind level.",
     )
-    parser.add_argument("key", nargs="?", help="a badge key from BADGE_CATALOG")
+    parser.add_argument("key", nargs="?",
+                        help="a badge key from BADGE_CATALOG, or a level tier key "
+                             "from levels.ts with --kind level")
+    parser.add_argument("--kind", choices=sorted(KINDS), default="badge",
+                        help="which deck (default badge). `level` is F22's "
+                             "rectangular panels, contracted by levels.md")
     parser.add_argument("--all", action="store_true",
-                        help="every badge; only legal with --dry-run")
+                        help="every key in the deck; only legal with --dry-run")
     parser.add_argument("--dry-run", action="store_true",
                         help="assemble and print the prompt; no key, no network, no file")
     parser.add_argument("--reference", type=Path,
-                        help="anchor image, normally assets/badges/_anchor.png")
+                        help="anchor image, normally assets/<deck>/_anchor.png")
     parser.add_argument("--note", help="a correction appended after the scene line")
     parser.add_argument("--model", default=DEFAULT_MODEL,
                         help=f"image model (default {DEFAULT_MODEL})")
     args = parser.parse_args()
 
-    version, style_block, scenes = load_style()
+    kind = KINDS[args.kind]
+    noun = kind["noun"]
+    candidates = kind["masters"] / "_candidates"
+
+    version, style_block, scenes = load_style(kind["contract"])
     scene_by_key = dict(scenes)
     scene_keys = [k for k, _ in scenes]
-    catalog_keys = load_catalog_keys()
-    assert_parity(scene_keys, catalog_keys)
+    source_keys = (
+        load_level_keys(kind["source"])
+        if args.kind == "level"
+        else load_catalog_keys(kind["source"])
+    )
+    assert_parity(scene_keys, source_keys, kind)
 
     if args.all:
         if not args.dry_run:
-            die("--all is only legal with --dry-run. One badge per invocation: the "
-                "three-attempt cap and the look-at-it step are per badge, and a "
-                "loop makes both ceremonial.")
-        targets = catalog_keys
+            die(f"--all is only legal with --dry-run. One {noun} per invocation: "
+                f"the three-attempt cap and the look-at-it step are per {noun}, "
+                f"and a loop makes both ceremonial.")
+        targets = source_keys
     elif args.key:
         if args.key not in scene_by_key:
-            die(f"unknown badge key {args.key!r}. Known keys:\n  "
-                + "\n  ".join(catalog_keys))
+            die(f"unknown {noun} key {args.key!r}. Known keys:\n  "
+                + "\n  ".join(source_keys))
         targets = [args.key]
     else:
-        die("name a badge key, or pass --dry-run --all")
+        die(f"name a {noun} key, or pass --dry-run --all")
 
     if args.reference and not args.reference.exists():
         die(f"no reference image at {rel(args.reference)}")
 
     if args.dry_run:
-        for i, key in enumerate(targets):
-            prompt = build_prompt(style_block, scene_by_key[key], args.note)
+        for key in targets:
+            prompt = build_prompt(style_block, scene_by_key[key], kind["subject"], args.note)
             print(f"\n{'=' * 76}\n{key}  (style {version}, model {args.model}, "
                   f"{len(prompt)} chars)\n{'=' * 76}\n{prompt}")
         print(f"\n{'-' * 76}\ndry run: {len(targets)} prompt(s) assembled. "
@@ -390,17 +484,19 @@ def main():
 
     key_name = targets[0]
     if not args.reference:
-        anchor = ROOT / "assets" / "badges" / "_anchor.png"
+        # This deck's anchor, never the other's: an edit call against a circular
+        # seal produces circular seals, which is the whole point of F22 D3.
+        anchor = kind["masters"] / "_anchor.png"
         if anchor.exists():
-            warn(f"{rel(anchor)} exists but --reference was not passed. Badges 2-N "
-                 f"should be generated against the anchor, never against a "
-                 f"description of it.")
+            warn(f"{rel(anchor)} exists but --reference was not passed. "
+                 f"{noun.capitalize()}s 2-N should be generated against the "
+                 f"anchor, never against a description of it.")
         else:
             print("no --reference and no anchor on disk: this is an ANCHOR RUN.")
 
     api_key = read_api_key()
-    prompt = build_prompt(style_block, scene_by_key[key_name], args.note)
-    print(f"badge {key_name}, style {version}, model {args.model}, "
+    prompt = build_prompt(style_block, scene_by_key[key_name], kind["subject"], args.note)
+    print(f"{noun} {key_name}, style {version}, model {args.model}, "
           f"{len(prompt)} chars of prompt")
 
     if args.reference:
@@ -408,9 +504,9 @@ def main():
     else:
         png = post_generation(api_key, args.model, prompt)
 
-    out = next_attempt_path(key_name)
+    out = next_attempt_path(candidates, key_name)
     out.write_bytes(png)
-    sidecar = write_sidecar(out, key_name, args.model, version, args.reference, prompt)
+    sidecar = write_sidecar(out, noun, key_name, args.model, version, args.reference, prompt)
 
     print(f"\nwrote {rel(out)}  ({len(png) / 1024:.0f} kB)")
     print(f"      {rel(sidecar)}")
