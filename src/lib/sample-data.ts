@@ -271,34 +271,15 @@ export const CHAT_OPENER = {
   text: "You are showing a friend around the office where you work, and they ask why the Friday meeting is never actually scheduled. Answer them — but the reason has to be an unspoken one.",
 };
 
-export const STATS = [
-  { n: 12, label: "Current streak" },
-  { n: 19, label: "Longest streak" },
-  { n: 38, label: "Cards made" },
-  { n: 227, label: "Words collected" },
-];
+/* The `STATS`, `BADGES` and `PROFILE` placeholders lived here until F9. They are
+   gone the way `ONBOARDING` went in F7: /profile now reads real numbers through
+   `lib/gamification/`, the badge titles live in `BADGE_CATALOG` and the level
+   titles in `STREAK_LEVELS` / `COLLECTOR_LEVELS`, all copied from the roadmap's
+   tables rather than from the design prototype's filler ([R20]). A second list
+   of badge names would be a shelf that disagrees with what gets awarded.
 
-/**
- * Badge keys and titles are taken from ROADMAP_v0.1.0.md, not from the design
- * prototype's filler. `earned: false` renders the dimmed slot on the shelf.
- */
-export const BADGES = [
-  { key: "sunday", name: "No Weekend Without Ration Card", count: 4 },
-  { key: "ibu", name: "Ibu Would Be Proud", count: 2 },
-  { key: "full_week", name: "Full Week Ration", count: 3 },
-  { key: "midnight_oil", name: "Burning the Midnight Oil", count: 1 },
-  { key: "first_card", name: "The Uncle’s Trick", count: 1 },
-  { key: "indonesia_independence", name: "National Speaker", count: 0 },
-  { key: "world_book_day", name: "The Bard’s Regard", count: 0 },
-];
-
-export const PROFILE = {
-  name: "Barnaby",
-  streakLevel: "Keeper of the Pocket",
-  nextLevel: "The Uncle’s Apprentice, at a 60-day streak",
-  collectorLevel: "Private Collector",
-  since: "Keeping a card since 8 August 2026.",
-};
+   `/kitchen-sink/profile` carries the invented numbers now, where it is obvious
+   they are invented. */
 
 /** Last seven days, most recent last. Shaped for `DayStrip`. */
 export const WEEK_STRIP: DayStripItem[] = [

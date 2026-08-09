@@ -6,6 +6,7 @@ import {
   getCardContext,
 } from "@/lib/db/queries/cards";
 import { onCardCreated, type CardCreatedEvent } from "@/lib/cards/hooks";
+import type { CardCreatedRewards } from "@/lib/gamification/schemas";
 import {
   createCardRequestSchema,
   type CreateCardRequest,
@@ -99,6 +100,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const card = outcome.card;
+  let rewards: CardCreatedRewards | null = null;
 
   if (outcome.status === "created") {
     const event: CardCreatedEvent = {
@@ -120,7 +122,7 @@ export async function POST(req: Request): Promise<Response> {
     // fail the request: the card exists and a streak can be recomputed, while
     // the reverse is not recoverable.
     try {
-      await onCardCreated(event);
+      rewards = await onCardCreated(event);
     } catch (err) {
       console.error("[api/cards] onCardCreated failed", { cardId: card.id, err });
     }
@@ -132,6 +134,9 @@ export async function POST(req: Request): Promise<Response> {
       card: toDailyCardPayload(card),
       underSupplied: card.items.length < LAYOUT.cardSize,
       activeWordCount,
+      // Null on a repeat press, on purpose: the same badge must not toast twice.
+      // F9's inserts return only genuinely new rows, so this is belt and braces.
+      rewards,
       timezone: tz,
       timezoneMismatch:
         body.data.clientTimezone !== undefined && body.data.clientTimezone !== tz,

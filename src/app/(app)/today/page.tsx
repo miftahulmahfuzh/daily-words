@@ -3,7 +3,9 @@ import { Screen, ScreenBody, ScreenHeader } from "@/components/layout/screen";
 import { DailyCard } from "@/components/daily/daily-card";
 import { DayStrip, type DayStripItem } from "@/components/daily/day-strip";
 import { NoCardYet } from "@/components/daily/no-card-yet";
+import { RewardToast } from "@/components/gamification/reward-toast";
 import { Button } from "@/components/ui/button";
+import { Pill } from "@/components/ui/pill";
 import { Eyebrow } from "@/components/ui/text";
 import { buildRecentDays, resolveAnchor, toCalendarMark } from "@/lib/cards/calendar";
 import { toDailyCardItemView } from "@/lib/cards/serialize";
@@ -16,6 +18,7 @@ import {
   getCardForDate,
   getFirstCardDate,
 } from "@/lib/db/queries/cards";
+import { getCurrentStreak } from "@/lib/gamification/profile-stats";
 import {
   addLocalDays,
   formatLocalDateWeekday,
@@ -50,10 +53,11 @@ export default async function TodayPage() {
   const tz = timezone.timezone;
   const today = localDateNow(tz);
 
-  const [card, recentCardDates, firstCardDate] = await Promise.all([
+  const [card, recentCardDates, firstCardDate, currentStreak] = await Promise.all([
     getCardForDate(user.id, today),
     getCardDatesBetween(user.id, addLocalDays(today, -(STRIP_DAYS - 1)), today),
     getFirstCardDate(user.id),
+    getCurrentStreak(user.id, tz),
   ]);
 
   // Only asked when the answer changes what is drawn. A card on the screen
@@ -76,13 +80,27 @@ export default async function TodayPage() {
   return (
     <Screen tabs>
       <ScreenBody>
-        {/* The trailing slot is deliberately empty. The design puts a streak
-            pill there, and a streak is F9's — F5 must not import it, and
-            inventing a substitute would only have to be removed later. */}
+        {/* F9 filled the slot F5 left empty: the design's "12 day run" pill,
+            taking the same tap to /calendar as the strip below.
+
+            Hidden at zero rather than showing "0 day run". A user between runs
+            is told nothing, because a zero here would be the app pointing at an
+            absence — and the profile page is where the honest number lives. */}
         <ScreenHeader
           className="pb-3"
           eyebrow={<Eyebrow>{formatLocalDateWeekday(today)}</Eyebrow>}
           title="Today’s card"
+          trailing={
+            currentStreak > 0 ? (
+              // Same className as `/kitchen-sink/today`'s fixture, which is what
+              // the no-scroll spec has been measuring the header against since
+              // F2 — the 70.4px header in the budget ledger already includes
+              // this pill. Change one, change both.
+              <Pill href="/calendar" mono className="min-h-[32px] text-mono-xs">
+                {currentStreak} day run
+              </Pill>
+            ) : undefined
+          }
         />
 
         {card ? (
@@ -142,6 +160,12 @@ export default async function TodayPage() {
         <Link href="/calendar" aria-label="Open the calendar" className="block shrink-0">
           <DayStrip days={strip} />
         </Link>
+
+        {/* Mounted unconditionally and outside the card/no-card branch, because
+            `NudgeButton` — which receives the payload — is inside that branch
+            and unmounts the instant the card replaces it. Fixed-position, so it
+            costs the no-scroll budget nothing. */}
+        <RewardToast />
       </ScreenBody>
     </Screen>
   );

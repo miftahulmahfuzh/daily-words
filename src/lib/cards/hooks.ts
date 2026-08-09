@@ -1,13 +1,16 @@
 import "server-only";
+import { applyCardCreated } from "@/lib/gamification/on-card-created";
+import type { CardCreatedRewards } from "@/lib/gamification/schemas";
 
 /**
  * The seam F9 attaches to. ROADMAP [R15]: this hook is F5's, and F9 replaces the
  * body of `onCardCreated` rather than touching card creation.
  *
- * F5 never imports F9; F9 never imports F5's creation logic. That is the whole
- * contract, and it is what keeps "the card was made" independent of "the streak
- * was counted" — the first is a fact about a day, the second is arithmetic over
- * facts, and arithmetic can always be redone.
+ * F5's creation logic never imports F9, and F9 never imports F5's creation
+ * logic — only this file bridges them, and only in one direction. That is what
+ * keeps "the card was made" independent of "the streak was counted": the first
+ * is a fact about a day, the second is arithmetic over facts, and arithmetic can
+ * always be redone.
  */
 
 export type CardCreatedEvent = {
@@ -41,7 +44,7 @@ export type CardCreatedEvent = {
  * Called exactly once per genuinely created card, AFTER the transaction commits.
  * NOT called when the nudge hits an existing card (`created: false`).
  *
- * Contract for F9, which replaces this body:
+ * Contract, which F9's implementation honours:
  *  - Must not throw. The call site wraps this in try/catch and swallows, but a
  *    hook that throws on every card is silent breakage — handle your own errors.
  *  - Must be idempotent per `cardId`. Retries and duplicate delivery are possible.
@@ -51,8 +54,16 @@ export type CardCreatedEvent = {
  *
  * Everything except `full_week` is decidable from this payload alone; that one
  * queries card history itself.
+ *
+ * **F9 widened the return type** from `void` to the reveal payload. That is
+ * additive — the call site awaited and discarded before — and it is what lets
+ * `POST /api/cards` carry a badge to the toast without F5 learning anything
+ * about badges. `null` means the hook handled its own failure: the card stands,
+ * the numbers are stale until the next card or a recompute, and nothing is
+ * revealed.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- F9 fills this in.
-export async function onCardCreated(_event: CardCreatedEvent): Promise<void> {
-  // no-op in F5. Streaks, levels and badges are F9's.
+export function onCardCreated(
+  event: CardCreatedEvent,
+): Promise<CardCreatedRewards | null> {
+  return applyCardCreated(event);
 }

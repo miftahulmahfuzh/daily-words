@@ -244,6 +244,9 @@ export default function KitchenSinkPage() {
           <Link href="/kitchen-sink/today" className="text-base text-accent underline">
             Layout fixture → /kitchen-sink/today
           </Link>
+          <Link href="/kitchen-sink/profile" className="text-base text-accent underline">
+            F9 profile states → /kitchen-sink/profile
+          </Link>
         </Section>
       </ScreenBody>
     </Screen>
