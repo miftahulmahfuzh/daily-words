@@ -27,6 +27,7 @@ import {
   type BadgeKey,
 } from '../src/lib/gamification/badges'
 import { BADGE_META, badgeMeta } from '../src/lib/gamification/badge-meta'
+import { LEVEL_GLOSS } from '../src/lib/gamification/level-meta'
 import {
   COLLECTOR_LEVELS,
   STREAK_LEVELS,
@@ -518,6 +519,13 @@ section('§14 the tone check — no loss aversion anywhere in this feature')
     ...STREAK_LEVELS.map((l) => l.title),
     ...COLLECTOR_LEVELS.map((l) => l.title),
     ...meta,
+    // F22's seventeen glosses and seventeen conditions ride the SAME list
+    // rather than a second one. The register is the feature's, not the badge
+    // deck's, and a level gloss is written in exactly the place a
+    // congratulation would arrive disguised as copy.
+    ...Object.values(LEVEL_GLOSS),
+    ...STREAK_LEVELS.map((_, i) => levelCondition('streak', i)),
+    ...COLLECTOR_LEVELS.map((_, i) => levelCondition('collector', i)),
   ]
   check('no nagging phrases', copy.filter((c) => banned.some((b) => b.test(c))), [])
   check('no exclamation marks', copy.filter((c) => c.includes('!')), [])
@@ -534,6 +542,17 @@ section('§14 the tone check — no loss aversion anywhere in this feature')
   // straight quote beside a typographic one in the same serif reads as a typo.
   // This would have caught "Sauron's Favourite" as first typed.
   check('no straight apostrophes', copy.filter((c) => c.includes("'")), [])
+
+  // The same cap `badge-meta.ts`'s gloss carries, for the same reason: past it
+  // the dialog reaches for its scrolling escape hatch on a 375×667 screen,
+  // which is the documented degradation rather than the intended state.
+  check(
+    'every level gloss is ≤ 320 characters',
+    Object.entries(LEVEL_GLOSS)
+      .filter(([, g]) => g.length > 320)
+      .map(([k, g]) => `${k} (${g.length})`),
+    [],
+  )
 }
 
 console.log(
