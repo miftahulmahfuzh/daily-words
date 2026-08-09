@@ -13,8 +13,8 @@
  * keyword. The fix for that failure is to generate the art, not to reach
  * for `Partial<>`.
  *
- * Filenames carry the first 8 hex of the master's SHA-256. Regenerating a
- * badge changes its bytes, its hash and its filename, so every cache misses
+ * Filenames carry the first 8 hex of the master's SHA-256. Regenerating an
+ * image changes its bytes, its hash and its filename, so every cache misses
  * correctly and `next.config.ts` may serve /badges/* as `immutable`.
  *
  * Plain data. No `import "server-only"` — F13's badge modal is a client
@@ -34,12 +34,12 @@ export type BadgeArt = {
    * frame. F21's hero paints its band with this so the square art can sit
    * `object-fit: contain` on a wider region with no seam and no crop —
    * the deck cannot be cropped (F21 §1.2: ibu's tassel reaches 95.7% of
-   * the image height). Sampled, never chosen: regenerating a badge can
+   * the image height). Sampled, never chosen: regenerating an image can
    * shift its paper, and `npm run badges:check` recomputes this from the
    * master exactly as it recomputes `sha256`.
    */
   plate: string;
-  /** The `style.md` version this image was generated against. */
+  /** The contract-file version this image was generated against. */
   styleVersion: string;
 };
 

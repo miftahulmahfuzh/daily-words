@@ -54,3 +54,15 @@ assets/badges/_candidates/
 assets/badges/_controls/*.themes.png
 assets/badges/_controls/*.ring.png
 assets/badges/_controls/*.centre.png
+
+# F22's second deck, on exactly the same terms. Source art
+# (assets/levels/<key>.png) and its .txt sidecar ARE committed — the sidecar
+# carries the style version, and losing it makes a mixed deck undetectable.
+assets/levels/_candidates/
+assets/levels/_controls/*.themes.png
+assets/levels/_controls/*.ring.png
+assets/levels/_controls/*.centre.png
+
+# Python bytecode from tools/. One .pyc was committed by accident before this
+# line existed; it is untracked in the same commit.
+__pycache__/
