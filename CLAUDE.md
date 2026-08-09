@@ -76,7 +76,7 @@ code, which only reports transport.
 ## Badge art and `OPENAI_API_KEY`
 
 Badge medals are raster art generated offline by the `/generate-badge-art` skill
-(`.claude/skills/generate-badge-art/`). The style contract and the thirteen scene
+(`.claude/skills/generate-badge-art/`). The style contract and the fourteen scene
 lines live in that skill's `style.md`, which `tools/gen_badge_art.py` **parses** —
 the `<!-- STYLE BLOCK vN -->` and `<!-- SCENES -->` markers are an interface, and
 a marker only counts when it is alone on its own line.
@@ -110,12 +110,39 @@ misses correctly. Do not extend that header to a path whose names are not
 content-hashed. `src/middleware.ts` excludes `badges` from the auth matcher —
 badge art is committed art, not user data, and F16–F18 serve it to strangers.
 
-Adding badge #14: add the key to `BADGE_CATALOG`, add one `- <key>: <scene>` line
-inside `<!-- SCENES -->` in `style.md`, run `/generate-badge-art <key>`, promote
+Adding badge #15: add the key to `BADGE_CATALOG`, add one `- <key>: <scene>` line
+inside `<!-- SCENES -->` in `style.md`, add its `condition` and `gloss` to
+`src/lib/gamification/badge-meta.ts`, run `/generate-badge-art <key>`, promote
 **both** the `.png` and its `.txt` sidecar (the sidecar carries the style version,
 and losing it makes a mixed deck undetectable), then
 `python3 tools/make_badge_assets.py`. Never edit `src/lib/gamification/badge-art.ts`
-by hand.
+by hand. Between adding the key and promoting the art, `npm run typecheck` is red
+on `badge-art.ts` and `badge-meta.ts` — that is both parity guards firing, not a
+mistake. Badge #14 (`tolkien`) was added exactly this way and is the worked
+example.
+
+## There is exactly one modal in the app
+
+`src/components/gamification/badge-dialog.tsx`, on `/profile`, opened by tapping a
+badge row. A native `<dialog>` + `showModal()`, so the focus trap, Escape, the
+backdrop and focus restoration are the UA's rather than the app's. It is in the
+**top layer** — outside `.dw-screen`'s flex column and its `overflow: hidden` —
+which is what exempts it from [R19]'s height budget, and
+`npm run test:layout` asserts that with the dialog open rather than assuming it.
+
+Two things bite here and neither throws:
+
+- **`.dw-badge-dialog[open]`, never bare `.dw-badge-dialog`.** A bare
+  `display: flex` beats the UA's `dialog:not([open]) { display: none }`, and the
+  closed element then sits on the page as an empty bordered box.
+- **No React `autoFocus` inside a `<dialog>`.** React focuses on *mount*, one
+  commit before the effect calls `showModal()`, so the dialog records a child of
+  its own as the element to restore focus to — and that child is unmounted on
+  close, dropping focus to `<body>`. `showModal()` already focuses the first
+  focusable descendant.
+
+Every *destructive* action still uses `ToggleRow`'s two-tap arm. The ban this
+relaxes was about confirmation modals; see [R22]'s neighbours and F13 D5.
 
 `scripts/profile-peek.ts` is the F7 verification helper — `show`, `unonboard`,
 `onboard`, `tz <zone> [manual]`, `clear`, `delete`, `context`. Run it with

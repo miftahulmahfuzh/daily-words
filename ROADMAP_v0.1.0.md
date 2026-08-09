@@ -309,6 +309,7 @@ See [R12] for the exact trigger of each.
 | `leap_day` | 29 February | Leap Year Lexicographer |
 | `midnight_oil` | card created 00:00–04:00 local | Burning the Midnight Oil |
 | `full_week` | 7 cards in 7 consecutive days | Full Week Ration |
+| `tolkien` | 2 September (the day J.R.R. Tolkien died) | Sauron's Favourite |
 
 Badges are repeatable across years; `badges_awarded` records each occurrence and the
 profile shows a count ("×2").
@@ -719,11 +720,55 @@ void, though F10's own always-present textarea is unchanged and still correct.
 
 ---
 
+### [R22] The badge table has fourteen rows. The fourteenth post-dates v0.1.0.
+
+Decided when F13 was built, on a direct user request recorded in
+`plans/F11-F18-BRIEF.md` § "Where these features came from", item 6: *"sauron's
+favorite: draw daily card on the death day of jrr tolkien"*. J.R.R. Tolkien died
+on **2 September 1973**.
+
+This is written into the table above rather than left to a plan, because
+`CLAUDE.md`'s authority order puts this file above `plans/F*.md` and the
+Reconciliation Decisions already say *"The level and badge tables in this roadmap
+remain authoritative."* A roadmap frozen at thirteen against a catalog of
+fourteen would read to the next agent as a bug in the catalog, and the obvious
+repair — deleting the badge — is the wrong one. **The table is authoritative; it
+is also amendable, and this is what an amendment looks like.**
+
+Three details F13 settled and this row inherits:
+
+- **The key is `tolkien`, not `sauron`.** Every other key in the table names its
+  trigger factually and in ASCII. `sauron` names the joke and describes nothing,
+  and a `badges_awarded` row reading `sauron` is unreadable in the Neon console
+  and in a `stats:recompute` diff.
+- **The title is en-GB — "Favourite".** Confirmed by the user against their own
+  spelling. The rest of the catalog is en-GB and `formatLocalDateLong` is
+  `en-GB`; the app draws the typographic apostrophe everywhere, per the note at
+  the top of `levels.ts`. The table above uses straight quotes throughout, as it
+  always has; the shipped string does not.
+- **Appended, last.** Catalog order is shelf order, toast order and evaluator
+  return order, and `scripts/check-gamification.ts` asserts a specific index
+  tuple. Appending preserves every existing index.
+
+`evaluateBadges` stays pure — the rule reads `month` and `day` off the
+already-parsed `cardDate`, like the nine other date badges. That is what makes
+the backfill safe: users with a card on a past 2 September receive it, silently
+and dated to the historic day, on the next `npm run stats:recompute --all`.
+
+**Overrides:** nothing. It adds a row and supersedes F9's "thirteen badges, all
+thirteen from the roadmap, no additions".
+
+---
+
 ### Still open — these need your call, not mine
 
 1. **`ConfirmSheet`.** F2 resolved the roadmap's "sheet" component against its ban on
    modals by allowing a heavily constrained native `<dialog>` for two uses only
    (confirm delete, confirm mastered). Defensible, but it is the thin end of a wedge.
    *(F2 shipped `ToggleRow`'s two-tap arm instead — no modal anywhere. Effectively closed.)*
+   *(F13 then put exactly one modal in the app: a native `<dialog>` on `/profile`
+   holding a badge's medal and explanation. It is not the wedge this question was
+   about — it interrupts nothing, confirms nothing and destroys nothing, and the
+   two-tap arm still owns every destructive action. See F13 D5.)*
 2. **`x-vercel-ip-timezone`** availability on Vercel's free tier is unverified — it is
    F7's second-choice timezone fallback. Check on a preview deploy before relying on it.

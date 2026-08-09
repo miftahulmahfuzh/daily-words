@@ -116,4 +116,10 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     sha256: "34b454753a91efeb40ba82f49351229d006e828808499336fe463cfa2bc29645",
     styleVersion: "v1",
   },
+  tolkien: {
+    src: "/badges/tolkien.6f5d9027.webp",
+    small: "/badges/tolkien.6f5d9027.sm.webp",
+    sha256: "6f5d9027ffedc48d07f1cae9b38de49a5f68efad23d6359f38af3975665f920a",
+    styleVersion: "v1",
+  },
 };

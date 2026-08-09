@@ -32,7 +32,7 @@ import {
  * new, and never announces "you earned 14 badges while we weren't looking". The
  * user simply finds the shelf correct next time they open /profile.
  *
- * Cost: three years of daily cards is ~1,095 rows and thirteen pure evaluations
+ * Cost: three years of daily cards is ~1,095 rows and fourteen pure evaluations
  * each. No network, no LLM, well under a second.
  */
 export async function recomputeUserGamification(

@@ -6,7 +6,9 @@ import { BADGE_CATALOG } from "@/lib/gamification/badges";
 /**
  * The same block heights the real page draws, so nothing jumps when the query
  * lands. The badge rows are ghosts rather than titles: a shelf that renders all
- * thirteen names and then re-orders them a moment later reads as a glitch.
+ * fourteen names and then re-orders them a moment later reads as a glitch.
+ *
+ * It iterates `BADGE_CATALOG`, so a fifteenth badge gets its ghost row for free.
  */
 export default function ProfileLoading() {
   return (

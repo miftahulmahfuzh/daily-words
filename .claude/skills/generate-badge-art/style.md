@@ -141,6 +141,7 @@ numerals, and numerals are text. Turn the face away.
 - christmas: A heavy door-knocker on a panelled door, its lion mask softening into a human face, the ring hanging dead still, the panelling's mouldings drawn in firm contour. VERMILION: a sprig of holly wedged behind the ring.
 - year_end: A squared stack of twelve identical torn-off paper leaves on a desk, the topmost lifting at one corner in a draught, the empty calendar backing board leaning against the stack behind. VERMILION: the pin still stuck through the top leaf.
 - leap_day: A hare in mid-leap over a low stone wall, drawn as a natural-history plate, its shadow the only thing beneath it; the wall's coping stones run in even blocks with one block missing from the run and set aside on the grass below. VERMILION: a mark on that single set-aside stone.
+- tolkien: A plain heavy iron ring set down on a bare table beside a briar pipe gone cold, the ring's band entirely smooth and unmarked, a thin coil of smoke still rising from the bowl. VERMILION: a wax seal on the table beside the ring.
 <!-- /SCENES -->
 ```
 
@@ -152,7 +153,7 @@ noticing convergence on badge eleven:
 hand-and-pocket / fanned coupons / columns-and-mug / oil lamp /
 hourglass-and-ink-pot / mimosa-and-envelope / stage-and-stool / coiled wristwatch
 / microphone-and-pole / cupped hands / door knocker / stack of leaves /
-hare-and-wall.
+hare-and-wall / ring-and-pipe.
 
 **Two known adjacencies to watch:** `first_card` and `ibu` are both hands
 (different framings — a back of a hand vs a cupped pair), and `full_week` and
@@ -168,24 +169,29 @@ frees the flame for the badge that is actually about staying up.
 
 ---
 
-## The fourteenth, drafted and deliberately not generated
+## The fourteenth, adopted — and what adopting one costs
 
-F13 adds "Sauron's Favorite" for a card drawn on 2 September, the day Tolkien
-died. F13 owns the key; `sauron` is suggested. The scene line is drafted here so
-that F13's author can adopt it rather than invent a style, and so that the
-"adding badge #14" procedure has a worked example.
+F13 shipped badge #14 for a card drawn on 2 September, the day Tolkien died. Its
+scene line was drafted here before the key existed and now sits inside
+`<!-- SCENES -->` with the rest, last, matching `BADGE_CATALOG`.
 
-**This line sits outside `<!-- SCENES -->` on purpose.** The generator's key-set
-assertion compares the scenes region against `BADGE_CATALOG`, and `sauron` is not
-in the catalog yet. To adopt it, move the line inside the scenes fence, in the
-same position the key occupies in `BADGE_CATALOG`, so the two files read in the
-same order.
+**It was drafted as `- sauron:` and adopted as `- tolkien:`.** F13 D8 owns the
+key and named the trigger rather than the joke, because a `badges_awarded` row
+reading `sauron` is unreadable in a recompute diff. Moving a drafted line in
+without renaming it is the one way to get this wrong, and `gen_badge_art.py`
+refuses to start on the key-set mismatch rather than generating something the
+manifest cannot place. **That refusal is the guard working.**
 
-    - sauron: A plain heavy iron ring set down on a bare table beside a briar pipe gone cold, the ring's band entirely smooth and unmarked, a thin coil of smoke still rising from the bowl. VERMILION: a wax seal on the table beside the ring.
+The other half of the same guard bites first: adding a key to `BADGE_CATALOG`
+breaks `npm run typecheck` immediately, because `BADGE_ART` is a total
+`Record<BadgeKey, BadgeArt>` (F12 D9). Between adding the key and promoting the
+art, the build is red on purpose. Generate, promote both the `.png` and its
+`.txt` sidecar, run `tools/make_badge_assets.py`, and it clears.
 
 `the ring's band entirely smooth and unmarked` is load-bearing. The One Ring's
 defining feature in every reference image this model has ever seen is an
-inscription, and an inscription is text, and text is an automatic rejection.
+inscription, and an inscription is text, and text is an automatic rejection. It
+held: the generated candidate carries no lettering anywhere.
 
 ---
 

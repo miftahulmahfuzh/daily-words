@@ -79,7 +79,7 @@ the design does not contain. The differences, and why:
 | `SegmentedTabs` | `Tabs` | The design uses underline tabs, not an iOS segmented control on a sunken track. Same job, correct drawing. |
 | `BadgeChip` (wrapping pills) | `BadgeRow` (ruled list) | The design draws a list. It is also the better answer to F2's own rule against truncating a badge name — "No Weekend Without Ration Card" is not a chip. |
 | `LevelPill` tier ramp | plain accent pill | The design has no ramp. The tier survives in the `title` attribute only. |
-| `ConfirmSheet` (native `<dialog>`) | `ToggleRow` two-tap arm | The user's call on the roadmap's open question #1. No modal anywhere in the app. |
+| `ConfirmSheet` (native `<dialog>`) | `ToggleRow` two-tap arm | The user's call on the roadmap's open question #1. **One modal in the app, and it is not this one** — F13's `BadgeDialog`, a native `<dialog>` in the top layer on `/profile`. The decision this row records was about a modal that *interrupts a destructive action*, which is the kind that earns the bad reputation; a badge's medal and explanation interrupts nothing. Every destructive action still goes through the two-tap arm. F13 D5. |
 | `PageHeader { title, subtitle, trailing }` | `ScreenHeader { eyebrow, title, trailing }` + composition | Every screen's header differs; one frozen 48px bar cannot express them. |
 | `Screen { title, headerTrailing, back, padded }` | `Screen { tabs }` + `ScreenBody` | F1 shipped this split and [R19] depends on it. |
 | `LAYOUT.dailyCardH: 347`, `todayFixedTotal: 520` | removed | [R19] replaced the arithmetic with structure. `LAYOUT` now publishes a floor and a count, not a total. |
@@ -110,12 +110,23 @@ Obligations F2 placed on the other features still stand:
   `BadgeRow`; recomputes the streak on read ([R11]). **Shipped**: two
   `LevelPill`s (streak and collection) and no progress bars — the design has
   none — over the design's ruled 2×2 stat grid and a `BadgeRow` shelf that shows
-  all thirteen, earned first. It also filled the trailing slot F5 left empty on
+  all fourteen, earned first. It also filled the trailing slot F5 left empty on
   `/today` with the design's "N day run" pill, hidden at zero. Reviewable without
   a session at `/kitchen-sink/profile?state=full|lapsed|nowords|empty`.
   `RewardToast` is the one component outside `Screen` allowed `position: fixed`:
   it contributes zero layout height, which is the property the rule protects, and
   `/kitchen-sink/today?n=6&toast=1` is where that is measured.
+- **F13** — the shelf's rows are `<button>`s and open `BadgeDialog`, **the one
+  modal in the app**. `BadgeRow` itself is unchanged: the kit is frozen and
+  exactly one caller needs the behaviour, so the shelf wraps rather than the
+  primitive grows. `BadgeDialog` is the second component allowed outside
+  `Screen`, on the same argument `RewardToast` won: `showModal()` puts it in the
+  **top layer**, outside `.dw-screen`'s flex column and its `overflow: hidden`,
+  so it contributes zero layout height — measured in `tests/e2e/no-scroll.spec.ts`
+  with the dialog open, not assumed. Its panel borrows `Card`'s tokens without
+  being a `Card`, because its body takes a documented `overflow-y` escape and
+  `card.tsx` promises a card never scrolls internally. Reviewable without a
+  session at `/kitchen-sink/profile?badge=<key>`.
 - **F10** — the journal composer is a permanent field at the top of `/journal`;
   entry body is serif; the insight is a ruled accent block. **Shipped**: the
   composer sits in `ScreenBody`'s `top` slot so the list scrolls under it, the
@@ -219,7 +230,7 @@ nothing failing anywhere.
 
 Badges are the one place this kit draws a raster. Everything else on screen is a
 rule, a dot or a word ([R18]), and badge medals are the deliberate exception:
-thirteen engraved letterpress seals, generated offline by `/generate-badge-art`.
+fourteen engraved letterpress seals, generated offline by `/generate-badge-art`.
 
 **Two sizes ship, and a component must draw at or below them:**
 
@@ -227,6 +238,13 @@ thirteen engraved letterpress seals, generated offline by `/generate-badge-art`.
 |---|---|---|---|
 | `BADGE_ART[key].src` | 768×768 | **~220 css px** | the badge modal (F13) |
 | `BADGE_ART[key].small` | 192×192 | **~40 css px** | the shelf mark on `/profile` |
+
+**~220 is a ceiling, and F13 draws it as `min(220px, 25dvh)`.** Measured: at
+375×667 a flat 220 pushes the longest gloss in `badge-meta.ts` 38px past the
+panel's max-height, and the first line to go under the fold is the earned-on
+date — the one thing on that panel a user cannot reconstruct from anywhere else.
+At 390×844 the clamp resolves to 211 and nothing moves. The rule lives in
+`.dw-badge-medal` in `globals.css`, beside the dialog's other measured sizing.
 
 Import them from `src/lib/gamification/badge-art.ts` — a **generated** file, never
 edited by hand — together with `BADGE_ART_SIZE` and `BADGE_ART_SMALL_SIZE` so a

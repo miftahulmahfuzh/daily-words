@@ -20,11 +20,13 @@
  */
 import {
   BADGE_CATALOG,
+  BADGE_KEYS,
   badgeTitle,
   evaluateBadges,
   type BadgeContext,
   type BadgeKey,
 } from '../src/lib/gamification/badges'
+import { BADGE_META, badgeMeta } from '../src/lib/gamification/badge-meta'
 import {
   COLLECTOR_LEVELS,
   STREAK_LEVELS,
@@ -245,6 +247,43 @@ check('year_end    − 2026-12-30', on({ cardDate: '2026-12-30' }), [])
 check('leap_day    + 2028-02-29', on({ cardDate: '2028-02-29' }), ['leap_day'])
 check('leap_day    − 2028-02-28', on({ cardDate: '2028-02-28' }), [])
 
+// F13's fourteenth. Weekdays below are `localDayOfWeek`'s answers, not guesses:
+// 1973-09-02 and 2029-09-02 are Sundays, 2026-09-02 a Wednesday, 2028-09-02 a
+// Saturday.
+check('tolkien     + 2026-09-02 (a Wednesday)', on({ cardDate: '2026-09-02' }), ['tolkien'])
+check('tolkien     − 2026-09-01', on({ cardDate: '2026-09-01' }), [])
+check('tolkien     − 2026-09-03', on({ cardDate: '2026-09-03' }), [])
+// 2027, not 2026: 2026-08-02 is a Sunday, and an expectation of `[]` there
+// would fail on `sunday` rather than on anything to do with this rule. 2027-08-02
+// is a Monday, so the empty result is about the month and nothing else.
+check('tolkien     − 2027-08-02 (right day, wrong month)', on({ cardDate: '2027-08-02' }), [])
+check('tolkien     − 2026-09-22 (right month, wrong day)', on({ cardDate: '2026-09-22' }), [])
+check(
+  'tolkien     + 1973-09-02, the day itself (a Sunday)',
+  on({ cardDate: '1973-09-02' }),
+  ['sunday', 'tolkien'],
+)
+check('tolkien     + 2029-09-02 (a Sunday)', on({ cardDate: '2029-09-02' }), ['sunday', 'tolkien'])
+check(
+  'tolkien     + 2026-09-02 at 02:00',
+  on({ cardDate: '2026-09-02', localHour: 2 }),
+  ['midnight_oil', 'tolkien'],
+)
+
+// The pair that catches a transposed comparison. `tolkien` is (month 9, day 2)
+// and `leap_day` is (month 2, day 29); written the wrong way round — `month === 2
+// && day === 9`, or `month === 29` — either one passes a single-date test and
+// fails here. Evaluated in sequence, because it also asserts that
+// `evaluateBadges` holds no state between calls.
+{
+  const leap = on({ cardDate: '2028-02-29' })
+  const tolkien = on({ cardDate: '2028-09-02' })
+  check('2 September and 29 February do not leak into each other', [leap, tolkien], [
+    ['leap_day'],
+    ['tolkien'],
+  ])
+}
+
 section('§8.3 badges — combinations, and the order they come back in')
 
 check(
@@ -264,13 +303,62 @@ check(
   ),
   [0, 1, 3, 10],
 )
+check(
+  'a first card on a Sunday 2 September',
+  on({ cardDate: '2029-09-02', isFirstCardEver: true }),
+  ['first_card', 'sunday', 'tolkien'],
+)
 
 section('§8.1 badges — the catalog')
 
-check('thirteen badges, no more', BADGE_CATALOG.length, 13)
-check('keys are unique', new Set(BADGE_CATALOG.map((b) => b.key)).size, 13)
-check('titles are unique', new Set(BADGE_CATALOG.map((b) => b.title)).size, 13)
+check('fourteen badges, no more', BADGE_CATALOG.length, 14)
+check('keys are unique', new Set(BADGE_CATALOG.map((b) => b.key)).size, 14)
+check('titles are unique', new Set(BADGE_CATALOG.map((b) => b.title)).size, 14)
+// Appending is what preserves the index tuple asserted above, and the toast
+// ordering of the thirteen that came before it.
+check('tolkien is last in the catalog', BADGE_CATALOG.at(-1)?.key, 'tolkien')
 check('§13.15 an unknown key has no title', badgeTitle('six_before_noon'), null)
+
+/* ------------------------ §F13 — the badge metadata ------------------------ */
+
+section('§F13 the badge metadata — parity with the catalog')
+
+// Both directions. The `Record<BadgeKey, …>` type already catches a catalog key
+// with no metadata at `npm run typecheck`; this catches the same thing one step
+// later and also catches the reverse, which the type cannot see because an extra
+// key in an object literal is only an error when it is literal-inferred.
+check(
+  'every catalog key has metadata',
+  BADGE_CATALOG.filter((b) => !BADGE_META[b.key]).map((b) => b.key),
+  [],
+)
+check(
+  'no metadata key is absent from the catalog',
+  Object.keys(BADGE_META).filter((k) => !BADGE_KEYS.includes(k as BadgeKey)),
+  [],
+)
+check('badgeMeta mirrors badgeTitle on an unknown key', badgeMeta('six_before_noon'), null)
+
+// Length caps. `condition` sits on one to two lines under the title and `gloss`
+// on three to five; past these the dialog reaches for §4.5's scrolling escape
+// hatch on a 375×667 screen, which is the documented degradation and not the
+// intended state.
+check(
+  'every condition is non-empty and ≤ 140 characters',
+  BADGE_CATALOG.filter((b) => {
+    const c = BADGE_META[b.key].condition
+    return c.length === 0 || c.length > 140
+  }).map((b) => `${b.key} (${BADGE_META[b.key].condition.length})`),
+  [],
+)
+check(
+  'every gloss is non-empty and ≤ 320 characters',
+  BADGE_CATALOG.filter((b) => {
+    const g = BADGE_META[b.key].gloss
+    return g.length === 0 || g.length > 320
+  }).map((b) => `${b.key} (${BADGE_META[b.key].gloss.length})`),
+  [],
+)
 
 /* ---------------- The Auckland case, end to end through the zone ------------ */
 
@@ -344,6 +432,14 @@ section('§14 the tone check — no loss aversion anywhere in this feature')
 
 {
   const banned = [/keep it up/i, /at risk/i, /don['’]t lose/i, /streak is about to/i, /hurry/i]
+  // F13's twenty-eight new strings ride the same list, and add three of their
+  // own. They are the longest prose in the feature and the only prose in it that
+  // explains rather than reports, which is exactly where a congratulation would
+  // arrive disguised as copy.
+  const meta = BADGE_CATALOG.flatMap((b) => [
+    BADGE_META[b.key].condition,
+    BADGE_META[b.key].gloss,
+  ])
   const copy = [
     levelCaption(resolveStreakLevel(10), 'streak'),
     levelCaption(resolveStreakLevel(365), 'streak'),
@@ -357,9 +453,23 @@ section('§14 the tone check — no loss aversion anywhere in this feature')
     ...BADGE_CATALOG.map((b) => b.title),
     ...STREAK_LEVELS.map((l) => l.title),
     ...COLLECTOR_LEVELS.map((l) => l.title),
+    ...meta,
   ]
   check('no nagging phrases', copy.filter((c) => banned.some((b) => b.test(c))), [])
   check('no exclamation marks', copy.filter((c) => c.includes('!')), [])
+
+  // The conditions are facts about cards, never things the reader did — which is
+  // what lets one string serve both the earned and the unearned state (D2).
+  const secondPerson = /\byou\b|\byour\b|\byours\b|\byou['’]re\b/i
+  check('no second person', copy.filter((c) => secondPerson.test(c)), [])
+
+  const flattery = /congratulations|well done|amazing|nice work|proud of|impressive/i
+  check('no flattery', copy.filter((c) => flattery.test(c)), [])
+
+  // The exact class of bug `levels.ts` documents at the top of the file: a
+  // straight quote beside a typographic one in the same serif reads as a typo.
+  // This would have caught "Sauron's Favourite" as first typed.
+  check('no straight apostrophes', copy.filter((c) => c.includes("'")), [])
 }
 
 console.log(
