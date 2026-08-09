@@ -10,7 +10,6 @@ import { TurnMeter } from "@/components/chat/turn-meter";
 import { closeChat, openChat, resetChat, sendChatMessage } from "@/lib/chat/client";
 import type { ChatMessageDto, ChatPageState, ChatStateDto } from "@/lib/chat/schemas";
 import type { ChatStatus } from "@/lib/chat/turn-policy";
-import { vocabDetailHref } from "@/lib/vocab/links";
 
 /**
  * The whole interactive surface of the chat: the proactive opener fire, the
@@ -21,7 +20,18 @@ import { vocabDetailHref } from "@/lib/vocab/links";
  * courtesy, and the reservation in `chat_sessions` is the actual cap. A client
  * that lies about `turnCount` gets a 409, which is the point.
  */
-export function ChatClient({ initial }: { initial: ChatPageState }) {
+export function ChatClient({
+  initial,
+  backHref,
+}: {
+  initial: ChatPageState;
+  /**
+   * Fully formed by the server, which is the only place that has read the
+   * `from` param. Passed rather than computed so no origin union reaches this
+   * bundle: the client stays dumb about where the word came from.
+   */
+  backHref: string;
+}) {
   const entryId = initial.vocabEntryId;
 
   const [messages, setMessages] = useState<ChatMessageDto[]>(initial.messages);
@@ -161,7 +171,7 @@ export function ChatClient({ initial }: { initial: ChatPageState }) {
         className="flex shrink-0 items-center justify-between gap-3 border-b border-rule px-[var(--gutter)] pb-3"
         style={{ paddingTop: "var(--pad-top)" }}
       >
-        <BackLink href={vocabDetailHref(entryId)} label="Back" />
+        <BackLink href={backHref} label="Back" />
         <span className="flex min-w-0 items-center gap-3">
           {/* The term only — never the definition. The user has just come from
               the detail page, and repeating the meaning here invites them to

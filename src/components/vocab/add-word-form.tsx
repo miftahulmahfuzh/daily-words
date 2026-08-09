@@ -204,7 +204,7 @@ export function AddWordForm({ recent }: { recent: RecentWord[] }) {
           <Eyebrow size="sm">Just added</Eyebrow>
           <div className="flex flex-wrap gap-2">
             {justAdded.map((word) => (
-              <Pill key={word.id} href={vocabDetailHref(word.id)}>
+              <Pill key={word.id} href={vocabDetailHref(word.id, "new")}>
                 {word.term}
               </Pill>
             ))}
@@ -228,7 +228,7 @@ function DuplicateNotice({ duplicate }: { duplicate: Duplicate }) {
           ? `${duplicate.term} — you marked this mastered.`
           : `You already have ${duplicate.term}.`}
       </Prose>
-      <Button size="sm" fullWidth={false} href={vocabDetailHref(duplicate.id)}>
+      <Button size="sm" fullWidth={false} href={vocabDetailHref(duplicate.id, "new")}>
         Open it
       </Button>
     </Card>

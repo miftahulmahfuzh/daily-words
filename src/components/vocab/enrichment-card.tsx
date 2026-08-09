@@ -28,6 +28,11 @@ export function EnrichmentCard({
   entry: EnrichResponse;
   onChange: (entry: EnrichResponse) => void;
 }) {
+  /* Both "Open it" buttons below hardcode the `"new"` origin, which is true
+     because this card has exactly one mount point: `AddWordForm` on
+     `/vocab/new`. F14 reworks this component — if it mounts it anywhere else,
+     the origin becomes a prop rather than staying a literal (F11 §7). */
+
   /** Set when accepting the correction found the word already in the collection. */
   const [merged, setMerged] = useState<{ id: string; term: string } | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -93,7 +98,7 @@ export function EnrichmentCard({
         <Prose size="body" tone="ink">
           You already had {merged.term}.
         </Prose>
-        <Button size="sm" fullWidth={false} href={vocabDetailHref(merged.id)}>
+        <Button size="sm" fullWidth={false} href={vocabDetailHref(merged.id, "new")}>
           Open it
         </Button>
       </Card>
@@ -184,7 +189,7 @@ export function EnrichmentCard({
                 onDone={onChange}
               />
             ) : (
-              <Button size="sm" fullWidth={false} href={vocabDetailHref(entry.id)}>
+              <Button size="sm" fullWidth={false} href={vocabDetailHref(entry.id, "new")}>
                 Open it
               </Button>
             )}

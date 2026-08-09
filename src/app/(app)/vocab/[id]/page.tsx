@@ -11,7 +11,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getVocabEntryDetail } from "@/lib/db/queries/vocab";
 import { enrichmentCopy, isStalePending } from "@/lib/vocab/display";
 import { termSizeClass } from "@/lib/vocab/format";
-import { vocabChatHref, vocabListHref } from "@/lib/vocab/links";
+import { backTarget, parseOrigin, vocabChatHref } from "@/lib/vocab/links";
 import { cn } from "@/lib/ui/cn";
 import { MasteredToggle } from "./mastered-toggle";
 
@@ -24,11 +24,26 @@ import { MasteredToggle } from "./mastered-toggle";
    a model call is the explicit Try again button. */
 export default async function WordPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  /* Wider than the `string` `/vocab/page.tsx` uses for `tab` and `q`, because
+     `parseOrigin` is the thing that has to be honest about a repeated param: a
+     `from` given twice arrives as an array and is discarded, not sampled. */
+  searchParams: Promise<{ from?: string | string[] }>;
 }) {
   const user = await requireUser();
   const { id } = await params;
+
+  /* Where the user came from, resolved once. `parseOrigin` narrows to a closed
+     union or `null`, and `backTarget` maps a union member — never a string — to
+     a literal href, so a hand-typed `from` of `https://evil.example` cannot
+     become a link. The
+     absent, unrecognised and `collection` cases all land on the Collection,
+     which is what makes this strictly additive: every URL that worked before
+     F11 still says exactly what it said. */
+  const origin = parseOrigin((await searchParams).from);
+  const back = backTarget(origin);
 
   // A malformed id must never reach the database: compared against a `uuid`
   // column it is a cast error and a 500, where the honest answer is a 404.
@@ -56,7 +71,7 @@ export default async function WordPage({
   return (
     <Screen>
       <ScreenBody scroll padded={false} className="px-6 pb-7">
-        <BackLink href={vocabListHref()} label="Collection" />
+        <BackLink href={back.href} label={back.label} />
 
         {/* `break-words` matters at the smallest bucket: `line-clamp-2` gives a
             long term two lines, but a single unbreakable word has no break
@@ -129,7 +144,14 @@ export default async function WordPage({
             word: mastering retires a word from daily cards, not from practice.
             F6 owns the route and must re-verify ownership itself — the button
             is not the only way to reach the URL. */}
-        <Button variant="filled" href={ready ? vocabChatHref(entry.id) : undefined} disabled={!ready}>
+        {/* The chat inherits the word's origin rather than becoming one, so
+            back out of the chat and back again lands where the user started
+            (F11 D6). */}
+        <Button
+          variant="filled"
+          href={ready ? vocabChatHref(entry.id, origin) : undefined}
+          disabled={!ready}
+        >
           Practise this word
         </Button>
         {!ready && <Meta className="block pt-2">Available once the word is ready</Meta>}

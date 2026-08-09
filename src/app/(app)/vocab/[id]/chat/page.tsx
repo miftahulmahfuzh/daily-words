@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { requireUser } from "@/lib/auth/session";
 import { vocabEntryIdSchema } from "@/lib/chat/schemas";
 import { getPageState } from "@/lib/chat/service";
-import { vocabDetailHref } from "@/lib/vocab/links";
+import { parseOrigin, vocabDetailHref } from "@/lib/vocab/links";
 import { ChatClient } from "./chat-client";
 
 /**
@@ -27,11 +27,14 @@ import { ChatClient } from "./chat-client";
  */
 export default async function ChatPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }) {
   const user = await requireUser();
   const { id } = await params;
+  const origin = parseOrigin((await searchParams).from);
 
   // A malformed id compared against a `uuid` column is a cast error and a 500,
   // where the honest answer is a 404.
@@ -45,6 +48,15 @@ export default async function ChatPage({
   const state = result.state;
 
   /**
+   * The chat always returns to its word, so its own label stays "Back" — but
+   * the *word* it returns to must still know where the user originally came
+   * from, or Today → word → chat → back → back lands in the Collection. The
+   * chat is never itself an origin: that would make back a two-node cycle with
+   * no exit (F11 D6).
+   */
+  const backHref = vocabDetailHref(state.vocabEntryId, origin);
+
+  /**
    * Enrichment has not landed, so there is no definition and no part of speech
    * — and the system prompt is built out of both. The client is never mounted,
    * so no `/open` is fired; `/open` refuses it independently if called direct.
@@ -53,14 +65,11 @@ export default async function ChatPage({
     return (
       <Screen>
         <ScreenBody padded={false} className="px-6">
-          <BackLink href={vocabDetailHref(state.vocabEntryId)} label="Back" />
+          <BackLink href={backHref} label="Back" />
           <EmptyState
             title="Still looking this word up"
             body="Practice needs the meaning first. Come back once it is ready."
-            action={{
-              label: "The word",
-              href: vocabDetailHref(state.vocabEntryId),
-            }}
+            action={{ label: "The word", href: backHref }}
           />
         </ScreenBody>
       </Screen>
@@ -69,7 +78,7 @@ export default async function ChatPage({
 
   return (
     <Screen keyboardAware>
-      <ChatClient initial={state} />
+      <ChatClient initial={state} backHref={backHref} />
     </Screen>
   );
 }

@@ -18,6 +18,7 @@
     "llm:check": "tsx --conditions=react-server --env-file=.env.local scripts/check-llm.ts",
     "vocab:enrich": "tsx --conditions=react-server --env-file=.env.local scripts/enrich-once.ts",
     "dates:check": "tsx scripts/check-dates.ts",
+    "nav:check": "tsx scripts/check-nav.ts",
     "selection:check": "tsx --conditions=react-server --env-file=.env.local scripts/check-selection.ts",
     "profile:check": "tsx scripts/check-profile.ts",
     "chat:check": "tsx scripts/check-chat.ts",

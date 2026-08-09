@@ -25,9 +25,14 @@ export function DailyCardRow({
   /** No hairline after the last row. */
   last?: boolean;
 }) {
+  /* `"today"` is a literal because this component has exactly one meaning: a
+     row of *today's card*, so the word it opens must come back here (F11 D4).
+     If F18's public shared card ever wants this row, lift the href to a prop
+     rather than adding a `share` origin — a public page's rows must not link
+     into `(app)`, which would bounce an anonymous visitor to /signin. */
   return (
     <Link
-      href={vocabDetailHref(item.id)}
+      href={vocabDetailHref(item.id, "today")}
       data-testid="daily-card-row"
       className={cn(
         "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-[3px] px-0.5 py-[11px]",

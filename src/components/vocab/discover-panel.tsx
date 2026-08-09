@@ -253,7 +253,7 @@ export function DiscoverPanel({
             {kept.map((word, i) => (
               <ListRow
                 key={word.id}
-                href={vocabDetailHref(word.id)}
+                href={vocabDetailHref(word.id, "discover")}
                 title={word.term}
                 subtitle={keptGloss(word)}
                 divider={i < kept.length - 1}
