@@ -318,6 +318,27 @@ throwing. Each cost real time.
   cycle. Adding a fifth origin means adding a row to `BACK_TARGETS`, not a
   template literal in a producer; `npm run nav:check` fails if the literal
   `from=` appears in any file under `src/` but `lib/vocab/links.ts`.
+- **The Collection's search runs in the browser, and the search term is written
+  to the URL rather than read from it.** `MineTab` ships the whole collection
+  when it is at most `VOCAB_CLIENT_INDEX_MAX` (1,500) rows — one statement, and
+  `q` is deliberately **not** passed to that query, because the whole safety of
+  `MineClient`'s `history.replaceState` rests on the RSC tree for `/vocab` and
+  for `/vocab?q=gen` being the same tree. Typing issues no request of any kind;
+  the field is seeded from `?q=` once, in a `useState` initialiser, and never
+  re-read. Above the ceiling the pre-F19 server-filtered path takes over
+  unchanged. The rule itself is `lib/vocab/search.ts` — a **third** module beside
+  `dedup.ts` and `normalize.ts`, and neither of theirs: it is a transcription of
+  `matchesQuery`'s SQL (case-insensitive substring over term and definition, no
+  diacritic folding, no metacharacters), and `vocab:check` drives one table
+  through a JS re-reading of the SQL and through it and requires the same answer.
+  The bug this replaced is worth knowing because nothing threw: `vocab-search.tsx`
+  kept one `urlQ` slot meaning both "what we asked the URL to become" and "what
+  the server says it is", and a render-phase sync read the disagreement between
+  them — which lasts for a whole round trip — as "the URL moved underneath us",
+  reverting the field to the stale server value one keystroke at a time. Back
+  still restores the filtered list; it has never restored the **scroll offset**,
+  because `.dw-pane-scroll` is an inner pane and scroll restoration restores
+  `window.scrollY`.
 - `tests/e2e/journal-duplicate.spec.ts` is the one spec in the suite that
   **writes**, so it is `mode: "serial"` and runs at the design-target viewport
   only — `fullyParallel` across two projects would have three tests deleting each
