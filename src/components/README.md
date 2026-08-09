@@ -12,7 +12,7 @@ is genuinely needed, add it to `src/styles/tokens.css` or the `@theme` block in
 
 | Export | Path | Props |
 |---|---|---|
-| `Screen` | `@/components/layout/screen` | `{ tabs?, className, children }` |
+| `Screen` | `@/components/layout/screen` | `{ tabs?, keyboardAware?, className, children }` |
 | `ScreenBody` | `@/components/layout/screen` | `{ top?, scroll?, padded?, className, children }` |
 | `ScreenHeader` | `@/components/layout/screen` | `{ eyebrow?, title?, trailing?, className }` |
 | `BackLink` | `@/components/layout/back-link` | `{ href, label }` |
@@ -49,6 +49,11 @@ those belong to `Screen`, and duplicating them is how the height budget breaks.
 | `DayStrip` | `@/components/daily/day-strip` | `{ days: DayStripItem[], label? }` |
 | `Chip`, `ChipSelect` | `@/components/profile/chip-select` | `{ pressed?, onClick? }` / `{ options, selected, onToggle }` |
 | `OptionRows` | `@/components/profile/option-rows` | `{ options: { value, label, gloss? }[], value, onChange }` |
+| `ChatTranscript` | `@/components/chat/chat-transcript` | `{ messages, timezone, pending, thinking }` |
+| `ChatComposer` | `@/components/chat/chat-composer` | `{ value, onChange, onSend, busy, error }` |
+| `TurnMeter` | `@/components/chat/turn-meter` | `{ used }` |
+| `RoundDivider` | `@/components/chat/round-divider` | `{ round, startedAt, timezone }` |
+| `VerdictCard` | `@/components/chat/verdict-card` | `{ content }` |
 
 `Chip` is the tappable sibling of `Pill` — same radius and tones, a real
 `<button>` with `aria-pressed` and a 44px floor. `ChipSelect` reports *which*
@@ -88,7 +93,8 @@ Obligations F2 placed on the other features still stand:
   `DailyCardItemView`; supplies `shortCardAction`; both the week strip and the month
   grid draw their marks with `CalendarMarkGlyph`.
 - **F6** — the chat pane scrolls, the composer sits outside it and owns the bottom
-  inset; the assistant's opening turn is the first `ChatBubble`.
+  inset; the assistant's opening turn is the first `ChatBubble`. **Shipped**, and
+  it is the one screen that passes `keyboardAware` — see below.
 - **F7** — `/onboarding` is one `Screen` with no `tabs` and five React states, not
   five routes. It lives **outside** the `(app)` route group, whose layout gates on
   `onboarded_at`. `/profile/edit` is a `Screen` with `BackLink` and a footer that
@@ -99,6 +105,25 @@ Obligations F2 placed on the other features still stand:
   `BadgeRow`; recomputes the streak on read ([R11]).
 - **F10** — the journal composer is a permanent field at the top of `/journal`;
   entry body is serif; the insight is a ruled accent block.
+
+### `Screen keyboardAware` — the one exception to `100dvh`
+
+`.dw-screen` sizes itself with `100dvh`, which tracks Safari's collapsing URL
+bar and is blind to the on-screen keyboard. That is right for every screen whose
+fields scroll inside a pane, and wrong for the one screen with a field pinned to
+the bottom of the column: F6's chat composer sits under the keyboard the moment
+it is focused.
+
+`keyboardAware` adds `.dw-screen-kb`, which sizes from `--vvh` and follows
+`--vvo`, both published by `<VisualViewportProbe />`. The fallbacks in the
+`var()` calls mean any browser without `visualViewport` behaves exactly as
+`.dw-screen` does.
+
+**Do not turn this on globally.** It makes the frame re-layout on every focus,
+and the other nine screens gain nothing from it. The composer's safe-area
+padding is arithmetic against the same variable — `max(0px, calc(var(--pad-bottom)
+- (100dvh - var(--vvh))))` — because the home-indicator inset is already inside
+the visual viewport when the keyboard is up, and applying it twice leaves a gap.
 
 ## The measured budget
 

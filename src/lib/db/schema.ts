@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
+  check,
   date,
   index,
   integer,
@@ -246,11 +247,32 @@ export const chatMessages = pgTable(
     createdAt: tsz('created_at').notNull().defaultNow(),
   },
   (t) => [
-    index('chat_messages_session_created_idx').on(t.sessionId, t.createdAt),
+    /**
+     * The only read path this feature has, in both its shapes: one round's
+     * history for the model, and every round chronologically for the page.
+     * `(round, created_at)` is chronological order for the second case too,
+     * because `round` only ever increases — so one index serves both and F6 §5
+     * gets its composite without a second index on a sixteen-row table.
+     *
+     * Replaces F1's `(session_id, created_at)`, which cannot serve the
+     * per-round filter.
+     */
+    index('chat_messages_session_round_created_idx').on(
+      t.sessionId,
+      t.round,
+      t.createdAt,
+    ),
     // [R6] partial unique: exactly one opener per (session, round).
     uniqueIndex('chat_messages_session_round_opener_uniq')
       .on(t.sessionId, t.round)
       .where(sql`${t.kind} = 'opener'`),
+    /**
+     * `$type<>()` is a compile-time claim; this is the runtime one. F6 reads
+     * `kind` to decide what goes in the model's history and what renders as a
+     * card, so a fourth value arriving from a migration or a psql session would
+     * be a silent display bug rather than an error.
+     */
+    check('chat_messages_kind_check', sql`${t.kind} in ('opener', 'reply', 'verdict')`),
   ],
 )
 

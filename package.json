@@ -20,6 +20,9 @@
     "dates:check": "tsx scripts/check-dates.ts",
     "selection:check": "tsx --conditions=react-server --env-file=.env.local scripts/check-selection.ts",
     "profile:check": "tsx scripts/check-profile.ts",
+    "chat:check": "tsx scripts/check-chat.ts",
+    "chat:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-chat-db.ts",
+    "chat:dry-run": "tsx --conditions=react-server --env-file=.env.local scripts/chat-dry-run.ts",
     "test:layout": "playwright test",
     "design:build": "node scripts/build-previews.mjs",
     "design:changed": "node scripts/dssync-changed.mjs"

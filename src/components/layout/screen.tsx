@@ -1,5 +1,6 @@
 import { cn } from "@/lib/ui/cn";
 import { TabBar } from "@/components/nav/tab-bar";
+import { VisualViewportProbe } from "@/components/layout/visual-viewport";
 
 /**
  * The layout primitive that owns the vertical budget.
@@ -18,15 +19,27 @@ import { TabBar } from "@/components/nav/tab-bar";
 export function Screen({
   children,
   tabs = false,
+  keyboardAware = false,
   className,
 }: {
   children: React.ReactNode;
   /** Render the four-item tab bar. False on /signin, /onboarding and detail routes. */
   tabs?: boolean;
+  /**
+   * Size the frame to `visualViewport` rather than `100dvh`.
+   *
+   * For the one screen with a text field pinned to the bottom of the column:
+   * F6's chat composer. `dvh` tracks Safari's URL bar but not its keyboard, so
+   * without this the composer sits under the keyboard the moment it is focused.
+   * Everywhere else the field scrolls in a pane and the default is correct —
+   * turning this on globally would make every screen re-layout on every focus.
+   */
+  keyboardAware?: boolean;
   className?: string;
 }) {
   return (
-    <div className="dw-screen">
+    <div className={cn("dw-screen", keyboardAware && "dw-screen-kb")}>
+      {keyboardAware && <VisualViewportProbe />}
       <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
         {children}
       </div>

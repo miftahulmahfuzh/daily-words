@@ -67,6 +67,38 @@ export function localHour(instant: Date, timeZone: string): number {
   return zonedParts(instant, timeZone).hour
 }
 
+/**
+ * The absolute instant at which the user's local day begins.
+ *
+ * The inverse of `toLocalDate`, and the only correct way to ask "has this
+ * happened today?" of a `timestamptz` column — `created_at >= startOfLocalDayUtc(today, tz)`.
+ * F6's per-day round guard is the first caller; F9 will want it for the same
+ * reason. A `date_trunc('day', created_at)` in SQL would truncate in the
+ * *server's* zone, which is the exact mistake the whole day-boundary contract
+ * exists to prevent.
+ *
+ * Two passes, because the offset depends on the instant we are trying to find.
+ * Pass one treats the wall time as if it were UTC and asks what the offset was
+ * near there; pass two re-asks at the corrected instant, which is what makes it
+ * right on the two days a year the offset changes. A third pass would never
+ * differ: no zone's offset changes twice within a day.
+ *
+ * On a spring-forward day whose local midnight does not exist the result is the
+ * first instant that does, which is the answer a "since midnight" filter wants.
+ */
+export function startOfLocalDayUtc(date: LocalDate, timeZone: string): Date {
+  const { year, month, day } = parseLocalDate(date)
+  const wallAsUtc = Date.UTC(year, month - 1, day)
+
+  const offsetAt = (instantMs: number): number => {
+    const p = zonedParts(new Date(instantMs), timeZone)
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - instantMs
+  }
+
+  const first = wallAsUtc - offsetAt(wallAsUtc)
+  return new Date(wallAsUtc - offsetAt(first))
+}
+
 export function parseLocalDate(date: LocalDate): {
   year: number
   month: number
@@ -129,6 +161,22 @@ export function formatLocalDateLong(date: LocalDate): string {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, month - 1, day)))
+}
+
+/**
+ * "14 August" — F6's round divider.
+ *
+ * No year and no weekday: the divider sits inside a transcript the user is
+ * scrolling through, where the only question is roughly when this round
+ * happened. `formatLocalDateLong` reads as a record; this reads as a margin note.
+ */
+export function formatLocalDayMonth(date: LocalDate): string {
+  const { year, month, day } = parseLocalDate(date)
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
     timeZone: 'UTC',
   }).format(new Date(Date.UTC(year, month - 1, day)))
 }

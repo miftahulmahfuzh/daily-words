@@ -227,6 +227,25 @@ a:active {
   }
 }
 
+/* The keyboard-aware frame — F6's chat route and nothing else.
+
+   `100dvh` tracks Safari's collapsing URL bar but is blind to the on-screen
+   keyboard: with the keyboard up, a `dvh` column still runs to the bottom of
+   the screen and the composer is underneath it. `--vvh` is the visual
+   viewport's height, published by <VisualViewportProbe />; the `var()` fallback
+   is what makes every other browser behave exactly as `.dw-screen` does.
+
+   The translate is the other half. Safari scrolls the layout viewport to reveal
+   the focused input, and `--vvo` (visualViewport.offsetTop) is how far — without
+   following it the composer slides off the top of the visible area.
+
+   Declared AFTER the @supports block above so it wins on source order; both
+   selectors are one class and therefore equal specificity. */
+.dw-screen-kb {
+  height: var(--vvh, 100dvh);
+  transform: translateY(var(--vvo, 0px));
+}
+
 /* A scrolling pane inside the frame. `contain` stops scroll chaining: reaching
    the bottom of the vocab list must not start bouncing the shell behind it. */
 .dw-pane-scroll {
