@@ -1,5 +1,5 @@
 /**
- * Executable assertions for the badge art manifest and the files it points at.
+ * Executable assertions for the two art manifests and the files they point at.
  *
  * Run with:  npm run badges:check
  *
@@ -9,18 +9,23 @@
  * the environment.
  *
  * This covers the half a type cannot. `BADGE_ART` is a total
- * `Record<BadgeKey, BadgeArt>`, so `npm run typecheck` already refuses a badge
- * key with no art — that is F12 D9 and it is the stronger guarantee. What a type
+ * `Record<BadgeKey, BadgeArt>` and `LEVEL_ART` is a total
+ * `Record<LevelArtKey, LevelArt>`, so `npm run typecheck` already refuses a key
+ * with no art — that is F12 D9 and it is the stronger guarantee. What a type
  * cannot see is the disk: whether the files are actually there, whether they are
  * the right size, whether the bytes they were promoted from are the bytes still
- * sitting in `assets/badges/`, and whether a superseded generation left orphans
- * behind.
+ * sitting in `assets/`, and whether a superseded generation left orphans behind.
  *
  * The hash assertion is the one worth understanding. Each shipped filename
  * carries the first 8 hex of its master's SHA-256, and this script recomputes
- * that SHA-256 from `assets/badges/<key>.png`. That is what turns "the shipped
- * file is the approved master" from a hope into a checked statement — and it is
- * what licenses `next.config.ts` to serve /badges/* as `immutable`.
+ * that SHA-256 from the master. That is what turns "the shipped file is the
+ * approved master" from a hope into a checked statement — and it is what
+ * licenses `next.config.ts` to serve /badges/* and /levels/* as `immutable`.
+ *
+ * **TWO DECKS, ONE COMMAND** (F22 D8). §1–§5 are F12's badge medals, §7–§11 are
+ * F22's level panels, and they run the same code against different identities.
+ * A third `npm run` script for the second half of one pipeline is how a check
+ * stops being run. §6 and §12 belong to neither deck.
  */
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -28,6 +33,8 @@ import { join } from 'node:path'
 import { inflateSync } from 'node:zlib'
 import { BADGE_ART, BADGE_ART_SIZE, BADGE_ART_SMALL_SIZE } from '../src/lib/gamification/badge-art'
 import { BADGE_CATALOG } from '../src/lib/gamification/badges'
+import { LEVEL_ART, LEVEL_ART_SIZE, LEVEL_ART_SMALL_SIZE } from '../src/lib/gamification/level-art'
+import { COLLECTOR_LEVELS, STREAK_LEVELS } from '../src/lib/gamification/levels'
 
 let failures = 0
 
@@ -47,38 +54,8 @@ function section(title: string) {
 }
 
 const root = join(import.meta.dirname, '..')
-const publicDir = join(root, 'public', 'badges')
-const masterDir = join(root, 'assets', 'badges')
-const keys = BADGE_CATALOG.map((b) => b.key)
 
-/* ------------------------- §1 the manifest is total ------------------------- */
-
-section('§1 the manifest covers the catalog, in the catalog’s order')
-
-// Belt to typecheck's braces, and the one that survives a `Partial<>`
-// regression — a change that would make the compiler stop caring.
-check('BADGE_ART key order matches BADGE_CATALOG', Object.keys(BADGE_ART), keys)
-
-check(
-  'no catalog key missing art',
-  keys.filter((k) => !BADGE_ART[k]),
-  [],
-)
-
-/* --------------------------- §2 one style version --------------------------- */
-
-section('§2 the deck is one style version')
-
-// A mixed set is a failure, not a surprise. The version rides from style.md
-// through gen_badge_art.py's sidecar into the manifest precisely so that this
-// line can be written.
-const versions = [...new Set(keys.map((k) => BADGE_ART[k].styleVersion))].sort()
-check('exactly one styleVersion across the deck', versions.length, 1)
-check('no entry is "unknown" (its sidecar was lost in promotion)', versions.includes('unknown'), false)
-
-/* ------------------- §3 the shipped bytes are the approved bytes ------------- */
-
-section('§3 the shipped file is the approved master')
+/* ------------------------------- the decoders ------------------------------ */
 
 /**
  * Python's rounding, which is round-half-to-even and not JavaScript's
@@ -100,9 +77,9 @@ function roundHalfEven(value: number): number {
  * A truecolour 8-bit PNG, decoded to raw RGB with nothing but `node:zlib`.
  *
  * `sharp` is not in this project and this script must stay offline and
- * dependency-free like its neighbours, so the deck's own narrow shape is the
+ * dependency-free like its neighbours, so the decks' own narrow shape is the
  * decoder's scope: every master is 1024², bit depth 8, colour type 2, not
- * interlaced (asserted below rather than assumed — the style contract's FULL
+ * interlaced (asserted below rather than assumed — the style contracts' FULL
  * BLEED rule is what makes an alpha channel impossible, and if one ever appears
  * this should stop rather than average it in).
  */
@@ -127,7 +104,7 @@ function decodePng(png: Buffer): { width: number; height: number; rgb: Buffer } 
       if (depth !== 8 || colourType !== 2 || interlace !== 0) {
         throw new Error(
           `unsupported PNG: depth ${depth}, colour type ${colourType}, interlace ${interlace} ` +
-            `(this decoder handles the deck's own shape only: 8-bit truecolour, no alpha, not interlaced)`,
+            `(this decoder handles the decks' own shape only: 8-bit truecolour, no alpha, not interlaced)`,
         )
       }
     } else if (type === 'IDAT') {
@@ -216,44 +193,14 @@ function plateHex(png: Buffer): string {
   return `#${hex(r)}${hex(g)}${hex(b)}`
 }
 
-for (const key of keys) {
-  const art = BADGE_ART[key]
-  const master = join(masterDir, `${key}.png`)
-
-  if (!existsSync(master)) {
-    failures++
-    console.error(`  FAIL ${key}: no master at assets/badges/${key}.png`)
-    continue
-  }
-
-  const bytes = readFileSync(master)
-  const sha = createHash('sha256').update(bytes).digest('hex')
-  check(`${key}: manifest sha256 equals the master’s`, art.sha256, sha)
-
-  // The same recomputation the hash assertion makes, for the same reason. The
-  // plate is a property of the master's bytes, so a hand-edit to the generated
-  // manifest — or a regenerated badge whose paper shifted and whose manifest was
-  // not rebuilt — is a red run rather than a seam somebody eventually notices
-  // beside the art in F21's hero.
-  check(`${key}: manifest plate equals the master’s`, art.plate, plateHex(bytes))
-
-  const h8 = sha.slice(0, 8)
-  check(`${key}: panel filename carries that hash`, art.src, `/badges/${key}.${h8}.webp`)
-  check(`${key}: shelf filename carries that hash`, art.small, `/badges/${key}.${h8}.sm.webp`)
-}
-
-/* ------------------------- §4 the files exist, at size ---------------------- */
-
-section('§4 both derivatives exist at exactly the right size')
-
 /**
  * WebP dimensions from the header, with no decode — the plan asked for a header
- * read and a decode would pull the whole deck through Node for four numbers.
+ * read and a decode would pull both decks through Node for four numbers.
  *
- * RIFF....WEBP then a fourcc naming the codec. Three shapes exist and this tool
- * can emit two of them: VP8 (lossy, the default) and VP8L (lossless, D7's
- * fallback if the hairline rule rings). VP8X is handled because a future Pillow
- * could wrap either in an extended container.
+ * RIFF....WEBP then a fourcc naming the codec. Three shapes exist and the
+ * promotion tool can emit two of them: VP8 (lossy, the default) and VP8L
+ * (lossless, D7's fallback if the hairline rule rings). VP8X is handled because
+ * a future Pillow could wrap either in an extended container.
  */
 function webpSize(path: string): { width: number; height: number } | null {
   const buf = readFileSync(path)
@@ -292,48 +239,162 @@ function webpSize(path: string): { width: number; height: number } | null {
   return null
 }
 
-for (const key of keys) {
-  const art = BADGE_ART[key]
-  for (const [label, url, want] of [
-    ['panel', art.src, BADGE_ART_SIZE],
-    ['shelf', art.small, BADGE_ART_SMALL_SIZE],
-  ] as const) {
-    const path = join(root, 'public', url.replace(/^\//, ''))
-    if (!existsSync(path)) {
-      failures++
-      console.error(`  FAIL ${key} ${label}: no file at public${url}`)
-      continue
-    }
-    check(`${key} ${label}: ${want}×${want}`, webpSize(path), { width: want, height: want })
-  }
+/* ------------------------------- one deck ---------------------------------- */
+
+type Art = { src: string; small: string; sha256: string; plate: string; styleVersion: string }
+
+type Deck = {
+  /** "badge" / "level" — what one entry is called in a failure message. */
+  noun: string
+  /** `badges` / `levels`: the directory name under assets/ and public/. */
+  dir: string
+  /** Where the key set comes from, named so a mismatch says what to edit. */
+  keySource: string
+  keys: readonly string[]
+  art: Record<string, Art>
+  panelSize: number
+  smallSize: number
+  /** §1–§5 for the badges, §7–§11 for the levels. */
+  first: number
 }
 
-/* ------------------------------ §5 no orphans ------------------------------- */
-
-section('§5 no orphan files in public/badges')
-
 /**
- * A stale hash left behind by a regeneration. This is the drift that the
- * content-hashed filename scheme makes *harmless* — an old file is never served
- * once the manifest stops naming it — but harmless is not the same as tidy, and
- * an orphan is the visible trace of a `make_badge_assets.py` run that was never
- * committed.
+ * The five disk assertions, run against one deck. Returns its style version for
+ * the closing line.
+ *
+ * One function rather than two copies, and the section numbers are a parameter,
+ * because the two decks differ in identity and in nothing else. The **key set**
+ * is the identity that matters: it is what §5 computes "expected filenames"
+ * from, which is exactly why the two decks may not share a public directory —
+ * a shared one would make this correct only against the union, and a stale file
+ * would survive a regeneration unnoticed.
  */
-const expected = new Set(keys.flatMap((k) => [BADGE_ART[k].src, BADGE_ART[k].small].map((u) => u.split('/').pop()!)))
-const orphans = existsSync(publicDir)
-  ? readdirSync(publicDir)
-      .filter((n) => n.endsWith('.webp') && !expected.has(n))
-      .sort()
-  : []
+function checkDeck(deck: Deck): string {
+  const publicDir = join(root, 'public', deck.dir)
+  const masterDir = join(root, 'assets', deck.dir)
+  const { keys, art, first } = deck
 
-check('unreferenced .webp files under public/badges', orphans, [])
+  /* ----------------------- the manifest is total ------------------------- */
 
-/* --------------------- §6 the key never reached the app --------------------- */
+  section(`§${first} the manifest covers ${deck.keySource}, in its order`)
+
+  // Belt to typecheck's braces, and the one that survives a `Partial<>`
+  // regression — a change that would make the compiler stop caring.
+  check(`manifest key order matches ${deck.keySource}`, Object.keys(art), keys)
+
+  check(
+    `no ${deck.noun} key missing art`,
+    keys.filter((k) => !art[k]),
+    [],
+  )
+
+  /* -------------------------- one style version -------------------------- */
+
+  section(`§${first + 1} the ${deck.noun} deck is one style version`)
+
+  // A mixed set is a failure, not a surprise. The version rides from the
+  // contract file through gen_badge_art.py's sidecar into the manifest
+  // precisely so that this line can be written.
+  //
+  // PER DECK, never across the union (F22 D3). `style.md`'s v1 and `levels.md`'s
+  // v1 are independent series that happen to share a number, and asserting one
+  // version across both would couple two files that are deliberately separate.
+  const versions = [...new Set(keys.map((k) => art[k].styleVersion))].sort()
+  check(`exactly one styleVersion across the ${deck.noun} deck`, versions.length, 1)
+  check('no entry is "unknown" (its sidecar was lost in promotion)', versions.includes('unknown'), false)
+
+  /* ------------------ the shipped bytes are the approved bytes ------------ */
+
+  section(`§${first + 2} the shipped ${deck.noun} file is the approved master`)
+
+  for (const key of keys) {
+    const entry = art[key]
+    const master = join(masterDir, `${key}.png`)
+
+    if (!existsSync(master)) {
+      failures++
+      console.error(`  FAIL ${key}: no master at assets/${deck.dir}/${key}.png`)
+      continue
+    }
+
+    const bytes = readFileSync(master)
+    const sha = createHash('sha256').update(bytes).digest('hex')
+    check(`${key}: manifest sha256 equals the master’s`, entry.sha256, sha)
+
+    // The same recomputation the hash assertion makes, for the same reason. The
+    // plate is a property of the master's bytes, so a hand-edit to the generated
+    // manifest — or a regenerated image whose paper shifted and whose manifest
+    // was not rebuilt — is a red run rather than a seam somebody eventually
+    // notices beside the art in F21's hero.
+    check(`${key}: manifest plate equals the master’s`, entry.plate, plateHex(bytes))
+
+    const h8 = sha.slice(0, 8)
+    check(`${key}: panel filename carries that hash`, entry.src, `/${deck.dir}/${key}.${h8}.webp`)
+    check(`${key}: small filename carries that hash`, entry.small, `/${deck.dir}/${key}.${h8}.sm.webp`)
+  }
+
+  /* ------------------------ the files exist, at size --------------------- */
+
+  section(`§${first + 3} both ${deck.noun} derivatives exist at exactly the right size`)
+
+  for (const key of keys) {
+    const entry = art[key]
+    for (const [label, url, want] of [
+      ['panel', entry.src, deck.panelSize],
+      ['small', entry.small, deck.smallSize],
+    ] as const) {
+      const path = join(root, 'public', url.replace(/^\//, ''))
+      if (!existsSync(path)) {
+        failures++
+        console.error(`  FAIL ${key} ${label}: no file at public${url}`)
+        continue
+      }
+      check(`${key} ${label}: ${want}×${want}`, webpSize(path), { width: want, height: want })
+    }
+  }
+
+  /* ------------------------------- no orphans ---------------------------- */
+
+  section(`§${first + 4} no orphan files in public/${deck.dir}`)
+
+  /**
+   * A stale hash left behind by a regeneration. This is the drift that the
+   * content-hashed filename scheme makes *harmless* — an old file is never served
+   * once the manifest stops naming it — but harmless is not the same as tidy, and
+   * an orphan is the visible trace of a `make_badge_assets.py` run that was never
+   * committed.
+   */
+  const expected = new Set(keys.flatMap((k) => [art[k].src, art[k].small].map((u) => u.split('/').pop()!)))
+  const orphans = existsSync(publicDir)
+    ? readdirSync(publicDir)
+        .filter((n) => n.endsWith('.webp') && !expected.has(n))
+        .sort()
+    : []
+
+  check(`unreferenced .webp files under public/${deck.dir}`, orphans, [])
+
+  return versions[0]
+}
+
+/* -------------------------- §1–§5 the badge deck --------------------------- */
+
+const badgeVersion = checkDeck({
+  noun: 'badge',
+  dir: 'badges',
+  keySource: 'BADGE_CATALOG',
+  keys: BADGE_CATALOG.map((b) => b.key),
+  art: BADGE_ART,
+  panelSize: BADGE_ART_SIZE,
+  smallSize: BADGE_ART_SMALL_SIZE,
+  first: 1,
+})
+
+/* --------------------- §6 the key never reached the app -------------------- */
 
 section('§6 OPENAI_API_KEY never reached application code')
 
 /**
- * [S1], asserted rather than trusted. The badge-art key is a different key from
+ * [S1], asserted rather than trusted. The art key is a different key from
  * `LLM_API_KEY` — the app's model access is GLM via z.ai — and no application
  * code may read it. `src/lib/env.ts` has no entry, `src/lib/llm/client.ts` does
  * not look for it, and the only files in the repository that name the variable
@@ -342,6 +403,9 @@ section('§6 OPENAI_API_KEY never reached application code')
  * The same shape as `check-nav.ts` §6's `from=` scan, and trips on a comment
  * mentioning the variable too. That is deliberate rather than tolerated: the
  * cheap check is the one that gets kept.
+ *
+ * **F22's three new files under `src/` are covered for free**, which is the
+ * point of having written this as a walk rather than a list.
  */
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -359,10 +423,56 @@ const leaks = walk(join(root, 'src'))
 
 check('files under src/ naming OPENAI_API_KEY', leaks, [])
 
+/* -------------------------- §7–§11 the level deck -------------------------- */
+
+const levelVersion = checkDeck({
+  noun: 'level',
+  dir: 'levels',
+  keySource: 'STREAK_LEVELS + COLLECTOR_LEVELS',
+  // From the tables themselves, so this script cannot disagree with them, and
+  // in the order /profile draws them: streak first, then collector.
+  keys: [...STREAK_LEVELS, ...COLLECTOR_LEVELS].map((b) => b.key),
+  art: LEVEL_ART,
+  panelSize: LEVEL_ART_SIZE,
+  smallSize: LEVEL_ART_SMALL_SIZE,
+  first: 7,
+})
+
+/* -------------- §12 no route may begin with an excluded prefix ------------- */
+
+section('§12 no route may begin with an excluded asset prefix')
+
+/**
+ * `src/middleware.ts`'s matcher excludes `badges` and `levels` so that a
+ * signed-out request for committed art gets the picture rather than a 307 to
+ * /signin. That negative lookahead is **prefix-matched**: those two words also
+ * exempt any route whose path merely *starts* with them. The exemption is
+ * correct for two directories of committed art and wrong for a page — a
+ * `/levels-explained` route would silently lose its auth gate with nothing
+ * failing anywhere.
+ *
+ * This is the same hazard CLAUDE.md forbids creating for the *share* exemption,
+ * which is why `isPublicSharePath` lives in the middleware body instead. Here
+ * the matcher is the right place and the constraint is cheap to check, so it is
+ * checked rather than remembered (F22 D6).
+ */
+const appDirs = readdirSync(join(root, 'src', 'app'), { withFileTypes: true })
+  .filter((e) => e.isDirectory())
+  .map((e) => e.name)
+
+check(
+  'no src/app route starts with an excluded prefix',
+  appDirs.filter((d) => /^(badges|levels)/.test(d)),
+  [],
+)
+
 /* ---------------------------------------------------------------------------- */
 
 if (failures > 0) {
   console.error(`\n${failures} assertion(s) failed.`)
   process.exit(1)
 }
-console.log(`\nAll badge-art assertions passed (${keys.length} badges, style ${versions[0]}).`)
+console.log(
+  `\nAll badge-art assertions passed (${BADGE_CATALOG.length} badges, style ${badgeVersion}; ` +
+    `${STREAK_LEVELS.length + COLLECTOR_LEVELS.length} levels, style ${levelVersion}).`,
+)
