@@ -12,8 +12,20 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * The single write that ends onboarding. **The only thing that sets
+ * The single write that ends onboarding. **The only HTTP route that sets
  * `onboarded_at`.**
+ *
+ * That sentence used to read "the only thing that sets `onboarded_at`", and F17
+ * made it false rather than deleting it. `lib/share/claim.server.ts` sets it too,
+ * by calling the same `completeOnboarding` with **five null answers** and a zone
+ * detected in the browser before the OAuth hop — for a stranger who tapped
+ * "Practise this word" on a shared word and would otherwise meet a five-screen
+ * questionnaire between them and the one thing they asked for. The row that
+ * produces is byte-identical to the one this route writes when the user presses
+ * `Skip all`, which is the whole argument for F17 D4: it adds no state the app did
+ * not already fully support. `coalesce(onboarded_at, now())` makes the two paths
+ * idempotent against each other, and F17's `claim:db` asserts that an established
+ * user's answers and timestamp survive a claim untouched.
  *
  * One request rather than a PATCH per screen. Five requests on a phone are five
  * chances to fail on a bad connection, and a partial save would leave

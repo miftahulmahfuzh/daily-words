@@ -160,6 +160,17 @@ Obligations F2 placed on the other features still stand:
   Reviewable without a session or a database at
   `/kitchen-sink/share?state=short|long|noexamples`; the frame is asserted in
   `tests/e2e/share-frame.spec.ts`.
+- **F17** — that action is `<PractiseThisWord />`, a client component for one
+  reason: it appends the browser's `detectTimeZone()` to the href on mount,
+  because the claim completes onboarding and **writes may not fall back to a
+  default zone**. It stays a `Button href` — an anchor, which is what
+  `share-frame.spec.ts` finds by `getByRole("link")` and what keeps the page
+  working with no JavaScript. `/claim` adds no primitive either: its stop states
+  are `EmptyState` and its sign-in state reuses `/signin`'s own `SignInButton`
+  verbatim, so the two screens say "Taking you to Google…" in one voice. The
+  interstitial's button is a real submit inside a real form that a client
+  component fires on mount — visible and tappable, because a dead screen is what
+  a spinner becomes when the effect never runs.
 
 ### `Screen keyboardAware` — the one exception to `100dvh`
 

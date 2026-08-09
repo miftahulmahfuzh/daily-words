@@ -189,7 +189,8 @@ export const vocabDetailResponseSchema = vocabListItemSchema.extend({
   partOfSpeech: z.string().nullable(),
   pronunciation: z.string().nullable(),
   examples: z.array(z.string()),
-  source: z.enum(["manual", "suggested"]),
+  /** `'shared'` is F17's — a word claimed from a share link. */
+  source: z.enum(["manual", "suggested", "shared"]),
   enrichmentError: z.string().nullable(),
   /**
    * [R1]: a word that has ever appeared on a daily card cannot be deleted. The

@@ -33,7 +33,9 @@ export type BadgeAward = typeof badgesAwarded.$inferSelect
 export type Share = typeof shares.$inferSelect
 export type NewShare = typeof shares.$inferInsert
 
-export type VocabSource = VocabEntry['source'] // 'manual' | 'suggested'
+// 'shared' is F17's: a word claimed from somebody else's share link. Kept out of
+// 'manual' so F9's collector level keeps counting words the user typed.
+export type VocabSource = VocabEntry['source'] // 'manual' | 'suggested' | 'shared'
 export type VocabStatus = VocabEntry['status'] // 'active' | 'mastered'
 export type EnrichmentStatus = VocabEntry['enrichmentStatus']
 export type InsightStatus = JournalEntry['insightStatus']

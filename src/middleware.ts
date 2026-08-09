@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { isPublicSharePath } from '@/lib/share/policy'
+import { isClaimPath, isPublicSharePath } from '@/lib/share/policy'
 
 /**
  * Layer 1 of two: an optimistic, cookie-presence-only redirect.
@@ -55,6 +55,26 @@ export function middleware(req: NextRequest) {
    * Signed-in viewers fall through to the same page: everybody sees the share.
    */
   if (isPublicSharePath(pathname)) {
+    return NextResponse.next()
+  }
+
+  /**
+   * F17's claim interstitial, and the second half of the same problem.
+   *
+   * A stranger arrives at `/claim` holding the signed intent cookie and **no
+   * session** — that is the entire audience for the feature. Bounced to `/signin`
+   * they would sign in against `signInWithGoogle`'s hardcoded
+   * `redirectTo: '/today'`, land in `/onboarding`, and the intent would expire
+   * unread: a silent failure that looks like "the claim just doesn't happen".
+   * So `/claim` renders its own Google button, aimed at itself.
+   *
+   * Exempting the render costs nothing. The page reads nothing privileged without
+   * `getSessionUser()`, and the claim's writes are behind `requireUser()` inside
+   * a server action. `isClaimPath` is **exact-match** — see its comment for why a
+   * `startsWith` would quietly exempt every future route beginning with those
+   * five letters.
+   */
+  if (isClaimPath(pathname)) {
     return NextResponse.next()
   }
 

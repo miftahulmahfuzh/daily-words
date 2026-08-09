@@ -38,6 +38,60 @@ export async function createVocabEntry(
   return row;
 }
 
+/**
+ * F17's claim: the word, the four fields copied off the share snapshot, and
+ * `source = 'shared'` — **in one INSERT.**
+ *
+ * Not an insert-then-update, and that is the whole reason this function exists
+ * rather than the claim calling `createVocabEntry` and then
+ * `writeEnrichmentSuccess`. Between those two statements the row is `pending`,
+ * and `pending` is precisely the state `/vocab/[id]/chat` refuses to render
+ * ("Still looking this word up"): the claim redirects there immediately, so a
+ * two-statement version would race its own redirect and show a brand-new user a
+ * dead end for as long as the second statement took. The row must never be
+ * observable in a state the chat page would refuse.
+ *
+ * `enrichment` is null when the snapshot had no definition to copy. The row then
+ * lands `pending` with `enrichment_attempts = 0` — the claimer keeps all three of
+ * their own retries — and the claim sends them to the detail page, which owns
+ * that state and the retry button.
+ *
+ * **Can throw `23505`** against `UNIQUE (user_id, lower(term))`, exactly as
+ * `createVocabEntry` can. The caller catches it and re-reads, the same shape
+ * `POST /api/vocab` uses; F17 does not fork the duplicate logic.
+ */
+export async function createClaimedVocabEntry(
+  userId: string,
+  term: string,
+  enrichment: {
+    partOfSpeech: string | null;
+    pronunciation: string | null;
+    definition: string;
+    examples: string[];
+  } | null,
+): Promise<VocabEntry> {
+  const [row] = await db
+    .insert(vocabEntries)
+    .values({
+      userId,
+      term,
+      // F17 D7. Never 'manual' — F9's collector level counts manually added
+      // words, and a claimed word must not inflate it.
+      source: "shared" satisfies VocabSource,
+      ...(enrichment
+        ? {
+            partOfSpeech: enrichment.partOfSpeech,
+            pronunciation: enrichment.pronunciation,
+            definition: enrichment.definition,
+            examples: enrichment.examples,
+            enrichmentStatus: "ready" as const,
+          }
+        : {}),
+    })
+    .returning();
+  return row;
+}
+
 export async function findEntryByNormalizedTerm(
   userId: string,
   term: string,

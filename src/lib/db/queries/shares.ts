@@ -132,6 +132,52 @@ export async function getShareBySlug(slug: string): Promise<{
 }
 
 /**
+ * The **second** read here that takes no user id, and the last one that should
+ * ever be added. F17's claim needs three facts `getShareBySlug` deliberately does
+ * not return, and its caller is the same stranger: someone who has just signed in
+ * for the first time and holds nothing but a slug out of a cookie.
+ *
+ * Read this file's header first. The safety property is identical — the slug is
+ * the capability, and it is the whole WHERE clause — with one addition worth
+ * stating plainly: **this function reads `user_id`, and that column is used for
+ * exactly one thing.** It answers "is the viewer the sharer?", which turns a
+ * claim of your own link into a no-op. It is never passed as an insert's
+ * `userId`. The share tells us *what* to copy; the session tells us *who* to copy
+ * it to; those two facts come from different places and are never allowed to
+ * swap. That is the one line in F17 to review.
+ *
+ * **Still not a join.** F16 D3's snapshot is what makes the claim cheap *and*
+ * safe: the four enrichment fields are already on the share row, so a claim
+ * copies them without reading the sharer's live entry, and the copy survives the
+ * owner deleting their word. F17 §4 planned to join `vocab_entries` here; the
+ * snapshot made that unnecessary, and `npm run share:check` greps this file for
+ * the names of user-owned tables precisely so it stays that way.
+ *
+ * `vocabEntryId` is returned for the owner short-circuit's destination, which is
+ * the sharer's *own* entry id — a uuid they already have in their own URL bar.
+ * It is never rendered to anyone else: nothing that reaches a stranger's screen
+ * comes from this function except `payload`.
+ */
+export async function getShareTargetForClaim(slug: string): Promise<{
+  userId: string
+  entityType: ShareEntityType
+  vocabEntryId: string | null
+  payload: unknown
+} | null> {
+  const [row] = await db
+    .select({
+      userId: shares.userId,
+      entityType: shares.entityType,
+      vocabEntryId: shares.vocabEntryId,
+      payload: shares.payload,
+    })
+    .from(shares)
+    .where(eq(shares.slug, slug))
+    .limit(1)
+  return row ?? null
+}
+
+/**
  * Does this user already share this entity? One indexed read, issued by
  * `/vocab/[id]` beside `getVocabEntryDetail` so the page can draw the shared
  * state without a round trip.
