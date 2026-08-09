@@ -71,9 +71,26 @@
 > dying on" 23 April — Cervantes was *buried* on the 23rd, having died on the 22nd.
 > The Friday-morning, 1911, 1928 and Tolkien claims were all verified and kept.
 >
-> **The backfill (§5.3, §7 step 10) has NOT been run.** It is a production act
-> whose safety mechanism is a human reading the dry run line by line, and it is
-> the user's to perform after this is deployed. R9 stands, unchanged.
+> **The backfill (§5.3, §7 step 10) HAS been run**, in the same session, after
+> the merge was pushed and Vercel had served the new content-hashed badge asset
+> — the ordering §7 step 10 asks for, checked by polling
+> `/badges/tolkien.<hash>.webp` until it answered 200 rather than assumed.
+>
+> **It was a no-op, and R9 is answered rather than still open.** Production holds
+> **one user with one card**, so no historical 2 September card exists to award.
+> The dry run reported `badges +0` and no stats change; the real run reported the
+> same; a second dry run after it reported the same again, which is the fixed
+> point §5.3 asks to confirm. `--prune` was not used.
+>
+> The more interesting result is one of §5.3's *stop* conditions not firing:
+> **no `+ <other key>` line appeared**, on any user. That would have meant the
+> live award path had already drifted from the replay — a pre-existing bug this
+> change did not cause and must not have buried. It has not drifted.
+>
+> The backfill therefore remains untested against a *populated* history. The
+> claim that a past 2 September card is awarded on replay is proven by
+> `npm run stats:db`'s §F13 section, which seeds exactly that fixture, and not by
+> production data.
 >
 > **Not done, and deliberately:** R1's before/after `npm run build` First Load JS
 > reading for `/profile` and `/today`, and §8.4's device passes (iOS Safari,
