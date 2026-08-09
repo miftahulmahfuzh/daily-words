@@ -166,6 +166,24 @@ export function formatLocalDateLong(date: LocalDate): string {
 }
 
 /**
+ * "3 Aug 2026" — F10's journal group headers and entry meta line.
+ *
+ * Abbreviated where `formatLocalDateLong` spells the month out, because this one
+ * sits in a 10px mono line beside a source note and has to survive a narrow
+ * column. Same UTC formatting trick: the weekday and month are properties of the
+ * local calendar date, not of the machine reading it.
+ */
+export function formatLocalDateShort(date: LocalDate): string {
+  const { year, month, day } = parseLocalDate(date)
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, month - 1, day)))
+}
+
+/**
  * "14 August" — F6's round divider.
  *
  * No year and no weekday: the divider sits inside a transcript the user is

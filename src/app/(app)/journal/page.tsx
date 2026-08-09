@@ -1,56 +1,41 @@
-import { Screen, ScreenBody } from "@/components/layout/screen";
-import { ListRow } from "@/components/ui/list-row";
-import { TextInput } from "@/components/ui/text-input";
-import { JOURNAL } from "@/lib/sample-data";
+import { Screen } from "@/components/layout/screen";
+import { requireUser } from "@/lib/auth/session";
+import { listEntries } from "@/lib/db/queries/journal";
+import { getUserTimezone } from "@/lib/db/queries/profiles";
+import { cursorFor, encodeCursor } from "@/lib/journal/cursor";
+import { JOURNAL_PAGE_SIZE } from "@/lib/journal/limits";
+import { toJournalEntryDtos } from "@/lib/journal/serialize";
+import { localDateNow } from "@/lib/time/local-date";
+import { JournalFeed } from "./journal-feed";
 
-/* The composer is a permanent textarea at the top — not behind a button, sheet
-   or FAB. This screen is the one place the app-shell "+" is suppressed. [R3] */
-export default function JournalPage() {
+/**
+ * The journal list. Page one is rendered from the database, never fetched —
+ * every screen in this app paints its own first page server-side.
+ *
+ * `force-dynamic` because the grouping is relative to *today*: a cached render
+ * would still say "Today" over yesterday's lines. Nothing here calls the model;
+ * an insight costs a deliberate tap on the entry page.
+ */
+export const dynamic = "force-dynamic";
+
+export default async function JournalPage() {
+  const user = await requireUser();
+
+  const timezone = await getUserTimezone(user.id);
+  const rows = await listEntries(user.id, { limit: JOURNAL_PAGE_SIZE + 1 });
+  const hasMore = rows.length > JOURNAL_PAGE_SIZE;
+  const page = hasMore ? rows.slice(0, JOURNAL_PAGE_SIZE) : rows;
+  const last = page[page.length - 1];
+
   return (
     <Screen tabs>
-      <ScreenBody
-        scroll
-        className="pt-4.5 pb-3"
-        top={
-          <>
-            <h1 className="m-0 mb-3.5 text-2xl font-normal tracking-title">
-              Journal
-            </h1>
-            <TextInput
-              name="entry"
-              placeholder="Paste a line worth keeping"
-              autoCapitalize="sentences"
-              autoCorrect="on"
-              spellCheck
-              enterKeyHint="done"
-              trailing={
-                <button
-                  type="button"
-                  className="font-mono text-mono-xs tracking-nav text-accent uppercase"
-                >
-                  Save
-                </button>
-              }
-            />
-          </>
+      <JournalFeed
+        initialEntries={toJournalEntryDtos(page, timezone)}
+        initialCursor={
+          hasMore && last ? encodeCursor(cursorFor(last)) : null
         }
-      >
-        {JOURNAL.map((entry) => (
-          <ListRow
-            key={entry.id}
-            href={`/journal/${entry.id}`}
-            layout="stacked"
-            // Clamped to three lines so a pasted paragraph occupies the same
-            // space as a proverb and the list stays scannable.
-            title={entry.text}
-            subtitle={
-              <>
-                {entry.source} · {entry.date}
-              </>
-            }
-          />
-        ))}
-      </ScreenBody>
+        today={localDateNow(timezone)}
+      />
     </Screen>
   );
 }

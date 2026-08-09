@@ -9,6 +9,7 @@ import { cn } from "@/lib/ui/cn";
  */
 export function TextArea({
   className,
+  ref,
   rows = 3,
   autoCapitalize = "sentences",
   autoCorrect = "on",
@@ -16,9 +17,17 @@ export function TextArea({
   ...rest
 }: {
   className?: string;
+  /**
+   * As on `TextInput`: React 19 passes `ref` to function components as an
+   * ordinary prop, so this is only a type declaration — but without it the
+   * compiler rejects the caller that needs one. F10's composer measures the
+   * element to auto-grow it and re-focuses it after a save.
+   */
+  ref?: React.Ref<HTMLTextAreaElement>;
 } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "className">) {
   return (
     <textarea
+      ref={ref}
       rows={rows}
       autoCapitalize={autoCapitalize}
       autoCorrect={autoCorrect}

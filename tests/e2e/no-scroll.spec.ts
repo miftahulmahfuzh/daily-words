@@ -156,3 +156,53 @@ test("both card lines are clamped to exactly one line", async ({ page }) => {
   const spread = Math.max(...heights) - Math.min(...heights);
   expect(spread, `row heights differ too much: ${heights.join(", ")}`).toBeLessThanOrEqual(1);
 });
+
+/**
+ * F10's version of the same claim, one screen down.
+ *
+ * `/journal` is a scrolling screen, so the no-scroll invariant does not apply to
+ * it — but the promise that makes the list scannable does: a 1000-character
+ * paste must occupy exactly the same three clamped lines as a six-word proverb.
+ * Without the clamp one entry can be twenty screens tall, and nothing throws.
+ *
+ * The fixture at `/kitchen-sink/journal` carries both, in that order.
+ */
+test("a long paste is clamped to three lines in the journal list", async ({ page }) => {
+  await page.goto("/kitchen-sink/journal");
+
+  const titles = page.locator("a, div").getByText(/It was the best of times/).first();
+  await expect(titles).toBeVisible();
+
+  const measured = await titles.evaluate((el) => {
+    const cs = getComputedStyle(el as HTMLElement);
+    return {
+      height: (el as HTMLElement).getBoundingClientRect().height,
+      lineHeight: parseFloat(cs.lineHeight),
+      scrollHeight: (el as HTMLElement).scrollHeight,
+    };
+  });
+
+  // The fixture must actually overflow, or the clamp assertion is vacuous.
+  expect(
+    measured.scrollHeight,
+    "the fixture is not long enough to test the clamp",
+  ).toBeGreaterThan(measured.height);
+
+  // Three line boxes, and not a fourth.
+  expect(
+    measured.height,
+    `the long entry occupies ${measured.height}px against a ${measured.lineHeight}px line box`,
+  ).toBeLessThanOrEqual(measured.lineHeight * 3 + 1);
+});
+
+test("the journal list does not scroll sideways and keeps its tab bar", async ({ page }) => {
+  await page.goto("/kitchen-sink/journal");
+
+  await tabBarIsOnScreen(page);
+
+  const overflows = await page.evaluate(() => {
+    const el = document.scrollingElement!;
+    return el.scrollWidth > el.clientWidth + 1;
+  });
+  expect(overflows, "the page scrolls horizontally").toBe(false);
+});

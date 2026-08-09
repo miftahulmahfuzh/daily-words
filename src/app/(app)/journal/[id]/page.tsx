@@ -1,60 +1,46 @@
 import { notFound } from "next/navigation";
+import { z } from "zod";
 import { Screen, ScreenBody } from "@/components/layout/screen";
 import { BackLink } from "@/components/layout/back-link";
-import { Button } from "@/components/ui/button";
-import { Eyebrow, Meta, Prose } from "@/components/ui/text";
-import { JOURNAL } from "@/lib/sample-data";
+import { requireUser } from "@/lib/auth/session";
+import { getEntry } from "@/lib/db/queries/journal";
+import { getUserTimezone } from "@/lib/db/queries/profiles";
+import { toJournalEntryDto } from "@/lib/journal/serialize";
+import { EntryView } from "./entry-view";
 
+/**
+ * A real route, not a modal — the roadmap's app-wide decision. Edge-swipe back
+ * works, reload survives, and the URL is shareable with oneself.
+ *
+ * Everything on the page is read from the database. **No model call is issued on
+ * load**, however many times the entry is opened; the one thing that can spend
+ * quota here is the Insight button.
+ */
 export default async function JournalEntryPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const user = await requireUser();
   const { id } = await params;
-  const entry = JOURNAL.find((j) => j.id === id);
-  if (!entry) notFound();
+
+  // A malformed id must never reach the database: compared against a `uuid`
+  // column it is a cast error and a 500, where the honest answer is a 404.
+  const parsed = z.uuid().safeParse(id);
+  if (!parsed.success) notFound();
+
+  // Scoped to the session user, and 404 rather than 403 for anyone else's row —
+  // a 403 confirms the id exists.
+  const row = await getEntry(user.id, parsed.data);
+  if (!row) notFound();
+
+  const timezone = await getUserTimezone(user.id);
 
   return (
     <Screen>
       <ScreenBody scroll padded={false} className="px-6 pb-7">
         <BackLink href="/journal" label="Journal" />
-
-        <p className="m-0 pt-3 text-2xl leading-[1.25] tracking-[-0.015em] text-pretty">
-          {entry.text}
-        </p>
-
-        <div className="flex items-baseline gap-2 py-4.5 pb-5.5">
-          <Eyebrow className="tracking-[0.1em]">
-            {entry.source} · {entry.date}
-          </Eyebrow>
-        </div>
-
-        <div className="h-px bg-rule" />
-
-        {/* Insight is opt-in per entry, never automatic on save — a line worth
-            keeping should not cost a model call to keep. */}
-        {entry.insight ? (
-          <div className="dw-in mt-5.5 flex flex-col gap-2 border-l-2 border-accent pl-3.5">
-            <Eyebrow size="sm" tone="accent">
-              Insight
-            </Eyebrow>
-            <Prose size="body" className="leading-[1.5]">
-              {entry.insight.meaning}
-            </Prose>
-            <div className="flex flex-col gap-1.5 pt-1">
-              {entry.insight.whenItApplies.map((line, i) => (
-                <Prose key={i} size="sm" tone="faint" className="leading-[1.45]">
-                  {line}
-                </Prose>
-              ))}
-            </div>
-            <Meta className="pt-1 tracking-[0.08em]">
-              Written by the machine. Keep or discard.
-            </Meta>
-          </div>
-        ) : (
-          <Button className="mt-5.5 h-[50px] text-ink">Ask for an insight</Button>
-        )}
+        <EntryView initial={toJournalEntryDto(row, timezone)} />
       </ScreenBody>
     </Screen>
   );

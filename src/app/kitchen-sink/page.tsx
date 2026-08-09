@@ -247,6 +247,9 @@ export default function KitchenSinkPage() {
           <Link href="/kitchen-sink/profile" className="text-base text-accent underline">
             F9 profile states → /kitchen-sink/profile
           </Link>
+          <Link href="/kitchen-sink/journal" className="text-base text-accent underline">
+            F10 journal list and entry → /kitchen-sink/journal
+          </Link>
         </Section>
       </ScreenBody>
     </Screen>

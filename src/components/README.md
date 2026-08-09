@@ -49,6 +49,9 @@ those belong to `Screen`, and duplicating them is how the height budget breaks.
 | `DayStrip` | `@/components/daily/day-strip` | `{ days: DayStripItem[], label? }` |
 | `Chip`, `ChipSelect` | `@/components/profile/chip-select` | `{ pressed?, onClick? }` / `{ options, selected, onToggle }` |
 | `OptionRows` | `@/components/profile/option-rows` | `{ options: { value, label, gloss? }[], value, onChange }` |
+| `EntryRow` | `@/components/journal/entry-row` | `{ entry, href? }` |
+| `InsightPanel` | `@/components/journal/insight-panel` | `{ insight }` |
+| `Composer` | `@/components/journal/composer` | `{ onSave }` — client |
 | `ChatTranscript` | `@/components/chat/chat-transcript` | `{ messages, timezone, pending, thinking }` |
 | `ChatComposer` | `@/components/chat/chat-composer` | `{ value, onChange, onSend, busy, error }` |
 | `TurnMeter` | `@/components/chat/turn-meter` | `{ used }` |
@@ -114,7 +117,17 @@ Obligations F2 placed on the other features still stand:
   it contributes zero layout height, which is the property the rule protects, and
   `/kitchen-sink/today?n=6&toast=1` is where that is measured.
 - **F10** — the journal composer is a permanent field at the top of `/journal`;
-  entry body is serif; the insight is a ruled accent block.
+  entry body is serif; the insight is a ruled accent block. **Shipped**: the
+  composer sits in `ScreenBody`'s `top` slot so the list scrolls under it, the
+  row is `ListRow` (`stacked`, the layout that exists for this screen), and the
+  insight is the design's `border-l-2 border-accent` block carrying the two
+  headings the structure needs. Reviewable without a session at
+  `/kitchen-sink/journal` and `?state=entry`; the three-line clamp is asserted in
+  `tests/e2e/no-scroll.spec.ts`.
+  `TextArea` gained a `ref` prop declaration — the only change to a kit
+  component, additive, and the same one `TextInput` already carried: React 19
+  passes `ref` as an ordinary prop but TypeScript needs it declared, and the
+  composer measures the element to auto-grow it and re-focuses it after a save.
 
 ### `Screen keyboardAware` — the one exception to `100dvh`
 
