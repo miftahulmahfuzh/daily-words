@@ -10,9 +10,17 @@ import {
 import { resolveTimezone } from "@/lib/db/queries/cards";
 import { profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { listEntryCreatedAts } from "@/lib/db/queries/journal";
+import { listVocabShareCreatedAts } from "@/lib/db/queries/shares";
 import { evaluateBadges } from "@/lib/gamification/badges";
 import type { RecomputeReport } from "@/lib/gamification/schemas";
-import { computeStreaks, runLengthEndingAt, toDayNumber } from "@/lib/gamification/streaks";
+import { countAtOrBefore } from "@/lib/gamification/tallies";
+import {
+  computeStreaks,
+  countInWeekEndingAt,
+  runLengthEndingAt,
+  toDayNumber,
+} from "@/lib/gamification/streaks";
 import {
   isValidTimeZone,
   localDateNow,
@@ -66,12 +74,30 @@ export async function recomputeUserGamification(
 
   /* --------------------------- Replay the badges --------------------------- */
 
+  // The two counters `five_shares` and `ten_journal_lines` read. Fetched whole
+  // and counted per card, so the replay asks "how many existed when this card
+  // was made" exactly the way the live hook did.
+  //
+  // **This is the one place the replay can honestly disagree with what was
+  // awarded on the day**, and it is not fixable here: shares and journal lines
+  // are hard-deletable, so a user who revokes a share makes the count at every
+  // later card smaller than it was. Insert-only recomputes are unaffected — they
+  // never remove an award. `--prune` is the path that would act on the
+  // difference, which is one more reason it refuses `--all` without `--force`.
+  const shareInstants = await listVocabShareCreatedAts(userId);
+  const journalInstants = await listEntryCreatedAts(userId);
+  let previousShared = 0;
+  let previousJournal = 0;
+
   const seen: number[] = [];
   const expected: { badgeKey: string; awardedForDate: LocalDate }[] = [];
 
   for (const [i, card] of history.entries()) {
     const dayNum = toDayNumber(card.cardDate);
     seen.push(dayNum);
+
+    const sharedNow = countAtOrBefore(shareInstants, card.createdAt);
+    const journalNow = countAtOrBefore(journalInstants, card.createdAt);
 
     // The zone the card was actually made in, not the user's current one. A
     // user who has since moved must not have `midnight_oil` re-judged under a
@@ -91,9 +117,20 @@ export async function recomputeUserGamification(
       // see the future, or a backfilled `full_week` would disagree with the
       // award the live hook made on the day.
       runLength: runLengthEndingAt(seen, dayNum),
+      // `seen` again, for the same reason and with the same consequence if it
+      // were `history`: a replay that could see the rest of the week would award
+      // `three_in_a_week` on the week's first card.
+      cardsThisLocalWeek: countInWeekEndingAt(seen, dayNum),
+      sharedWordsNow: sharedNow,
+      sharedWordsAtPreviousCard: previousShared,
+      journalLinesNow: journalNow,
+      journalLinesAtPreviousCard: previousJournal,
     })) {
       expected.push({ badgeKey: key, awardedForDate: card.cardDate });
     }
+
+    previousShared = sharedNow;
+    previousJournal = journalNow;
   }
 
   /* ------------------------------ Apply, or not ---------------------------- */

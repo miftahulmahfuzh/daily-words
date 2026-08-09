@@ -1,11 +1,19 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { awardBadges } from "@/lib/db/queries/badges";
-import { getCardDates, readUserStats, upsertUserStats } from "@/lib/db/queries/stats";
+import { listEntryCreatedAts } from "@/lib/db/queries/journal";
+import { listVocabShareCreatedAts } from "@/lib/db/queries/shares";
+import { getCardHistory, readUserStats, upsertUserStats } from "@/lib/db/queries/stats";
 import { badgeTitle, evaluateBadges, type BadgeKey } from "@/lib/gamification/badges";
 import { resolveStreakLevel } from "@/lib/gamification/levels";
 import type { AwardedBadge, CardCreatedRewards } from "@/lib/gamification/schemas";
-import { computeStreaks, runLengthEndingAt, toDayNumber } from "@/lib/gamification/streaks";
+import { countAtOrBefore } from "@/lib/gamification/tallies";
+import {
+  computeStreaks,
+  countInWeekEndingAt,
+  runLengthEndingAt,
+  toDayNumber,
+} from "@/lib/gamification/streaks";
 import type { CardCreatedEvent } from "@/lib/cards/hooks";
 import { localDateNow } from "@/lib/time/local-date";
 
@@ -30,21 +38,50 @@ export async function applyCardCreated(
   event: CardCreatedEvent,
 ): Promise<CardCreatedRewards | null> {
   try {
+    // Read outside the transaction, and before it. Both are reads of tables this
+    // hook does not write, so they need no snapshot of their own; keeping them
+    // out here is also what lets `queries/shares.ts` and `queries/journal.ts`
+    // stay free of a stats-only transaction type they have no other use for.
+    const [shareInstants, journalInstants] = await Promise.all([
+      listVocabShareCreatedAts(event.userId),
+      listEntryCreatedAts(event.userId),
+    ]);
+
     return await db.transaction(async (tx): Promise<CardCreatedRewards> => {
       const previous = await readUserStats(event.userId, tx);
       const previousLongest = previous?.longestStreak ?? 0;
 
-      // Post-commit, so this includes the card that just landed.
-      const dates = await getCardDates(event.userId, tx);
+      // Post-commit, so this includes the card that just landed. `getCardHistory`
+      // rather than `getCardDates` because the milestone badges need the instant
+      // of the *previous* card, not only its date.
+      const history = await getCardHistory(event.userId, tx);
+      const dates = history.map((h) => h.cardDate);
       const streaks = computeStreaks(dates, localDateNow(event.timezone));
 
       await upsertUserStats(event.userId, streaks, tx);
+
+      // The card before this one, by `card_date` — the history is ordered by it,
+      // so the last row below this card's date is that card. Its instant is when
+      // the share and journal counters were last read, which is what makes
+      // `five_shares` and `ten_journal_lines` fire on a crossing rather than on
+      // a total. Null on the user's first card ever, and `countAtOrBefore` reads
+      // that as zero.
+      const previousCardAt =
+        history.filter((h) => h.cardDate < event.cardDate).at(-1)?.createdAt ?? null;
+
+      const dayNums = dates.map(toDayNumber);
+      const today = toDayNumber(event.cardDate);
 
       const earned = evaluateBadges({
         cardDate: event.cardDate,
         localHour: event.localCreatedAtHour,
         isFirstCardEver: event.isFirstCardEver,
-        runLength: runLengthEndingAt(dates.map(toDayNumber), toDayNumber(event.cardDate)),
+        runLength: runLengthEndingAt(dayNums, today),
+        cardsThisLocalWeek: countInWeekEndingAt(dayNums, today),
+        sharedWordsNow: shareInstants.length,
+        sharedWordsAtPreviousCard: countAtOrBefore(shareInstants, previousCardAt),
+        journalLinesNow: journalInstants.length,
+        journalLinesAtPreviousCard: countAtOrBefore(journalInstants, previousCardAt),
       });
 
       // Only rows the INSERT genuinely created come back, so a re-delivered

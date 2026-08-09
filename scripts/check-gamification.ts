@@ -39,9 +39,11 @@ import {
 } from '../src/lib/gamification/levels'
 import {
   computeStreaks,
+  countInWeekEndingAt,
   runLengthEndingAt,
   toDayNumber,
 } from '../src/lib/gamification/streaks'
+import { countAtOrBefore } from '../src/lib/gamification/tallies'
 import { toRewardLines } from '../src/lib/gamification/reveal'
 import { localHour, toLocalDate, type LocalDate } from '../src/lib/time/local-date'
 
@@ -143,6 +145,46 @@ check('runLengthEndingAt — absent target', runLengthEndingAt([1, 2, 3], 5), 0)
 check('runLengthEndingAt — a seven-day run', runLengthEndingAt([1, 2, 3, 4, 5, 6, 7], 7), 7)
 check('runLengthEndingAt — mid-run', runLengthEndingAt([1, 2, 3, 9], 3), 3)
 check('runLengthEndingAt — gap before target', runLengthEndingAt([1, 2, 9], 9), 1)
+
+/* ------------- The week counter, and the tally `five_shares` reads ----------- */
+
+section('§8.3 the Monday-start week, and the counters that are not cards')
+
+{
+  // 2026-08-09 is a Sunday and 2026-08-10 the Monday after it. Every assertion
+  // below turns on that pair, because a week that started on Sunday would make
+  // `three_in_a_week` fire one day early forever and nothing would throw.
+  const d = (s: LocalDate) => toDayNumber(s)
+  const week = ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13'].map(d)
+
+  check('three cards, asked on the third', countInWeekEndingAt(week, d('2026-08-12')), 3)
+  check('the fourth day does not see the third again', countInWeekEndingAt(week, d('2026-08-13')), 4)
+  check('never counts forward', countInWeekEndingAt(week, d('2026-08-10')), 1)
+  check('a day with no card', countInWeekEndingAt(week, d('2026-08-14')), 0)
+  check(
+    'Sunday belongs to the week before, not the week after',
+    countInWeekEndingAt([d('2026-08-09'), d('2026-08-10')], d('2026-08-10')),
+    1,
+  )
+  check(
+    'and that Sunday closes its own week',
+    countInWeekEndingAt([d('2026-08-07'), d('2026-08-08'), d('2026-08-09')], d('2026-08-09')),
+    3,
+  )
+  // Before the epoch, where `Math.floor` on a negative is the whole question.
+  check(
+    'a pre-epoch week counts the same way',
+    countInWeekEndingAt([d('1969-12-29'), d('1969-12-30')], d('1969-12-30')),
+    2,
+  )
+
+  const at = (iso: string) => new Date(iso)
+  const instants = [at('2026-08-01T09:00:00Z'), at('2026-08-05T09:00:00Z')]
+  check('countAtOrBefore — inclusive at the instant', countAtOrBefore(instants, at('2026-08-05T09:00:00Z')), 2)
+  check('countAtOrBefore — between the two', countAtOrBefore(instants, at('2026-08-03T00:00:00Z')), 1)
+  check('countAtOrBefore — before both', countAtOrBefore(instants, at('2026-07-01T00:00:00Z')), 0)
+  check('countAtOrBefore — no previous card reads as zero', countAtOrBefore(instants, null), 0)
+}
 
 /* ------------------------------ §7 — the levels ----------------------------- */
 
@@ -259,6 +301,13 @@ const ordinary: BadgeContext = {
   localHour: 14,
   isFirstCardEver: false,
   runLength: 4,
+  // Two cards so far this week, and both counters standing still since the last
+  // card — the state in which none of badges #15–#20 has anything to say.
+  cardsThisLocalWeek: 2,
+  sharedWordsNow: 3,
+  sharedWordsAtPreviousCard: 3,
+  journalLinesNow: 7,
+  journalLinesAtPreviousCard: 7,
 }
 const on = (over: Partial<BadgeContext>): BadgeKey[] =>
   evaluateBadges({ ...ordinary, ...over })
@@ -349,7 +398,98 @@ check(
   ])
 }
 
+// #15. `=== 3`, and the negatives are the badge: days four through seven of the
+// same week must say nothing, or one good week awards five times.
+check('three_in_a_week + on the third', on({ cardsThisLocalWeek: 3 }), ['three_in_a_week'])
+check('three_in_a_week − on the second', on({ cardsThisLocalWeek: 2 }), [])
+check('three_in_a_week − on the fourth', on({ cardsThisLocalWeek: 4 }), [])
+check('three_in_a_week − on the seventh', on({ cardsThisLocalWeek: 7 }), [])
+check('three_in_a_week − with no card that day', on({ cardsThisLocalWeek: 0 }), [])
+
+// #16. Thirty, sixty, ninety — and 30 is not a multiple of 7, so these four
+// assertions also prove the two streak badges are reading the same number
+// without colliding.
+check('thirty_day_streak + at 30', on({ runLength: 30 }), ['thirty_day_streak'])
+check('thirty_day_streak + at 60', on({ runLength: 60 }), ['thirty_day_streak'])
+check('thirty_day_streak + at 90', on({ runLength: 90 }), ['thirty_day_streak'])
+check('thirty_day_streak − at 29', on({ runLength: 29 }), [])
+check('thirty_day_streak − at 31', on({ runLength: 31 }), [])
+check('thirty_day_streak − at 0', on({ runLength: 0 }), [])
+check(
+  'thirty_day_streak + full_week at 210, the first day both fall on',
+  on({ runLength: 210 }),
+  ['full_week', 'thirty_day_streak'],
+)
+
+// #17. 2026-06-30 is a Tuesday and 1997-06-30 — the day itself — was a Monday,
+// so both expectations are about the date and nothing else.
+check('dumbledore  + 2026-06-30 (a Tuesday)', on({ cardDate: '2026-06-30' }), ['dumbledore'])
+check('dumbledore  + 1997-06-30, the day itself', on({ cardDate: '1997-06-30' }), ['dumbledore'])
+check('dumbledore  − 2026-06-29', on({ cardDate: '2026-06-29' }), [])
+check('dumbledore  − 2026-07-30 (right day, wrong month)', on({ cardDate: '2026-07-30' }), [])
+check(
+  'dumbledore  + midnight_oil at 00:30, which is when it happened',
+  on({ cardDate: '2026-06-30', localHour: 0 }),
+  ['midnight_oil', 'dumbledore'],
+)
+
+// #18. 2026-03-30 and 1998-03-30 are both Mondays. The 29th is a Sunday in 2026,
+// which is the useful negative: it fails on `sunday` alone if the day is wrong.
+check('dobby       + 2026-03-30 (a Monday)', on({ cardDate: '2026-03-30' }), ['dobby'])
+check('dobby       + 1998-03-30, the day itself', on({ cardDate: '1998-03-30' }), ['dobby'])
+check('dobby       − 2026-03-29 (a Sunday, the day before)', on({ cardDate: '2026-03-29' }), ['sunday'])
+check('dobby       − 2026-03-31 (the funeral, not the death)', on({ cardDate: '2026-03-31' }), [])
+
+// The pair that catches a month-blind comparison, exactly as `leap_day` and
+// `tolkien` do above. Both of these fall on day 30; written as `day === 30`
+// alone, each fires on the other's date and a single-date test still passes.
+{
+  const march = on({ cardDate: '2026-03-30' })
+  const june = on({ cardDate: '2026-06-30' })
+  check('30 March and 30 June do not leak into each other', [march, june], [
+    ['dobby'],
+    ['dumbledore'],
+  ])
+}
+
+// #19 and #20. Crossings, not totals — the negatives are the entire rule, and
+// the "count stood still" case is the one that would otherwise award on every
+// card for the rest of the user's life.
+check('five_shares + crossing 4 → 5', on({ sharedWordsAtPreviousCard: 4, sharedWordsNow: 5 }), ['five_shares'])
+check('five_shares + crossing 9 → 10', on({ sharedWordsAtPreviousCard: 9, sharedWordsNow: 10 }), ['five_shares'])
+check('five_shares + 0 → 5 on a first card', on({ sharedWordsAtPreviousCard: 0, sharedWordsNow: 5 }), ['five_shares'])
+check('five_shares − the count stood still at 5', on({ sharedWordsAtPreviousCard: 5, sharedWordsNow: 5 }), [])
+check('five_shares − 5 → 9, same bucket', on({ sharedWordsAtPreviousCard: 5, sharedWordsNow: 9 }), [])
+check('five_shares − 4 → 4', on({ sharedWordsAtPreviousCard: 4, sharedWordsNow: 4 }), [])
+// A revoked share makes the count fall. It must not re-award on the way back up,
+// and it must not award on the way down.
+check('five_shares − a revoked share, 12 → 10', on({ sharedWordsAtPreviousCard: 12, sharedWordsNow: 10 }), [])
+// Two milestones between one pair of cards is one award, deliberately.
+check('five_shares + 0 → 12 awards once, not twice', on({ sharedWordsAtPreviousCard: 0, sharedWordsNow: 12 }), ['five_shares'])
+
+check('ten_journal_lines + crossing 9 → 10', on({ journalLinesAtPreviousCard: 9, journalLinesNow: 10 }), ['ten_journal_lines'])
+check('ten_journal_lines + crossing 19 → 20', on({ journalLinesAtPreviousCard: 19, journalLinesNow: 20 }), ['ten_journal_lines'])
+check('ten_journal_lines − the count stood still at 10', on({ journalLinesAtPreviousCard: 10, journalLinesNow: 10 }), [])
+check('ten_journal_lines − 10 → 19, same bucket', on({ journalLinesAtPreviousCard: 10, journalLinesNow: 19 }), [])
+check('ten_journal_lines − a deleted line, 25 → 20', on({ journalLinesAtPreviousCard: 25, journalLinesNow: 20 }), [])
+
 section('§8.3 badges — combinations, and the order they come back in')
+
+check(
+  'both counters cross on the same card',
+  on({
+    sharedWordsAtPreviousCard: 4,
+    sharedWordsNow: 5,
+    journalLinesAtPreviousCard: 9,
+    journalLinesNow: 10,
+  }),
+  ['five_shares', 'ten_journal_lines'],
+)
+check(
+  'the third card of the week, on a thirty-day run, on 30 June',
+  on({ cardDate: '2026-06-30', cardsThisLocalWeek: 3, runLength: 30 }),
+  ['three_in_a_week', 'thirty_day_streak', 'dumbledore'],
+)
 
 check(
   'Christmas at 01:30 on a full week',
@@ -374,14 +514,79 @@ check(
   ['first_card', 'sunday', 'tolkien'],
 )
 
+section('§8.4 [R12] — how often each repeating badge repeats on a 100-day run')
+
+/**
+ * [R12]'s trap, written down as numbers instead of as a warning.
+ *
+ * Every rule here reads literally as something that would fire on *every* day
+ * past its threshold: "three cards in a week" is true on days four to seven too,
+ * "thirty consecutive days" is true on day thirty-one. These counts are the
+ * assertion that none of them does. If a rule is ever loosened by accident, this
+ * block moves before anything else in the file notices.
+ *
+ * 100 consecutive days from a Monday: fourteen whole weeks and two days over.
+ */
+{
+  const days = range('2026-01-05', 100) // 2026-01-05 is a Monday
+  const nums = days.map(toDayNumber)
+  const tally = new Map<string, number>()
+
+  for (const [i, date] of days.entries()) {
+    const n = toDayNumber(date)
+    for (const key of evaluateBadges({
+      cardDate: date,
+      localHour: 14,
+      isFirstCardEver: i === 0,
+      runLength: runLengthEndingAt(nums, n),
+      cardsThisLocalWeek: countInWeekEndingAt(nums, n),
+      sharedWordsNow: 0,
+      sharedWordsAtPreviousCard: 0,
+      journalLinesNow: 0,
+      journalLinesAtPreviousCard: 0,
+    })) {
+      tally.set(key, (tally.get(key) ?? 0) + 1)
+    }
+  }
+
+  check('first_card        ×1 — once, ever', tally.get('first_card'), 1)
+  check('full_week         ×14 — one per completed week', tally.get('full_week'), 14)
+  check('sunday            ×14', tally.get('sunday'), 14)
+  // Fourteen, not fifteen: the run ends on a Tuesday, so the fifteenth week
+  // never reaches a third card.
+  check('three_in_a_week   ×14 — one per week that reaches three', tally.get('three_in_a_week'), 14)
+  check('thirty_day_streak ×3 — at 30, 60 and 90', tally.get('thirty_day_streak'), 3)
+  // The window is 2026-01-05 to 2026-04-14, which contains 8 March and 30 March.
+  // Both are worth having here: a calendar badge inside a 100-day run must fire
+  // exactly once, and these are the assertion that a date rule cannot repeat
+  // within a year the way a counting rule repeats within a month.
+  check('womens_day        ×1', tally.get('womens_day'), 1)
+  check('dobby             ×1', tally.get('dobby'), 1)
+  check('and nothing else fires at all', [...tally.keys()].sort(), [
+    'dobby',
+    'first_card',
+    'full_week',
+    'sunday',
+    'thirty_day_streak',
+    'three_in_a_week',
+    'womens_day',
+  ])
+}
+
 section('§8.1 badges — the catalog')
 
-check('fourteen badges, no more', BADGE_CATALOG.length, 14)
-check('keys are unique', new Set(BADGE_CATALOG.map((b) => b.key)).size, 14)
-check('titles are unique', new Set(BADGE_CATALOG.map((b) => b.title)).size, 14)
+check('twenty badges, no more', BADGE_CATALOG.length, 20)
+check('keys are unique', new Set(BADGE_CATALOG.map((b) => b.key)).size, 20)
+check('titles are unique', new Set(BADGE_CATALOG.map((b) => b.title)).size, 20)
 // Appending is what preserves the index tuple asserted above, and the toast
-// ordering of the thirteen that came before it.
-check('tolkien is last in the catalog', BADGE_CATALOG.at(-1)?.key, 'tolkien')
+// ordering of everything that came before. Badges #15–#20 went on the end for
+// that reason, so `tolkien` keeps index 13 and the tuple keeps its meaning.
+check('ten_journal_lines is last in the catalog', BADGE_CATALOG.at(-1)?.key, 'ten_journal_lines')
+check(
+  'the first fourteen did not move',
+  BADGE_CATALOG.findIndex((b) => b.key === 'tolkien'),
+  13,
+)
 check('§13.15 an unknown key has no title', badgeTitle('six_before_noon'), null)
 
 /* ------------------------ §F13 — the badge metadata ------------------------ */
@@ -438,6 +643,7 @@ section('§6.5 C — the timezone boundary at the moment of creation')
   check(
     'so the badges are new_year + midnight_oil, never year_end',
     evaluateBadges({
+      ...ordinary,
       cardDate,
       localHour: localHour(instant, 'Pacific/Auckland'),
       isFirstCardEver: false,

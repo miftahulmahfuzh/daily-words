@@ -120,6 +120,40 @@ export const BADGE_META: Record<BadgeKey, BadgeMeta> = {
     gloss:
       "Tolkien died on 2 September 1973, a Sunday, at eighty-one. He was a philologist first and a novelist second: the languages came before the story, and the story was built to give them somewhere to be spoken. Somebody in Mordor presumably marked the date.",
   },
+  three_in_a_week: {
+    condition:
+      "Three cards inside one week, counted Monday to Sunday. Awarded on the third card of a week, once per week.",
+    gloss:
+      "Three is where a week stops looking accidental. It is not the full ration and was never meant to be — the office that issued these took three stamps as evidence that somebody had been in, and did not ask what happened on the other four days.",
+  },
+  thirty_day_streak: {
+    condition:
+      "Thirty cards on thirty consecutive days. Awarded again at sixty, at ninety, and every thirtieth day after that.",
+    gloss:
+      "The line belongs to a covered order who repeat it whenever somebody does the plainly correct thing, which is most of what a creed is for. Thirty days is about where a habit stops needing to be argued with. A missed day restarts the count and takes nothing away.",
+  },
+  dumbledore: {
+    condition: "A card made on 30 June, the day Albus Dumbledore died.",
+    gloss:
+      "Killed on the Astronomy Tower shortly after midnight on 30 June 1997, by two words, spoken by the man he had asked to speak them. The date is fixed by arithmetic rather than by a calendar: the bequests arrived on 31 July, thirty-one days later.",
+  },
+  dobby: {
+    condition: "A card made on 30 March, the day Dobby died.",
+    gloss:
+      "Dobby died at Shell Cottage on 30 March 1998 and was buried the next morning under a stone cut by hand, six words long. The books never give the date; it is reconstructed from the Easter chronology, which makes it the one day on this shelf that readers worked out rather than read.",
+  },
+  five_shares: {
+    condition:
+      "Five words handed to somebody else. Awarded again at ten, at fifteen, and every fifth word shared after that.",
+    gloss:
+      "The parable is about the one traveller who stopped, and none of it is about vocabulary. The mechanism is the same either way: a word costs nothing to pass on and is worth nothing until somebody does.",
+  },
+  ten_journal_lines: {
+    condition:
+      "Ten lines written in the journal. Awarded again at twenty, at thirty, and every tenth line after that.",
+    gloss:
+      "A maester forges one link for each subject he masters and wears the whole chain for the rest of his life. The links are different metals and are not meant to match. Ten lines is one link, and the chain is only ever added to.",
+  },
 };
 
 /**
