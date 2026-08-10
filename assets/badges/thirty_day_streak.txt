@@ -1,9 +1,34 @@
 badge:          thirty_day_streak
-model:          gpt-image-2
+model:          supplied by hand (not gen_badge_art.py)
 style version:  v1
 reference:      assets/badges/_anchor.png
 size / quality: 1024x1024 / high
-image sha256:   b8dcc74d51b15b9f3f69f4c6ac1837873bc7923ae6bb5cc9e5038f5456bdf343
+image sha256:   c94707301ad370d4e3c872a44986bc66124ad233d1e5ad9d16e598d3fb3a4bda
+
+--- provenance ---
+This master did NOT come out of tools/gen_badge_art.py. It was supplied as
+1786337779.png, 1664x928, and conformed to the v1 contract by hand on
+2026-08-10:
+
+  - the seal is a true circle at (830.6, 456) in the source, diameter 847;
+  - a 1026px square was cropped around that centre, which needed 57 rows of
+    padding above and 41 below. The padding is a mirror-tile of the source's
+    ink-free strips (rows 0..32 and 880..927) rather than a flat fill, so the
+    paper tooth continues across the seam;
+  - that square was resampled to 1024x1024 (LANCZOS) and every channel scaled
+    by 0.975, which is a 1.2-point drop in plate luminance once the WCAG
+    gamma is applied. The source paper was 87.2% against the anchor's 81.1%
+    and check 9b allows 4.0.
+
+Result against tools/check_badge_art.py: all hard checks pass — seal radius
+40.6% vs the anchor's 41.0% (deck range 40.2-41.4), plate 82.4% (deck range
+79.0-84.6). Two warnings stand: 9c mean colour distance, which is loose by
+design, and 6 vermilion share at 0.00% — this art is a single green ink and
+carries no second-pass mark, unlike the rest of the deck (0.06-1.82%).
+
+The prompt below is the v1 contract this art was measured against. It is NOT
+what produced these bytes; it produced the superseded master
+b8dcc74d..., and is kept here as the starting point for any regeneration.
 
 --- prompt as sent ---
 A single printed keepsake ticket, square, in the manner of a nineteenth-century
