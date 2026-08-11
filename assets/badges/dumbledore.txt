@@ -1,9 +1,43 @@
 badge:          dumbledore
-model:          gpt-image-2
+model:          supplied by hand (not gen_badge_art.py)
 style version:  v1
 reference:      assets/badges/_anchor.png
 size / quality: 1024x1024 / high
-image sha256:   5b8d0a0f917419cf11cbc78c74c6a2df2b57b1ba7aaf304921577444ad21b830
+image sha256:   f815e53a2514eede831c038a90e2234a4a776fe584e2c33434d228b0433d4eb5
+
+--- provenance ---
+This master did NOT come out of tools/gen_badge_art.py. It was supplied as
+1786429816faca.png, 2048x2048, and conformed to the v1 contract by hand on
+2026-08-11. Unlike thirty_day_streak it arrived square and at the right
+paper tone, so the only correction was framing:
+
+  - the ring is a circle of diameter 1709 centred at (1034.3, 967.0), which
+    is 57px above the source's own centre — enough to read as a tilted shelf
+    beside its neighbours, though check 8a would have passed it at 2.8%;
+  - a 2048px square was cropped around the RING's centre rather than the
+    image's, which needed 57 rows of padding at the top and 10 columns at
+    the right. As with thirty_day_streak the padding is a mirror-tile of the
+    ink-free margins (rows 0..112, cols 1889..2047) rather than a flat fill;
+  - resampled to 1024x1024 (LANCZOS). No luminance scaling: the source paper
+    measured 80.5% against the anchor's 81.1%, already inside check 9b's 4.0.
+
+Result against tools/check_badge_art.py: all hard checks pass — seal radius
+40.6% vs the anchor's 41.0% (deck range 40.2-41.4), plate 80.6%, centring
+0.07% off. Two warnings stand: 9c mean colour distance, which is loose by
+design, and 6 vermilion share at 0.01% against a wanted 0.02-3.00. This art
+DOES carry a second-pass mark, low and right inside the ring — it is simply
+smaller than the band the check wants, so this is a near miss rather than
+thirty_day_streak's absent mark.
+
+Note this subject is tonally heavier than the rest of the deck: the robe is
+a large dense field, giving ink contrast 10.23 where deck-mates run 7-8. It
+reads well at 40px (legibility stddev 52.4) because the pale head sits
+against that field, but it is the darkest badge on the shelf.
+
+The prompt below is the v1 contract this art was measured against. It is NOT
+what produced these bytes; it produced the superseded master 5b8d0a0f...,
+including 27f973c's Elder Wand on the parapet, and is kept here as the
+starting point for any regeneration.
 
 --- prompt as sent ---
 A single printed keepsake ticket, square, in the manner of a nineteenth-century
