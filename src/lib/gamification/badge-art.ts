@@ -168,10 +168,10 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     styleVersion: "v1",
   },
   dobby: {
-    src: "/badges/dobby.db5038a0.webp",
-    small: "/badges/dobby.db5038a0.sm.webp",
-    sha256: "db5038a0e36d20d048e05a4a01af9f3e1c9044ab6c7026353b4bb09d13f7f976",
-    plate: "#e9e4d2",
+    src: "/badges/dobby.4649dd92.webp",
+    small: "/badges/dobby.4649dd92.sm.webp",
+    sha256: "4649dd9265fb7a917ef5642cde8154b8f5550b1140df70aca5e884ff59832bb4",
+    plate: "#f0ead1",
     styleVersion: "v1",
   },
   five_shares: {

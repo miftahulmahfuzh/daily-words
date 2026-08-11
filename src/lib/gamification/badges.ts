@@ -60,7 +60,13 @@ export const BADGE_CATALOG = [
   // for the reader who has not read the books, so `condition` names the day and
   // the man instead of leaning on it.
   { key: "dumbledore", title: "Avada Kedavra" },
-  { key: "dobby", title: "Master Has Given a Sock" },
+  // Retitled. The key stays `dobby` for `ibu`'s reason above. The old title
+  // quoted the moment of the freeing and needed the sock to be known; this one
+  // names the state instead, and is four of the six words on the stone that
+  // `gloss` counts without quoting. The gloss is left alone deliberately: its
+  // move is that the date is reconstructed rather than read, which the title
+  // does not spend — unlike `dumbledore` above, where it did.
+  { key: "dobby", title: "Dobby The Free Elf" },
   { key: "five_shares", title: "The Good Samaritan" },
   // Retitled. The key stays `ten_journal_lines` for `ibu`'s reason above — it is
   // the value in `badges_awarded`, in the art filename and in `style.md`'s scene
