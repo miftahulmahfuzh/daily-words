@@ -100,11 +100,6 @@ export const BADGE_META: Record<BadgeKey, BadgeMeta> = {
     gloss:
       "Indonesian Mother’s Day, dated to the first Indonesian Women’s Congress in 1928 rather than to a greetings-card season.",
   },
-  christmas: {
-    condition: "A card made on 25 December.",
-    gloss:
-      "Dickens sent three ghosts and each of them had a speech. This one shows six words and leaves.",
-  },
   year_end: {
     condition: "A card made on 31 December.",
     gloss:
@@ -153,6 +148,25 @@ export const BADGE_META: Record<BadgeKey, BadgeMeta> = {
       "Ten lines written in the journal. Awarded again at twenty, at thirty, and every tenth line after that.",
     gloss:
       "A maester forges one link for each subject he masters and wears the whole chain for the rest of his life. The links are different metals and are not meant to match. Ten lines is one link, and the chain is only ever added to.",
+  },
+  /**
+   * The one gloss in the deck that is a **quotation rather than written prose**,
+   * and it is here by explicit instruction. Every other entry in this file
+   * explains what its title refers to in the app's own register; this one is the
+   * passage the badge was asked for, carried across intact, so it is the one
+   * place a reader will hear a voice that is not the shop's. The register checks
+   * in `check-gamification.ts` all pass on it unchanged — no second person, no
+   * exclamation, no straight apostrophes — which is why it needs no exemption.
+   *
+   * The `condition` therefore does all the explaining, including the part a user
+   * who never answered the question needs: a profile with no birthday on it
+   * earns nothing, and says so rather than reading as a rule that is broken.
+   */
+  birthday: {
+    condition:
+      "A card made on the day and month of the birthday on the profile. No birthday given, nothing to award.",
+    gloss:
+      "On the day that we are born the Many-Faced God sends each of us a dark angel to walk through life beside us. When our sins and our sufferings grow too great to be borne, the angel takes us by the hand to lead us to the nightlands",
   },
 };
 

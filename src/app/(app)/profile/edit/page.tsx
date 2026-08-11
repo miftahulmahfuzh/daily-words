@@ -1,7 +1,9 @@
 import { Screen } from "@/components/layout/screen";
 import { ProfileEditForm } from "@/components/profile/profile-edit-form";
 import { requireOnboardedUser } from "@/lib/auth/guards";
+import { resolveTimezone } from "@/lib/db/queries/cards";
 import { toProfileResponse } from "@/lib/profile/serialize";
+import { localDateNow } from "@/lib/time/local-date";
 
 /**
  * The five answers, editable.
@@ -21,7 +23,13 @@ export default async function ProfileEditPage() {
 
   return (
     <Screen>
-      <ProfileEditForm profile={toProfileResponse(profile)} />
+      {/* `today` in the profile's own zone, not the browser's: it bounds the
+          birthday field, and this app keeps exactly one answer to "what day is
+          it". */}
+      <ProfileEditForm
+        profile={toProfileResponse(profile)}
+        today={localDateNow(resolveTimezone(profile).timezone)}
+      />
     </Screen>
   );
 }

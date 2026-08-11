@@ -155,6 +155,57 @@ export async function updateProfileAnswers(
   return row ?? null
 }
 
+/* --------------------------------- Birthday --------------------------------- */
+
+/**
+ * Record the answer to the one question that is not one of the five — or record
+ * that it was put and declined.
+ *
+ * **`birthday_asked_at` is written on every call, including `null`.** That is the
+ * whole point: the timestamp is what turns "asked and declined" into a distinct
+ * state from "never asked", and without it the gate re-asks a skipping user for
+ * ever. `now()` in SQL rather than a JS `Date`, on the F10 precedent — the app's
+ * clock and Neon's are not the same clock, and every timestamp this schema writes
+ * comes from the database.
+ *
+ * An UPDATE and not an upsert, like `updateProfileAnswers`: both callers are past
+ * the onboarding gate and therefore have a row, and this must not become a second
+ * way to bring a profile into existence.
+ *
+ * **Never touches `badges_awarded`.** A birthday moved from date A to date B
+ * leaves every award already made standing, and a card on date B later inserts a
+ * second row and takes the count to two. That rule is a property of doing nothing
+ * here, and `evaluateBadges` documents the one path — `--prune` — that could
+ * undo it.
+ */
+export async function setBirthday(
+  userId: string,
+  birthday: string | null,
+): Promise<Profile | null> {
+  const [row] = await db
+    .update(profiles)
+    .set({ birthday, birthdayAskedAt: sql`now()`, updatedAt: new Date() })
+    .where(eq(profiles.userId, userId))
+    .returning()
+  return row ?? null
+}
+
+/**
+ * The birthday alone, for the two badge paths.
+ *
+ * A column read rather than `getProfile`, because both callers are counting rows
+ * in a loop and neither wants the interests array. `null` covers three cases the
+ * badge treats identically: no profile, no answer, and declined.
+ */
+export async function getBirthday(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ birthday: profiles.birthday })
+    .from(profiles)
+    .where(eq(profiles.userId, userId))
+    .limit(1)
+  return row?.birthday ?? null
+}
+
 export type CompleteOnboardingResult = {
   onboardedAt: Date
   alreadyOnboarded: boolean

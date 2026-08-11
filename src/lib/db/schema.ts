@@ -112,6 +112,29 @@ export const profiles = pgTable('profiles', {
   currentlyConsuming: text('currently_consuming'),
   englishContexts: text('english_contexts').array(),
   chatTone: text('chat_tone').$type<'patient' | 'blunt' | 'playful'>(),
+  /**
+   * The user's date of birth, `'YYYY-MM-DD'`, or null — which is where every
+   * profile that existed before this column starts, and where a profile whose
+   * owner declined the question stays.
+   *
+   * A `date` and not a `(month, day)` pair: it is a real day, `localDate()`
+   * already reads and writes it as a string, and the badge that consumes it
+   * reads the month and day off it and ignores the year. NOT NULL was never an
+   * option — the column has to be able to say "never answered", and that is a
+   * different fact from any date it could be defaulted to.
+   *
+   * **Not one of the five onboarding answers**, deliberately: the roadmap caps
+   * that flow at five questions and `ONBOARDING_STEPS` is not a config value.
+   * `/birthday` is its own single-question screen, asked once of everybody.
+   */
+  birthday: localDate('birthday'),
+  /**
+   * When the birthday question was last put to this user — set whether they
+   * answered it or skipped it, which is the whole reason it exists. Without it
+   * `birthday IS NULL` cannot tell "not asked yet" from "asked and declined",
+   * and a skip would re-ask on every single app open forever.
+   */
+  birthdayAskedAt: tsz('birthday_asked_at'),
   onboardedAt: tsz('onboarded_at'),
   createdAt: tsz('created_at').notNull().defaultNow(),
   updatedAt: tsz('updated_at').notNull().defaultNow(),

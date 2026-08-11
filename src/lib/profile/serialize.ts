@@ -19,6 +19,7 @@ export function toProfileResponse(row: Profile): ProfileResponse {
     currentlyConsuming: row.currentlyConsuming,
     englishContexts: row.englishContexts,
     chatTone: row.chatTone,
+    birthday: row.birthday,
     onboardedAt: row.onboardedAt?.toISOString() ?? null,
   }
 }

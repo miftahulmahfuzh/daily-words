@@ -52,7 +52,7 @@ export async function recomputeUserGamification(
   const warnings: string[] = [];
 
   const [profile] = await db
-    .select({ timezone: profiles.timezone })
+    .select({ timezone: profiles.timezone, birthday: profiles.birthday })
     .from(profiles)
     .where(eq(profiles.userId, userId))
     .limit(1);
@@ -125,6 +125,12 @@ export async function recomputeUserGamification(
       sharedWordsAtPreviousCard: previousShared,
       journalLinesNow: journalNow,
       journalLinesAtPreviousCard: previousJournal,
+      // The birthday **as it stands now**, not as it stood on the day — the
+      // column keeps no history, and inventing one would be the only way to
+      // replay it faithfully. Insert-only recomputes are unaffected: a card on
+      // the old birthday keeps its award because nothing here removes one. See
+      // the prune warning below, which is where this becomes visible.
+      birthday: profile?.birthday ?? null,
     })) {
       expected.push({ badgeKey: key, awardedForDate: card.cardDate });
     }
@@ -138,6 +144,31 @@ export async function recomputeUserGamification(
   const existing = await listBadgeAwards(userId);
   const expectedSet = new Set(expected.map(keyOf));
   const stale = prune ? existing.filter((a) => !expectedSet.has(keyOf(a))) : [];
+
+  /**
+   * A stale `birthday` row is the one prune candidate that is very likely
+   * **correct**, and it is named here rather than left to be discovered.
+   *
+   * The rule the badge was asked for is that changing a birthday is additive:
+   * the count already earned stands, and a card on the new date adds to it. That
+   * survives every insert-only recompute by construction. `--prune` is the single
+   * path that undoes it, because the replay judges the whole history against the
+   * date on the profile *today* and cannot know the row was earned under the old
+   * one. The same exposure `five_shares` and `ten_journal_lines` carry — see the
+   * note above the two counters — and the same mitigation: this is why `--prune`
+   * refuses `--all` without `--force`.
+   *
+   * A stale row under a key the catalog no longer knows — `christmas` — is a
+   * different thing and wants no warning: deleting it is the point.
+   */
+  const prunedBirthdays = stale.filter((a) => a.badgeKey === "birthday");
+  if (prunedBirthdays.length > 0) {
+    warnings.push(
+      `prune would drop ${prunedBirthdays.length} birthday award(s) (${prunedBirthdays
+        .map((a) => a.awardedForDate)
+        .join(", ")}) that the birthday on the profile no longer matches; a changed birthday is meant to keep them`,
+    );
+  }
 
   if (dryRun) {
     const existingSet = new Set(existing.map(keyOf));

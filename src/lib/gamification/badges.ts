@@ -1,4 +1,9 @@
-import { localDayOfWeek, parseLocalDate, type LocalDate } from "@/lib/time/local-date";
+import {
+  isLocalDate,
+  localDayOfWeek,
+  parseLocalDate,
+  type LocalDate,
+} from "@/lib/time/local-date";
 
 /**
  * The twenty badges, and the one function that decides which of them a card
@@ -39,7 +44,6 @@ export const BADGE_CATALOG = [
   // (`badgeTitle` returns null for an unknown key, the shelf drops the row, and
   // `--prune` deletes it). The title is display and costs nothing to change.
   { key: "ibu", title: "Mama Would Be Proud" },
-  { key: "christmas", title: "Ghost of Christmas Vocab" },
   { key: "year_end", title: "Last Word of the Year" },
   { key: "leap_day", title: "Leap Year Lexicographer" },
   // Appended, and appended for a reason: catalog order is shelf order, toast
@@ -76,6 +80,21 @@ export const BADGE_CATALOG = [
   // one is a different subject. The `gloss` in `badge-meta.ts` was already about
   // maesters and the art was already the chain; only the title disagreed.
   { key: "ten_journal_lines", title: "Maester of the Seven Kingdoms" },
+  // #21, and the first badge in the deck whose trigger is a fact about the
+  // *user* rather than about their cards: it reads a date they typed. Appended
+  // like every one before it.
+  //
+  // It replaced `christmas`, which was removed rather than retired — the key,
+  // the title, the rule, the metadata, the scene line and the art are all gone.
+  // Removing a key from the MIDDLE of this array is the one edit the appending
+  // rule above does not cover, and it shifts every index after it: `year_end`
+  // took christmas's index 10 and `tolkien` moved from 13 to 12. Nothing
+  // persisted carries an index, so the shift is confined to
+  // `check-gamification.ts`'s two positional assertions, both of which moved
+  // with it. A `badges_awarded` row still reading `christmas` is inert: it has
+  // no title, `getProfileStats` drops it from the shelf with a warning, and
+  // `stats:recompute --prune` deletes it.
+  { key: "birthday", title: "A Man Needs a Card" },
 ] as const;
 
 export type BadgeKey = (typeof BADGE_CATALOG)[number]["key"];
@@ -126,6 +145,23 @@ export type BadgeContext = {
   /** Journal lines written, same pair and same reason. */
   journalLinesNow: number;
   journalLinesAtPreviousCard: number;
+  /**
+   * The birthday on the user's profile, `'YYYY-MM-DD'`, or null when they have
+   * never given one — which is the state every existing user starts in and the
+   * state a user who skipped the question stays in.
+   *
+   * **The whole date is carried and only the month and day are read.** Passing
+   * a pre-computed `isUserBirthday: boolean` was the alternative and it is
+   * worse: it moves the one comparison this badge *is* out of the pure function
+   * and into two call sites that would then have to agree, which is the failure
+   * `evaluateBadges` exists to make impossible. The year is carried rather than
+   * stripped because a `MM-DD` pair is not a `LocalDate` and would need its own
+   * parser, and because the column holds a real date.
+   *
+   * Read as the *current* birthday on both paths, which is deliberate and is
+   * what makes changing it additive rather than retroactive — see the rule.
+   */
+  birthday: LocalDate | null;
 };
 
 /**
@@ -161,9 +197,11 @@ function crossedMultipleOf(before: number, now: number, step: number): boolean {
  * Which badges this card earns. Order follows `BADGE_CATALOG`, which is also
  * shelf order and toast order.
  *
- * Several can fire at once and all are awarded: 2026-12-25 at 01:30 is
- * `christmas` + `midnight_oil`; a first card on a Sunday is `first_card` +
- * `sunday`; 2026-06-21 is `fathers_day` + `sunday`.
+ * Several can fire at once and all are awarded: 2026-12-31 at 01:30 is
+ * `year_end` + `midnight_oil`; a first card on a Sunday is `first_card` +
+ * `sunday`; 2026-06-21 is `fathers_day` + `sunday`. A card on a birthday that
+ * falls on 29 February is `birthday` + `leap_day`, and nothing about that is a
+ * collision.
  */
 export function evaluateBadges(ctx: BadgeContext): BadgeKey[] {
   const { month, day } = parseLocalDate(ctx.cardDate);
@@ -195,7 +233,6 @@ export function evaluateBadges(ctx: BadgeContext): BadgeKey[] {
 
   if (month === 8 && day === 17) earned.push("indonesia_independence");
   if (month === 12 && day === 22) earned.push("ibu");
-  if (month === 12 && day === 25) earned.push("christmas");
   if (month === 12 && day === 31) earned.push("year_end");
 
   // No leap-year test: a non-leap year has no card dated 29 February.
@@ -239,6 +276,34 @@ export function evaluateBadges(ctx: BadgeContext): BadgeKey[] {
   }
   if (crossedMultipleOf(ctx.journalLinesAtPreviousCard, ctx.journalLinesNow, 10)) {
     earned.push("ten_journal_lines");
+  }
+
+  // A card made on the user's own birthday. Month and day only, so it is the
+  // anniversary rather than the birth: 1996-05-10 earns this on 2026-05-10.
+  //
+  // **`isLocalDate` before `parseLocalDate`, which throws.** Every other input
+  // here is a number or a date this app computed; this one is a column a person
+  // filled in, and a hand-edited row must not be able to take down the whole
+  // evaluation and cost the user their `first_card`. An unreadable birthday
+  // earns nothing, which is also what a null earns.
+  //
+  // **A birthday on 29 February earns this only in leap years**, roughly once in
+  // 1,461 days, and always beside `leap_day`. That is the honest reading of "the
+  // day I was born" and no substitute date is invented: 28 February and 1 March
+  // are both somebody else's birthday.
+  //
+  // **Changing the birthday is additive, never retroactive**, which is the rule
+  // this badge was asked for with. Awards already made are rows in
+  // `badges_awarded`, keyed on `(user_id, badge_key, awarded_for_date)`; nothing
+  // in the profile write path touches them, so the count stands and a card on
+  // the new date inserts a second row and takes it to two. The one path that
+  // could disagree is `stats:recompute --prune`, which replays against the
+  // *current* birthday and would drop the old row — the same exposure shares and
+  // journal lines already carry, for the same reason, and `recompute.ts` names
+  // this case in a warning rather than leaving it to be discovered.
+  if (ctx.birthday !== null && isLocalDate(ctx.birthday)) {
+    const born = parseLocalDate(ctx.birthday);
+    if (born.month === month && born.day === day) earned.push("birthday");
   }
 
   return earned;

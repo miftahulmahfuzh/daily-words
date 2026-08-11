@@ -12,7 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { TextInput } from "@/components/ui/text-input";
 import { Eyebrow, Meta } from "@/components/ui/text";
-import { patchProfile, postTimezone } from "@/lib/profile/client";
+import {
+  BIRTHDAY_ERRORS,
+  MIN_BIRTHDAY_YEAR,
+  normalizeBirthday,
+} from "@/lib/profile/birthday";
+import { patchProfile, postBirthday, postTimezone } from "@/lib/profile/client";
 import { completeProfileAnswers } from "@/lib/profile/normalize";
 import { toggleExclusive } from "@/lib/profile/selection";
 import {
@@ -47,7 +52,14 @@ const CONTEXT_CHIPS = ENGLISH_CONTEXTS.map((slug) => ({
   label: ENGLISH_CONTEXT_LABELS[slug],
 }));
 
-export function ProfileEditForm({ profile }: { profile: ProfileResponse }) {
+export function ProfileEditForm({
+  profile,
+  today,
+}: {
+  profile: ProfileResponse;
+  /** The user's local date, from the server. Bounds the birthday field. */
+  today: string;
+}) {
   const router = useRouter();
 
   const [occupation, setOccupation] = useState(profile.occupation ?? "");
@@ -55,15 +67,26 @@ export function ProfileEditForm({ profile }: { profile: ProfileResponse }) {
   const [currently, setCurrently] = useState(profile.currentlyConsuming ?? "");
   const [contexts, setContexts] = useState<string[]>(profile.englishContexts ?? []);
   const [tone, setTone] = useState<string | null>(profile.chatTone);
+  const [birthday, setBirthday] = useState(profile.birthday ?? "");
   const [timezone, setTimezone] = useState(profile.timezone);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const timezoneChanged = timezone !== profile.timezone;
+  const birthdayChanged = (birthday || null) !== profile.birthday;
 
   async function save() {
     if (saving) return;
+
+    // Validated before anything is sent, so a bad date cannot leave the timezone
+    // saved and the rest not. The route re-checks; this only keeps the form honest.
+    const parsedBirthday = normalizeBirthday(birthday, today);
+    if (!parsedBirthday.ok) {
+      setError(BIRTHDAY_ERRORS[parsedBirthday.reason]);
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -72,6 +95,24 @@ export function ProfileEditForm({ profile }: { profile: ProfileResponse }) {
       if (!tz.ok) {
         setSaving(false);
         setError(tz.message);
+        return;
+      }
+    }
+
+    /**
+     * A third request, and only when it changed — a different resource with a
+     * different rule, exactly like the timezone above it.
+     *
+     * **Changing this is additive and never retroactive.** A badge already earned
+     * on the old date stays earned and stays counted; a card on the new date later
+     * adds one to the count. Nothing here deletes an award, which is the whole
+     * implementation of that rule.
+     */
+    if (birthdayChanged) {
+      const saved = await postBirthday(parsedBirthday.value);
+      if (!saved.ok) {
+        setSaving(false);
+        setError(saved.message);
         return;
       }
     }
@@ -160,6 +201,23 @@ export function ProfileEditForm({ profile }: { profile: ProfileResponse }) {
           <Eyebrow>How should the chat talk to you?</Eyebrow>
           <OptionRows options={CHAT_TONE_OPTIONS} value={tone} onChange={setTone} />
         </div>
+
+        {/* Not one of the five answers, and drawn last with the timezone rather
+            than among them: it is asked once on its own screen, and this is the
+            only place it can be corrected afterwards. Clearing it is allowed and
+            keeps the question answered — the field going empty is "I would rather
+            not say", not a re-arming of the prompt. */}
+        <Field id="birthday" label="When is your birthday?">
+          <TextInput
+            id="birthday"
+            name="birthday"
+            type="date"
+            value={birthday}
+            onChange={(e) => setBirthday(e.target.value)}
+            min={`${MIN_BIRTHDAY_YEAR}-01-01`}
+            max={today}
+          />
+        </Field>
 
         <TimezoneField
           value={timezone}

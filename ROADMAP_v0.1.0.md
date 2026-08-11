@@ -304,7 +304,6 @@ See [R12] for the exact trigger of each.
 | `fathers_day` | third Sunday of June | For the Old Man |
 | `world_book_day` | 23 April | The Bard's Regard |
 | `new_year` | 1 January | Resolution, Documented |
-| `christmas` | 25 December | Ghost of Christmas Vocab |
 | `year_end` | 31 December | Last Word of the Year |
 | `leap_day` | 29 February | Leap Year Lexicographer |
 | `midnight_oil` | card created 00:00–04:00 local | Burning the Midnight Oil |
@@ -313,6 +312,23 @@ See [R12] for the exact trigger of each.
 
 Badges are repeatable across years; `badges_awarded` records each occurrence and the
 profile shows a count ("×2").
+
+**Amended after v0.1.0, twice, and the table above is no longer exhaustive.** F13
+added `tolkien` and amended the table for it; badges #15–#20 were added later
+without one, so `src/lib/gamification/badges.ts` is the list. Two changes are
+recorded here because they contradict rather than extend what is written above:
+
+- **`christmas` (25 December, "Ghost of Christmas Vocab") was removed** — key,
+  title, rule, prose, scene line and art. It is deleted rather than retired: a
+  `badges_awarded` row still carrying the key has no title, `getProfileStats`
+  drops it from the shelf with a warning, and `stats:recompute --prune` deletes
+  it. Removing it from the middle of `BADGE_CATALOG` moved every index after it
+  down one, which nothing persists and `check-gamification.ts` pins.
+- **`birthday` ("A Man Needs a Card") took its place at the end**, and it is the
+  first badge whose trigger is a fact about the *user* — the day and month of
+  `profiles.birthday`, a column asked for once on `/birthday`, outside the
+  five-question flow this file caps at five. Changing the stored birthday is
+  additive: awards already made stand, and a card on the new date adds one.
 
 ---
 

@@ -124,10 +124,33 @@ curl -si http://localhost:3200/claim                                 # 200 "Noth
 ## Badge and level art, and `OPENAI_API_KEY`
 
 Badge medals are raster art generated offline by the `/generate-badge-art` skill
-(`.claude/skills/generate-badge-art/`). The style contract and the fourteen scene
-lines live in that skill's `style.md`, which `tools/gen_badge_art.py` **parses** —
-the `<!-- STYLE BLOCK vN -->` and `<!-- SCENES -->` markers are an interface, and
-a marker only counts when it is alone on its own line.
+(`.claude/skills/generate-badge-art/`). The style contract and the scene lines —
+one per key in `BADGE_CATALOG`, twenty of them now — live in that skill's
+`style.md`, which `tools/gen_badge_art.py` **parses** — the
+`<!-- STYLE BLOCK vN -->` and `<!-- SCENES -->` markers are an interface, and a
+marker only counts when it is alone on its own line.
+
+**Three of the twenty masters were supplied by hand rather than generated**
+(`thirty_day_streak`, `dumbledore`, `birthday`), and their sidecars are the record
+of what conforming one costs. The job is framing and tone, never redrawing: pad or
+crop to the anchor's seal radius, mirror-tile the ink-free margins rather than
+filling them flat, resample to 1024, then read `check_badge_art.py`. Two rules
+learned the hard way sit in those sidecars — **centre a non-circular seal by what
+check 8a measures, not by what a ruler measures** (`birthday`'s seal is an oval,
+and centring on its bounding box made both geometry checks worse), and **a scene
+line written after the fact does not reproduce the master**, which `birthday`'s
+says out loud because its vermilion is on the subject's cheeks where the style
+block forbids exactly that.
+
+**A badge can also be removed, and `christmas` is the worked example.** Deleting a
+key from the *middle* of `BADGE_CATALOG` is the one edit the append-only rule does
+not cover: every index after it shifts, which nothing persists but
+`check-gamification.ts` pins in two places. The rest is a sweep — the rule, the
+metadata, the scene line, the collision audit, the master, the sidecar, the
+`public/badges/*` pair (`make_badge_assets.py` warns about orphans and leaves them
+alone, so they go by hand), the roadmap's table row, and every assertion that
+named it. An award row left behind under a dead key is inert: no title, dropped
+from the shelf with a warning, deleted by `--prune`.
 
 **F22 added a second deck from the same pipeline**: seventeen level
 illustrations, one per band in `STREAK_LEVELS` and `COLLECTOR_LEVELS`. Its
@@ -391,7 +414,27 @@ throwing. Each cost real time.
   the group, not a member: putting it inside makes the guard part of its own
   layout chain and every visit an infinite redirect. API routes are outside every
   layout, which is what keeps `POST /api/profile/complete` reachable.
-- The user's timezone is detected, never asked. `timezone_source = 'manual'`
+- **That layout now holds a second gate, and `/birthday` is a sibling for the
+  same reason `/onboarding` is.** `needsBirthdayPrompt(profile)` — both columns,
+  `birthday IS NULL AND birthday_asked_at IS NULL` — sends a user to a
+  one-question screen exactly once, ever. `birthday_asked_at` is the load-bearing
+  half: on the date column alone a user who skipped would be asked on every app
+  open for life. Answering and skipping both stamp it, and `/profile/edit` is
+  where it changes afterwards. **The birthday is not a sixth onboarding
+  question** — the roadmap caps that flow at five and `ONBOARDING_STEPS` is not a
+  config value — so one screen serves both a brand-new user and a user who has
+  been here since F1. A `DW_TEST_SESSION` run needs a profile that has been asked,
+  or every route in `journal-duplicate.spec.ts` redirects and fails on a missing
+  composer: `scripts/profile-peek.ts birthday <date|skip|ask>` is the switch, and
+  `openJournal` in that spec turns the redirect into one legible message.
+- The user's timezone is detected, never asked. **The birthday is asked, never
+  guessed**, which is the same argument from the other side: a wrong zone is
+  recoverable by re-detection, and there is nothing to detect a birth date from.
+  `normalizeBirthday` refuses a future date and anything before 1900, uses
+  `isLocalDate` rather than a shape test, and treats null, `''` and whitespace
+  alike as "no birthday" — the skip and the clear are the same state, exactly as
+  they are for the five answers.
+- `timezone_source = 'manual'`
   means a human corrected it and automatic re-detection must leave it alone.
 - Discovery's `listAllUserTerms` carries **no status filter** — a mastered word
   must still block a suggestion, and neither does F14's `listTermsForDedup`, for

@@ -23,6 +23,15 @@ import { DESIGN_TARGET_PROJECTS } from "../../playwright.config";
  * It writes into the real journal of whoever owns that session and deletes
  * everything it wrote in an `afterEach`, including on failure. It never touches
  * a row it did not create.
+ *
+ * **The session's profile must have been asked its birthday**, or the `(app)`
+ * layout redirects every route in this spec to `/birthday` and each test fails on
+ * a missing composer — the misleading-timeout failure CLAUDE.md warns about.
+ * `openJournal` below turns that into one legible message. Answer the question
+ * once in the app, or stamp the column with
+ *
+ *     tsx --conditions=react-server --env-file=.env.local \
+ *       scripts/profile-peek.ts birthday skip
  */
 
 const TOKEN = process.env.DW_TEST_SESSION;
@@ -72,6 +81,22 @@ test.afterEach(async ({ page }) => {
   }, STAMP);
 });
 
+/**
+ * `/journal`, or a sentence saying why not.
+ *
+ * The birthday gate lives in the `(app)` layout, so it applies to every route
+ * this spec drives and it fires exactly once per profile. Checked here rather
+ * than hoped for: the symptom without this is three tests timing out on
+ * `getByLabel`, which reads as a broken composer.
+ */
+async function openJournal(page: Page) {
+  await page.goto("/journal");
+  expect(
+    new URL(page.url()).pathname,
+    "the session's profile has never been asked its birthday — see the note at the top of this file",
+  ).toBe("/journal");
+}
+
 const composer = (page: Page) => page.getByLabel("A line worth keeping");
 const sourceNote = (page: Page) => page.getByLabel("Where from");
 const saveButton = (page: Page) => page.getByRole("button", { name: "Save" });
@@ -86,7 +111,7 @@ async function saveAndSettle(page: Page) {
 }
 
 test("a re-paste is warned about, and Never mind gives the line back", async ({ page }) => {
-  await page.goto("/journal");
+  await openJournal(page);
   await composer(page).fill(LINE);
   await saveAndSettle(page);
   const rowsAfterFirst = await listRows(page).count();
@@ -109,7 +134,7 @@ test("a re-paste is warned about, and Never mind gives the line back", async ({ 
 });
 
 test("the draft survives the tab being discarded, before and after a warning", async ({ page }) => {
-  await page.goto("/journal");
+  await openJournal(page);
   await composer(page).fill(LINE);
   await saveAndSettle(page);
 
@@ -137,7 +162,7 @@ test("the draft survives the tab being discarded, before and after a warning", a
 });
 
 test("Keep it anyway saves the line that collided, not what is on screen", async ({ page }) => {
-  await page.goto("/journal");
+  await openJournal(page);
   await composer(page).fill(LINE);
   await saveAndSettle(page);
   const rowsAfterFirst = await listRows(page).count();

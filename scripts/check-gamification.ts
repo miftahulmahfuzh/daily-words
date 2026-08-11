@@ -308,6 +308,11 @@ const ordinary: BadgeContext = {
   sharedWordsAtPreviousCard: 3,
   journalLinesNow: 7,
   journalLinesAtPreviousCard: 7,
+  // No birthday on the profile — the state every user who predates the column is
+  // in, and the state a user who skipped the question stays in. It is the right
+  // default for this fixture for the same reason `isFirstCardEver: false` is: the
+  // ordinary card must earn nothing.
+  birthday: null,
 }
 const on = (over: Partial<BadgeContext>): BadgeKey[] =>
   evaluateBadges({ ...ordinary, ...over })
@@ -352,8 +357,12 @@ check('indonesia_independence − 2026-08-18', on({ cardDate: '2026-08-18' }), [
 check('ibu         + 2026-12-22', on({ cardDate: '2026-12-22' }), ['ibu'])
 check('ibu         − 2026-12-23', on({ cardDate: '2026-12-23' }), [])
 
-check('christmas   + 2026-12-25', on({ cardDate: '2026-12-25' }), ['christmas'])
-check('christmas   − 2026-12-26', on({ cardDate: '2026-12-26' }), [])
+// `christmas` was #11 and is gone — key, title, rule, prose and art. The date it
+// used to fire on is asserted here as earning NOTHING, which is a stronger
+// statement than the absence of an assertion: a rule left behind in
+// `evaluateBadges` after its catalog entry was deleted would not typecheck, but a
+// rule re-added by a merge would, and this is what fails then.
+check('christmas   − 2026-12-25, the key is gone', on({ cardDate: '2026-12-25' }), [])
 
 check('year_end    + 2026-12-31', on({ cardDate: '2026-12-31' }), ['year_end'])
 check('year_end    − 2026-12-30', on({ cardDate: '2026-12-30' }), [])
@@ -473,6 +482,88 @@ check('ten_journal_lines − the count stood still at 10', on({ journalLinesAtPr
 check('ten_journal_lines − 10 → 19, same bucket', on({ journalLinesAtPreviousCard: 10, journalLinesNow: 19 }), [])
 check('ten_journal_lines − a deleted line, 25 → 20', on({ journalLinesAtPreviousCard: 25, journalLinesNow: 20 }), [])
 
+// #21. The anniversary, not the birth: month and day only, and the year on the
+// card is never compared with the year on the profile.
+//
+// The dates below are 11 August, a Tuesday in 2026, chosen the way this file
+// already chose `tolkien`'s: 10 May 2026 is a Sunday, so every `[]` there would
+// be `['sunday']` and every expectation would be about a different rule.
+check(
+  'birthday    + the anniversary (a Tuesday)',
+  on({ cardDate: '2026-08-11', birthday: '1996-08-11' }),
+  ['birthday'],
+)
+check(
+  'birthday    + the day itself, thirty years earlier (a Sunday)',
+  on({ cardDate: '1996-08-11', birthday: '1996-08-11' }),
+  ['sunday', 'birthday'],
+)
+check('birthday    − the day after', on({ cardDate: '2026-08-12', birthday: '1996-08-11' }), [])
+check('birthday    − the day before', on({ cardDate: '2026-08-10', birthday: '1996-08-11' }), [])
+// The state every user who predates the column is in, and the state a user who
+// declined the question stays in. It must be silent rather than lucky.
+check('birthday    − no birthday given', on({ cardDate: '2026-08-11', birthday: null }), [])
+// The transposition trap, the same one the `leap_day`/`tolkien` and
+// `dobby`/`dumbledore` pairs exist for. Compared the wrong way round, this fires
+// and every single-date assertion above still passes. Both directions, so neither
+// is the lucky one — and 2027 for the second, because 8 November 2026 is a Sunday.
+check(
+  'birthday    − 8 November against a card on 11 August',
+  on({ cardDate: '2026-08-11', birthday: '1996-11-08' }),
+  [],
+)
+check(
+  'birthday    − 11 August against a card on 8 November 2027 (a Monday)',
+  on({ cardDate: '2027-11-08', birthday: '1996-08-11' }),
+  [],
+)
+// A column a person typed into is the only input here that is not a number or a
+// date this app computed, and `parseLocalDate` THROWS. A throw would cost the user
+// every other badge on the card, so an unreadable birthday earns nothing and takes
+// nothing with it — which is exactly what a null earns.
+check('birthday    − a shaped non-date', on({ cardDate: '2026-08-11', birthday: '2026-13-99' }), [])
+check('birthday    − not a date at all', on({ cardDate: '2026-08-11', birthday: 'sometime' }), [])
+check('birthday    − an empty string', on({ cardDate: '2026-08-11', birthday: '' }), [])
+check(
+  'and a broken birthday costs the card nothing else',
+  on({ cardDate: '2026-08-11', birthday: 'sometime', isFirstCardEver: true, runLength: 7 }),
+  ['first_card', 'full_week'],
+)
+// Born on a leap day: earned in leap years only, roughly once in 1,461 days, and
+// always beside `leap_day`. No substitute date is invented — 28 February and
+// 1 March are both somebody else's birthday.
+check(
+  'birthday    + 29 February in a leap year, with leap_day',
+  on({ cardDate: '2028-02-29', birthday: '2004-02-29' }),
+  ['leap_day', 'birthday'],
+)
+check(
+  'birthday    − 28 February, which is not it',
+  on({ cardDate: '2028-02-28', birthday: '2004-02-29' }),
+  [],
+)
+/**
+ * **The changed-birthday rule, in the half that lives here.**
+ *
+ * Asked for as: award under date A, change the profile to date B, and the count
+ * already earned stands; a card on date B later takes it to two. The evaluator's
+ * share of that is the pair below — under date B, date A earns nothing, so nothing
+ * re-fires and nothing is re-judged, and date B earns the award that makes it two.
+ * The other half is that no write path deletes an award row: `setBirthday` touches
+ * one table and it is not `badges_awarded`. `stats:db` is where writes are
+ * asserted, and `recompute.ts` names the one path — `--prune` — that would undo it.
+ */
+check(
+  'birthday    − the old date, once the profile says another (a Tuesday)',
+  on({ cardDate: '2026-05-12', birthday: '1996-08-11' }),
+  [],
+)
+check(
+  'birthday    + the new date, which is what makes the count two',
+  on({ cardDate: '2027-08-11', birthday: '1996-08-11' }),
+  ['birthday'],
+)
+
 section('§8.3 badges — combinations, and the order they come back in')
 
 check(
@@ -492,18 +583,22 @@ check(
 )
 
 check(
-  'Christmas at 01:30 on a full week',
-  on({ cardDate: '2026-12-25', localHour: 1, runLength: 14 }),
-  ['full_week', 'midnight_oil', 'christmas'],
+  'New Year’s Eve at 01:30 on a full week',
+  on({ cardDate: '2026-12-31', localHour: 1, runLength: 14 }),
+  ['full_week', 'midnight_oil', 'year_end'],
 )
 check(
   'a first card on a Sunday',
   on({ cardDate: '2026-09-13', isFirstCardEver: true }),
   ['first_card', 'sunday'],
 )
+// The tuple that catches an insertion in the middle of the catalog. It used to be
+// driven by 25 December and `christmas`'s index 10; `year_end` inherited that
+// index when `christmas` was removed, so the assertion is the same shape against
+// the date four days later.
 check(
   'returned in BADGE_CATALOG order',
-  on({ cardDate: '2026-12-25', localHour: 1, runLength: 7, isFirstCardEver: true }).map(
+  on({ cardDate: '2026-12-31', localHour: 1, runLength: 7, isFirstCardEver: true }).map(
     (k) => BADGE_CATALOG.findIndex((b) => b.key === k),
   ),
   [0, 1, 3, 10],
@@ -512,6 +607,12 @@ check(
   'a first card on a Sunday 2 September',
   on({ cardDate: '2029-09-02', isFirstCardEver: true }),
   ['first_card', 'sunday', 'tolkien'],
+)
+// #21 is last in the catalog, so it comes last however many fire with it.
+check(
+  'a first card on a birthday that is also a Sunday (10 May 2026)',
+  on({ cardDate: '2026-05-10', birthday: '1996-05-10', isFirstCardEver: true }),
+  ['first_card', 'sunday', 'birthday'],
 )
 
 section('§8.4 [R12] — how often each repeating badge repeats on a 100-day run')
@@ -544,6 +645,9 @@ section('§8.4 [R12] — how often each repeating badge repeats on a 100-day run
       sharedWordsAtPreviousCard: 0,
       journalLinesNow: 0,
       journalLinesAtPreviousCard: 0,
+      // Null here on purpose: this block's job is the badges that *repeat*, and
+      // the run below re-runs the same hundred days with a birthday in them.
+      birthday: null,
     })) {
       tally.set(key, (tally.get(key) ?? 0) + 1)
     }
@@ -562,6 +666,7 @@ section('§8.4 [R12] — how often each repeating badge repeats on a 100-day run
   // within a year the way a counting rule repeats within a month.
   check('womens_day        ×1', tally.get('womens_day'), 1)
   check('dobby             ×1', tally.get('dobby'), 1)
+  check('birthday          ×0 — nothing to match against', tally.get('birthday'), undefined)
   check('and nothing else fires at all', [...tally.keys()].sort(), [
     'dobby',
     'first_card',
@@ -573,6 +678,44 @@ section('§8.4 [R12] — how often each repeating badge repeats on a 100-day run
   ])
 }
 
+/**
+ * The same hundred days again, with a birthday inside the window.
+ *
+ * **The answer to [R12]'s question for #21 is one.** Every calendar badge in the
+ * deck reads as something that could repeat — "a card on my birthday" is true of
+ * one day a year, and a rule written against the day *number* alone would fire in
+ * every month of the run. A year is longer than any streak this block can
+ * express, so once is the ceiling as well as the count, and the only way to earn
+ * it twice is to move the date, which is the one thing the rule allows.
+ *
+ * 14 February 2026 is a Saturday and falls inside 2026-01-05 … 2026-04-14, so the
+ * expected difference from the run above is exactly one award and nothing else.
+ */
+{
+  const days = range('2026-01-05', 100)
+  const nums = days.map(toDayNumber)
+  let birthdays = 0
+
+  for (const [i, date] of days.entries()) {
+    const n = toDayNumber(date)
+    const earned = evaluateBadges({
+      cardDate: date,
+      localHour: 14,
+      isFirstCardEver: i === 0,
+      runLength: runLengthEndingAt(nums, n),
+      cardsThisLocalWeek: countInWeekEndingAt(nums, n),
+      sharedWordsNow: 0,
+      sharedWordsAtPreviousCard: 0,
+      journalLinesNow: 0,
+      journalLinesAtPreviousCard: 0,
+      birthday: '1996-02-14',
+    })
+    if (earned.includes('birthday')) birthdays++
+  }
+
+  check('birthday          ×1 on a 100-day run — once a year, ever', birthdays, 1)
+}
+
 section('§8.1 badges — the catalog')
 
 check('twenty badges, no more', BADGE_CATALOG.length, 20)
@@ -581,11 +724,31 @@ check('titles are unique', new Set(BADGE_CATALOG.map((b) => b.title)).size, 20)
 // Appending is what preserves the index tuple asserted above, and the toast
 // ordering of everything that came before. Badges #15–#20 went on the end for
 // that reason, so `tolkien` keeps index 13 and the tuple keeps its meaning.
-check('ten_journal_lines is last in the catalog', BADGE_CATALOG.at(-1)?.key, 'ten_journal_lines')
+check('birthday is last in the catalog', BADGE_CATALOG.at(-1)?.key, 'birthday')
+// **`christmas` was removed from the middle, and that is the one edit appending
+// does not protect against.** It held index 10, so everything after it moved down
+// one: `tolkien` from 13 to 12. Indices 0–9 did not move, nothing persisted
+// carries an index, and these two assertions are the whole blast radius.
 check(
-  'the first fourteen did not move',
+  'the first ten did not move',
+  BADGE_CATALOG.slice(0, 10).map((b) => b.key),
+  [
+    'first_card',
+    'full_week',
+    'sunday',
+    'midnight_oil',
+    'new_year',
+    'womens_day',
+    'world_book_day',
+    'fathers_day',
+    'indonesia_independence',
+    'ibu',
+  ],
+)
+check(
+  'and tolkien moved down exactly one',
   BADGE_CATALOG.findIndex((b) => b.key === 'tolkien'),
-  13,
+  12,
 )
 check('§13.15 an unknown key has no title', badgeTitle('six_before_noon'), null)
 
@@ -686,12 +849,12 @@ check(
 )
 check(
   'badges follow catalog order, not award order',
-  toRewardLines(rewards(['christmas', 'first_card', 'sunday'])).map((l) => l.text),
-  ['The Uncle’s Trick', 'No Weekend Without Ration Card', 'Ghost of Christmas Vocab'],
+  toRewardLines(rewards(['year_end', 'first_card', 'sunday'])).map((l) => l.text),
+  ['The Uncle’s Trick', 'No Weekend Without Ration Card', 'Last Word of the Year'],
 )
 check(
   'a fourth item collapses rather than queuing',
-  toRewardLines(rewards(['first_card', 'sunday', 'christmas', 'midnight_oil'], true)).map(
+  toRewardLines(rewards(['first_card', 'sunday', 'year_end', 'midnight_oil'], true)).map(
     (l) => l.text,
   ),
   ['The Small Scribe', 'The Uncle’s Trick', 'and 3 more — see profile'],
