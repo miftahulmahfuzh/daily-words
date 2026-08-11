@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { and, eq, ne, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { profiles } from '@/lib/db/schema'
@@ -22,10 +23,25 @@ import type { Profile, TimezoneSource } from '@/lib/db/types'
  * `queries/cards.ts`, which selects two columns for the day boundary.
  */
 
-export async function getProfile(userId: string): Promise<Profile | null> {
+/**
+ * The profile row, read at most once per request per user.
+ *
+ * `cache()` for the same reason `getSessionUser` carries one: the authed shell
+ * layout reads this row on every navigation, and `/profile`, `/profile/edit` and
+ * `getUserTimezone` then read it again inside the same render. Per-request, so
+ * `userId` stays the cache key and rule 3 above is untouched — a second user in a
+ * second request gets a second read.
+ *
+ * A write through `upsertProfile` within the same request is not reflected by a
+ * later `getProfile` in that request. No caller does that: the writes live in
+ * route handlers, which return before anything re-reads.
+ */
+export const getProfile = cache(async function getProfile(
+  userId: string,
+): Promise<Profile | null> {
   const [row] = await db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1)
   return row ?? null
-}
+})
 
 /** Total by construction: every user gets a row at createUser. Never null. */
 export async function getUserTimezone(userId: string): Promise<string> {

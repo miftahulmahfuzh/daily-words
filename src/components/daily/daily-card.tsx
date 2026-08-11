@@ -22,6 +22,7 @@ export function DailyCard({
   items,
   hrefFor,
   shortCardAction,
+  prefetch,
   className,
 }: {
   /** 0..6. More than six is a programming error and is sliced, loudly. */
@@ -38,6 +39,12 @@ export function DailyCard({
   hrefFor?: (item: DailyCardItemView, index: number) => string;
   /** Shown beneath the rows when the card is short. F5 supplies it. */
   shortCardAction?: React.ReactNode;
+  /**
+   * Forwarded to every row's `<Link>`. Undefined — the default — leaves Next's
+   * `auto` in place, so this is additive for `/card/[date]`, `/s/[slug]` and the
+   * kitchen sink alike. Only `/today` passes `true`; see `DailyCardRow`.
+   */
+  prefetch?: boolean;
   className?: string;
 }) {
   let rows = items;
@@ -66,6 +73,7 @@ export function DailyCard({
           key={item.id}
           item={item}
           href={hrefFor?.(item, i)}
+          prefetch={prefetch}
           last={i === rows.length - 1 && !shortCardAction}
         />
       ))}

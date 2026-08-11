@@ -20,6 +20,7 @@ import { vocabDetailHref } from "@/lib/vocab/links";
 export function DailyCardRow({
   item,
   href,
+  prefetch,
   last = false,
 }: {
   item: DailyCardItemView;
@@ -40,12 +41,39 @@ export function DailyCardRow({
   href?: string;
   /** No hairline after the last row. */
   last?: boolean;
+  /**
+   * Passed straight to `<Link>`. Undefined — the default — is Next's `auto`,
+   * which is what this row has always done.
+   *
+   * A prop rather than a default of `true`, for the reason the `href` prop above
+   * exists: this component also draws F18's **public** shared card, and eagerly
+   * prefetching six `/s/<slug>/<n>` snapshot pages for a stranger is a decision
+   * nobody asked for. `/today` opts in; nothing else does.
+   *
+   * `true` here means `PrefetchKind.FULL`, and that is the whole point — it is
+   * the only kind whose payload is *reusable* rather than merely `stale`. With
+   * `staleTimes.dynamic` at its default 0, the `AUTO` prefetch this row gets by
+   * default reuses only a loading boundary and lazy-fetches the real data on tap,
+   * which is why a tap is not instant. `FULL` is governed by the neighbouring
+   * `STATIC_STALETIME_MS` branch instead — 300s — with no config change.
+   * See `router-reducer/prefetch-cache-utils.ts`'s `getPrefetchEntryCacheStatus`.
+   */
+  prefetch?: boolean;
 }) {
   /* `"today"` is a literal because the *default* meaning of this component is a
      row of today's card, so the word it opens must come back here (F11 D4). */
   return (
     <Link
       href={href ?? vocabDetailHref(item.id, "today")}
+      /* Never prefetch a word that is still enriching. The row below draws
+         "finding it…" from `definition === null`, and a FULL prefetch would pin
+         that sentence in the router cache for 300s — so the tap would show a
+         spinner where today it renders fresh and shows the definition. The
+         condition is the row's own pending branch rather than a second reading of
+         it: `toDailyCardItemView` nulls `definition` unless the status is
+         `ready`, so `definition !== null` *is* "ready". Nothing throws if this is
+         got wrong, which is why it is one expression and not two. */
+      prefetch={prefetch === undefined ? undefined : prefetch && item.definition !== null}
       data-testid="daily-card-row"
       className={cn(
         "flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-[3px] px-0.5 py-[11px]",
