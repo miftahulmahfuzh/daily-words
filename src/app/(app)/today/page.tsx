@@ -140,6 +140,34 @@ export default async function TodayPage() {
         {card ? (
           <DailyCard
             items={card.items.map(toDailyCardItemView)}
+            /**
+             * The one page in the app that pays for a full prefetch, and the one
+             * that earns it: these six rows are the app's most-tapped links, and
+             * the card never scrolls, so all six are in the viewport by
+             * construction — the prefetch fires for every ready row without the
+             * user doing anything.
+             *
+             * `true` is `PrefetchKind.FULL`, whose payload is *reusable* for
+             * `STATIC_STALETIME_MS` (300s). The default `auto` kind is only
+             * `stale`, reusing a loading boundary and lazy-fetching the real data
+             * on tap, which is what made the tap slow. No `staleTimes` config:
+             * setting `dynamic` would extend reuse to every dynamic navigation in
+             * the app, where `FULL` buys it on this one page.
+             *
+             * The cost is deliberate and was priced: six page renders fire once
+             * this screen settles, at ~3 Neon round trips each, at low priority,
+             * once per view. That is why `getSessionUser`, `getProfile` and
+             * `getVocabEntryDetail` were made to stop duplicating reads first —
+             * the amplification is what makes those round trips worth removing.
+             *
+             * **None of this is observable in `next dev`**: viewport prefetching
+             * returns early outside production (`client/components/links.js`),
+             * which is also why `npm run test:layout` — which boots `npm run
+             * dev` — is untouched by it, and cannot cover it. The verification is
+             * a production build and the Network panel; the procedure is in
+             * `docs/plans/2026-08-11-today-card-prefetch-design.md`.
+             */
+            prefetch
             shortCardAction={
               card.items.length < LAYOUT.cardSize ? (
                 <Button variant="quiet" size="sm" fullWidth={false} href="/vocab/new">

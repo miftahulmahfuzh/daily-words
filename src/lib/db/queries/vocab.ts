@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, lt, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { chatSessions, dailyCardItems, vocabEntries } from "@/lib/db/schema";
 import type { VocabEntry, VocabSource, VocabStatus } from "@/lib/db/types";
@@ -513,26 +513,53 @@ export type VocabEntryDetail = VocabEntry & {
  * `limit(1)` rather than `count(*)`: the page asks whether the word has history,
  * never how much, and the scan stops at the first row of
  * `daily_card_items_vocab_idx`.
+ *
+ * ---
+ *
+ * **Amended 2026-08-11.** It is one statement again, and the paragraph above is
+ * kept rather than deleted because its failure mode is still real — it just was
+ * not a property of correlated subqueries. It was a property of a **raw `sql`
+ * fragment**, whose bare `vocab_entry_id = id` drizzle qualified against the
+ * wrong table. `exists()` takes a query *builder*, so the correlation is
+ * qualified structurally rather than by luck:
+ *
+ * ```sql
+ * exists (select "id" from "daily_card_items"
+ *          where "daily_card_items"."vocab_entry_id" = "vocab_entries"."id")
+ * ```
+ *
+ * The premise changed too. "A page the user opens a handful of times a week" was
+ * true when the only way here was a tap; `/today` now issues a full `<Link>`
+ * prefetch per ready row, so this function runs six times per view of the card
+ * and the second statement had become six avoidable Neon round trips.
+ *
+ * Rendered SQL is **not** what licensed the merge — the bug it replaces rendered
+ * clean SQL too, returned a tidy `false` and threw nothing. What licensed it was
+ * running both readings side by side over all 37 live rows, 18 of them carded and
+ * 19 not, and getting zero disagreements. Re-run that comparison before touching
+ * this expression; do not re-derive it from the SQL.
  */
 export async function getVocabEntryDetail(
   userId: string,
   id: string,
 ): Promise<VocabEntryDetail | null> {
-  const [entry] = await db
-    .select()
+  const [row] = await db
+    .select({
+      entry: vocabEntries,
+      carded: exists(
+        db
+          .select({ one: dailyCardItems.id })
+          .from(dailyCardItems)
+          .where(eq(dailyCardItems.vocabEntryId, vocabEntries.id)),
+      ).mapWith(Boolean),
+    })
     .from(vocabEntries)
     .where(and(eq(vocabEntries.id, id), eq(vocabEntries.userId, userId)))
     .limit(1);
 
-  if (!entry) return null;
+  if (!row) return null;
 
-  const [item] = await db
-    .select({ id: dailyCardItems.id })
-    .from(dailyCardItems)
-    .where(eq(dailyCardItems.vocabEntryId, entry.id))
-    .limit(1);
-
-  return { ...entry, carded: Boolean(item) };
+  return { ...row.entry, carded: row.carded };
 }
 
 /**
