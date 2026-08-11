@@ -4,6 +4,7 @@ import type {
   CompleteOnboardingResponse,
   ProfileAnswersRequest,
   ProfileResponse,
+  SetBirthdayResponse,
   SetTimezoneResponse,
 } from "@/lib/profile/schemas";
 
@@ -40,6 +41,21 @@ export function completeOnboarding(
   answers: CompleteOnboardingRequest,
 ): Promise<ApiResult<CompleteOnboardingResponse>> {
   return request("/api/profile/complete", "POST", answers);
+}
+
+/**
+ * The birthday, from the `/birthday` screen and from the edit form.
+ *
+ * `null` is the skip and the clear, and both are real writes — the route stamps
+ * `birthday_asked_at` either way, which is what makes the question happen once.
+ * Not folded into `patchProfile`: a different resource with a different rule, and
+ * the edit form sends it as its own request for the same reason it sends the
+ * timezone as its own.
+ */
+export function postBirthday(
+  birthday: string | null,
+): Promise<ApiResult<SetBirthdayResponse>> {
+  return request("/api/profile/birthday", "POST", { birthday });
 }
 
 /** Partial update from /profile/edit. `null` clears a field. */

@@ -88,6 +88,35 @@ export const profileAnswersSchema = z
 
 export type ProfileAnswersRequest = z.infer<typeof profileAnswersSchema>;
 
+/* -------------------------- POST /api/profile/birthday ---------------------- */
+
+/**
+ * One field, nullable, and **not** part of `profileAnswersSchema`.
+ *
+ * zod validates the structure only — that it is a string of some plausible
+ * length, or null. Whether the string is a real day, is not in the future and is
+ * not before 1900 is `normalizeBirthday()`'s decision, in the same division of
+ * labour the five answers already use: zod checks shape, the normaliser decides
+ * content. It has to be that way round here anyway, because "not in the future"
+ * needs the user's timezone and a schema has no access to it.
+ *
+ * `.nullable()` and NOT `.optional()`: an absent key would be indistinguishable
+ * from a skip, and a skip is a write — it stamps `birthday_asked_at`. The caller
+ * always says what it means.
+ */
+export const setBirthdaySchema = z
+  .object({
+    birthday: z.string().max(32).nullable(),
+  })
+  .strict();
+
+export type SetBirthdayRequest = z.infer<typeof setBirthdaySchema>;
+
+export type SetBirthdayResponse = {
+  /** 'YYYY-MM-DD', or null for a skip or a clear. */
+  birthday: string | null;
+};
+
 /* -------------------------- POST /api/profile/complete ---------------------- */
 
 /**
@@ -132,5 +161,7 @@ export type ProfileResponse = {
   currentlyConsuming: string | null;
   englishContexts: string[] | null;
   chatTone: "patient" | "blunt" | "playful" | null;
+  /** 'YYYY-MM-DD', or null for never answered / declined / cleared. */
+  birthday: string | null;
   onboardedAt: string | null;
 };

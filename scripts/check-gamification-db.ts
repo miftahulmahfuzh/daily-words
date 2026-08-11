@@ -40,6 +40,7 @@ import {
   listBadgeAwards,
   pruneBadges,
 } from '../src/lib/db/queries/badges'
+import { setBirthday } from '../src/lib/db/queries/profiles'
 import {
   countManualWords,
   getCardDates,
@@ -113,6 +114,7 @@ async function main() {
   let userId: string | null = null
   let liveUserId: string | null = null
   let backfillUserId: string | null = null
+  let birthdayUserId: string | null = null
 
   try {
     const [user] = await db.insert(users).values({ email }).returning({ id: users.id })
@@ -364,10 +366,101 @@ async function main() {
       (await recomputeUserGamification(live.id)).after.currentStreak,
       2,
     )
+
+    /* ------------------------------------------------------------------ 7 */
+
+    section('#21 — a changed birthday keeps what was earned and starts earning again')
+
+    /**
+     * The rule this badge was asked for, and it is a claim about rows rather than
+     * about arithmetic: `check-gamification.ts` can only assert that the evaluator
+     * stops firing on the old date. That the award already made *survives* is a
+     * property of the write paths — nothing in `setBirthday` touches
+     * `badges_awarded`, and an insert-only recompute never deletes — and it is the
+     * kind of property that stays true right up until somebody adds a tidy-up.
+     *
+     * Both dates below are Tuesdays, so `sunday` cannot make a positive look real.
+     */
+    const [bday] = await db
+      .insert(users)
+      .values({ email: `f9-birthday-check-${process.pid}@example.invalid` })
+      .returning({ id: users.id })
+    birthdayUserId = bday.id
+    await db.insert(profiles).values({
+      userId: bday.id,
+      timezone: TZ,
+      birthday: '1996-05-12',
+      birthdayAskedAt: new Date(),
+    })
+
+    const firstBirthdayCard = await seedCard(bday.id, '2026-05-12', '10:00')
+    check(
+      'a card on the birthday earns it',
+      (await applyCardCreated(eventFor(bday.id, firstBirthdayCard, '2026-05-12', true)))
+        ?.awardedBadges.map((b) => b.key),
+      ['first_card', 'birthday'],
+    )
+
+    await setBirthday(bday.id, '1996-08-11')
+    const afterChange = (await getBadgeCounts(bday.id)).find((c) => c.badgeKey === 'birthday')
+    check('changing the birthday leaves the award standing', afterChange?.count, 1)
+    check('dated to the day it was earned', afterChange?.lastAwardedOn, '2026-05-12')
+
+    const secondBirthdayCard = await seedCard(bday.id, '2026-08-11', '10:00')
+    check(
+      'and a card on the new date earns it again',
+      (await applyCardCreated(eventFor(bday.id, secondBirthdayCard, '2026-08-11', false)))
+        ?.awardedBadges.map((b) => b.key),
+      ['birthday'],
+    )
+    check(
+      'the count is two, under one key, on two dates',
+      (await getBadgeCounts(bday.id)).find((c) => c.badgeKey === 'birthday')?.count,
+      2,
+    )
+
+    // The replay judges the whole history against the birthday on the profile
+    // *today*, so it cannot re-derive the first award. Insert-only, so it does not
+    // have to: the row stands and the count stays two.
+    const bdayReplay = await recomputeUserGamification(bday.id)
+    check('an insert-only recompute adds nothing', bdayReplay.badgesInserted, [])
+    check('and takes nothing away', bdayReplay.badgesPruned, [])
+    check('and says nothing about it', bdayReplay.warnings, [])
+    check(
+      'both awards are still there',
+      (await listBadgeAwards(bday.id))
+        .filter((a) => a.badgeKey === 'birthday')
+        .map((a) => a.awardedForDate)
+        .sort(),
+      ['2026-05-12', '2026-08-11'],
+    )
+
+    // `--prune` is the one path that undoes the rule, which is why it warns. Dry
+    // run, so this asserts the warning without doing the damage it describes.
+    const bdayPrune = await recomputeUserGamification(bday.id, {
+      prune: true,
+      dryRun: true,
+    })
+    check(
+      'prune would drop the old one',
+      bdayPrune.badgesPruned.map((b) => `${b.key}@${b.awardedForDate}`),
+      ['birthday@2026-05-12'],
+    )
+    check(
+      'and says so before it would',
+      bdayPrune.warnings.filter((w) => w.includes('birthday')).length,
+      1,
+    )
+    check(
+      'the dry run wrote nothing',
+      (await listBadgeAwards(bday.id)).filter((a) => a.badgeKey === 'birthday').length,
+      2,
+    )
   } finally {
     if (userId) await db.delete(users).where(eq(users.id, userId))
     if (liveUserId) await db.delete(users).where(eq(users.id, liveUserId))
     if (backfillUserId) await db.delete(users).where(eq(users.id, backfillUserId))
+    if (birthdayUserId) await db.delete(users).where(eq(users.id, birthdayUserId))
     await db.$client.end({ timeout: 5 })
   }
 }

@@ -138,7 +138,6 @@ numerals, and numerals are text. Turn the face away.
 - fathers_day: A man's wristwatch with a cracked leather strap, unbuckled and laid down in a loose coil, turned so that only the plain case back shows. VERMILION: the worn patch on the strap where the buckle has bitten through.
 - indonesia_independence: An upright ribbon microphone on a plain stand, seen a little from below, with a tall bamboo pole rising behind it and a halyard falling from the pole's top; a small pennant is bent to the halyard, its upper half printed solid and its lower half left as bare paper. VERMILION: that pennant's upper half.
 - ibu: A woman's hands, one cupped inside the other, holding a small heap of melati jasmine buds, with a strung length of the same buds running out between her fingers and off the lower rule. VERMILION: the thread the buds are strung on.
-- christmas: A heavy door-knocker on a panelled door, its lion mask softening into a human face, the ring hanging dead still, the panelling's mouldings drawn in firm contour. VERMILION: a sprig of holly wedged behind the ring.
 - year_end: A squared stack of twelve identical torn-off paper leaves on a desk, the topmost lifting at one corner in a draught, the empty calendar backing board leaning against the stack behind. VERMILION: the pin still stuck through the top leaf.
 - leap_day: A hare in mid-leap over a low stone wall, drawn as a natural-history plate, its shadow the only thing beneath it; the wall's coping stones run in even blocks with one block missing from the run and set aside on the grass below. VERMILION: a mark on that single set-aside stone.
 - tolkien: A plain heavy iron ring set down on a bare table beside a briar pipe gone cold, the ring's band entirely smooth and unmarked, a thin coil of smoke still rising from the bowl. VERMILION: a wax seal on the table beside the ring.
@@ -148,6 +147,7 @@ numerals, and numerals are text. Turn the face away.
 - dobby: A single knitted woollen sock, alone, laid out flat on a bare rule with its ribbed cuff turned back once, the knit drawn stitch by stitch in engraved line, the wool gone thin and open at the heel. VERMILION: a darn worked across that thin place in a coarser stitch.
 - five_shares: A squat earthenware flask, unstoppered, its stopper lying where it was set down, standing beside a folded travelling blanket on a bare road rule. VERMILION: a small spill running from the flask's lip onto the rule.
 - ten_journal_lines: A short length of heavy chain lying in a loose curve on a bare rule, its links interlocked and overlapping one another in one continuous unbroken run, each link a slightly different section from its neighbour — one round, one square, one flat and drawn out long — and the run ending in a last link lying free at the near end. VERMILION: a small bright mark on that last link.
+- birthday: A bust portrait of one person facing the viewer squarely, head and shoulders only, filling the seal's interior, the hair falling loose past the jaw, built entirely from fine engraved hatch with the paper left bare for the light on the brow and the cheekbones. VERMILION: one small dab high on each cheek.
 <!-- /SCENES -->
 ```
 
@@ -158,9 +158,14 @@ noticing convergence on badge eleven:
 
 hand-and-pocket / fanned coupons / columns-and-mug / oil lamp /
 hourglass-and-ink-pot / mimosa-and-envelope / stage-and-stool / coiled wristwatch
-/ microphone-and-pole / cupped hands / door knocker / stack of leaves /
-hare-and-wall / ring-and-pipe / tally-stick-and-knife / helmet /
-wand-on-parapet / sock / flask-and-blanket / open chain.
+/ microphone-and-pole / cupped hands / stack of leaves / hare-and-wall /
+ring-and-pipe / tally-stick-and-knife / helmet / wand-on-parapet / sock /
+flask-and-blanket / open chain / one face.
+
+`door knocker` left this list with `christmas`, which was removed outright — key,
+rule, prose and art. Nothing inherited its scene: the lion mask softening into a
+human face was the only face in the deck, and the badge that replaced it is a
+portrait, which is a different subject drawn a different way.
 
 **Two known adjacencies to watch:** `first_card` and `ibu` are both hands
 (different framings — a back of a hand vs a cupped pair), and `full_week` and
@@ -249,11 +254,31 @@ thing to watch — asked for as `long tapered`, it came back as a beak that read
 as a bird's head at shelf size. `short and broad … about equal to the width of
 the skull` is the proportion that holds.
 
-**`christmas` deliberately is not a candle.** The obvious Dickens image is a
-guttering stub under a conical extinguisher, and it would have been the second
-flame in the set after `midnight_oil`. Marley's knocker is unmistakably *A
-Christmas Carol*, holds a silhouette at 40 px far better than smoke does, and
-frees the flame for the badge that is actually about staying up.
+**`christmas` was removed, and its argument is kept because it is still true of
+the deck.** The badge was a knocker rather than the obvious guttering candle
+under a conical extinguisher, on the grounds that a second flame after
+`midnight_oil` costs the set more than the reference is worth and that smoke does
+not hold a silhouette at 40 px. **The flame is still spoken for**, and a future
+scene line reaching for one should read that sentence first.
+
+**`birthday` is the only human face in the deck, and it is the only badge here
+whose art was supplied rather than generated.** The scene line above is a
+description of the master that exists — written *after* it, so that a
+regeneration has somewhere to start and `gen_badge_art.py`'s key-set check has
+its line — and it is deliberately a bust portrait: head and shoulders squarely
+on, the interior filled, nothing else in the frame. That is what keeps it apart
+from `first_card` and `ibu`, which are the deck's other pictures of a person and
+are both hands.
+
+**And it contradicts the style block on one point, knowingly.** The ink rule three
+paragraphs up says the vermilion "never colours the subject"; this master's second
+pass is two small dabs high on the cheeks, which is exactly that. It is recorded
+here rather than smoothed over because the contradiction is the kind a generator
+resolves arbitrarily: **regenerating `birthday` from this scene line will not
+reproduce the supplied master**, and whoever does it must decide which of the two
+rules to keep before spending anything. The dabs are also the smallest vermilion
+in the deck — 0.07% against a wanted 0.02–3.00, so it passes, but only just, and
+on a mark that reads as colour on skin rather than as an object.
 
 ---
 

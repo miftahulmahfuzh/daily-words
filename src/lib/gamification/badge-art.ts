@@ -118,13 +118,6 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     plate: "#eae6d7",
     styleVersion: "v1",
   },
-  christmas: {
-    src: "/badges/christmas.05f5f397.webp",
-    small: "/badges/christmas.05f5f397.sm.webp",
-    sha256: "05f5f3979d3c9c4637b60b8c728c3064d6add275df629e89acb8109855196cff",
-    plate: "#ede8dc",
-    styleVersion: "v1",
-  },
   year_end: {
     src: "/badges/year_end.e8becf15.webp",
     small: "/badges/year_end.e8becf15.sm.webp",
@@ -186,6 +179,13 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     small: "/badges/ten_journal_lines.f54fe8c3.sm.webp",
     sha256: "f54fe8c3ce52d5f8632e2eb52c2fee42b7070c9130cc526bef46d6d6c5f2a574",
     plate: "#eae5d4",
+    styleVersion: "v1",
+  },
+  birthday: {
+    src: "/badges/birthday.4d9a192f.webp",
+    small: "/badges/birthday.4d9a192f.sm.webp",
+    sha256: "4d9a192f9c244ed8a7a33d76209d2aaf90d386c13e6f82552818c24ed1781996",
+    plate: "#f1e7ce",
     styleVersion: "v1",
   },
 };

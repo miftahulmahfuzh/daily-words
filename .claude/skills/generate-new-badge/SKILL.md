@@ -55,7 +55,7 @@ adopted `tolkien`, because a recompute diff reading `sauron` is unreadable. See
 
 **The title is display and costs nothing to change.** Match the deck's voice,
 which is dry, period, and slightly sidelong — "The Uncle's Trick", "Burning the
-Midnight Oil", "No Weekend Without Ration Card", "Ghost of Christmas Vocab". Not
+Midnight Oil", "No Weekend Without Ration Card", "Last Word of the Year". Not
 a congratulation, not an exclamation, and typographic apostrophes only (`’`).
 The user's `<name>` is the strongest input here; keep it if it already fits the
 voice, and say so if you are changing it.

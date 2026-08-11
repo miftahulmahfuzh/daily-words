@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { awardBadges } from "@/lib/db/queries/badges";
 import { listEntryCreatedAts } from "@/lib/db/queries/journal";
+import { getBirthday } from "@/lib/db/queries/profiles";
 import { listVocabShareCreatedAts } from "@/lib/db/queries/shares";
 import { getCardHistory, readUserStats, upsertUserStats } from "@/lib/db/queries/stats";
 import { badgeTitle, evaluateBadges, type BadgeKey } from "@/lib/gamification/badges";
@@ -42,9 +43,15 @@ export async function applyCardCreated(
     // hook does not write, so they need no snapshot of their own; keeping them
     // out here is also what lets `queries/shares.ts` and `queries/journal.ts`
     // stay free of a stats-only transaction type they have no other use for.
-    const [shareInstants, journalInstants] = await Promise.all([
+    // The birthday joins these two for the same reason: a read of a table this
+    // hook does not write, needing no snapshot of its own. It is read here rather
+    // than carried on `CardCreatedEvent` so that F5's creation path learns nothing
+    // about badges — the hook's contract allows optional new fields, but adding one
+    // would mean F5 reading `profiles` to fill it in.
+    const [shareInstants, journalInstants, birthday] = await Promise.all([
       listVocabShareCreatedAts(event.userId),
       listEntryCreatedAts(event.userId),
+      getBirthday(event.userId),
     ]);
 
     return await db.transaction(async (tx): Promise<CardCreatedRewards> => {
@@ -82,6 +89,10 @@ export async function applyCardCreated(
         sharedWordsAtPreviousCard: countAtOrBefore(shareInstants, previousCardAt),
         journalLinesNow: journalInstants.length,
         journalLinesAtPreviousCard: countAtOrBefore(journalInstants, previousCardAt),
+        // As it stands right now, which is the only reading available on the live
+        // path and is also the one the rule wants: a birthday changed after an
+        // award leaves that award alone and starts earning on the new date.
+        birthday,
       });
 
       // Only rows the INSERT genuinely created come back, so a re-delivered

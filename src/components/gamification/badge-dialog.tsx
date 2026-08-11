@@ -310,7 +310,7 @@ function toView(selection: DialogSelection): PanelView {
 /**
  * `awarded_for_date`, never `created_at` — the day the badge is *about*, not the
  * instant its row was written. After a backfill those differ by years, and
- * `created_at` would tell a user they earned "Ghost of Christmas Vocab" in
+ * `created_at` would tell a user they earned "Last Word of the Year" in
  * August. `getBadgeCounts` selects only the correct column, which is what keeps
  * this honest (F13 D3).
  *
