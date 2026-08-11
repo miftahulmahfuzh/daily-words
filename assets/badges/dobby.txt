@@ -1,9 +1,46 @@
 badge:          dobby
-model:          gpt-image-2
+model:          supplied by hand (not gen_badge_art.py)
 style version:  v1
 reference:      assets/badges/_anchor.png
 size / quality: 1024x1024 / high
-image sha256:   db5038a0e36d20d048e05a4a01af9f3e1c9044ab6c7026353b4bb09d13f7f976
+image sha256:   4649dd9265fb7a917ef5642cde8154b8f5550b1140df70aca5e884ff59832bb4
+
+--- provenance ---
+This master did NOT come out of tools/gen_badge_art.py. It was supplied as
+17864306261536.png, 1376x768, and conformed to the v1 contract by hand on
+2026-08-11. The third of these, and the only one that needed both
+corrections at once:
+
+  - the ring is a circle of diameter 701 centred at (686.8, 377.0). An 846px
+    square around that centre needs 46 rows of padding at the top and 32 at
+    the bottom; the sides come straight from the source. As with the other
+    two the padding is a mirror-tile of the ink-free margins, but here the
+    top margin is only 27 rows against 46 needed, so the tile repeats. It is
+    not visible — the paper is flat enough at this scale that the bounce has
+    nothing to beat against;
+  - resampled to 1024x1024 (LANCZOS), then every channel scaled by 0.972.
+    The source paper measured 87.7% against the anchor's 81.1% and check 9b
+    allows 4.0.
+
+Squaring at 846 rather than the 863 the ring's diameter suggests puts the
+radius at 40.6% (1.0% drift) instead of 39.8% (2.9%).
+
+Result against tools/check_badge_art.py: all hard checks pass, and this is
+the cleanest of the three supplied masters — the only warning is 9c mean
+colour distance, which is loose by design.
+
+The vermilion mark is worth a note because it breaks the style block's
+model. The contract describes it as a second pass over the seal, "very
+slightly off register from the green"; here it is a blot on the bare paper
+OUTSIDE the ring, at radius 405 against the ring's 350. It was left exactly
+as supplied, on instruction. It costs nothing measurable: check 6 reads
+0.11% (deck runs 0.06-1.82) and check 8b's outer-margin stddev is 2.10
+against a 4.00 limit, so the blot is quiet enough not to matter when F13's
+--r-card corner clips that region.
+
+The prompt below is the v1 contract this art was measured against. It is NOT
+what produced these bytes; it produced the superseded master db5038a0...,
+and is kept here as the starting point for any regeneration.
 
 --- prompt as sent ---
 A single printed keepsake ticket, square, in the manner of a nineteenth-century
