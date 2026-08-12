@@ -1,11 +1,59 @@
 badge:          friday_blessing
-provider:       openrouter
-model:          qwen/qwen-image-3-pro
-seed:           31
+provider:       hand
+model:          supplied by hand (not gen_badge_art.py)
+seed:           (none)
 style version:  v1
 reference:      assets/badges/_anchor.png
-size / quality: 1024x1024 / high  (sent as 1K 1:1)
-image sha256:   dc1593f9beccf92681a92661ca68108ba81bdbb4647b1ddb3bb3a6b9dd01c9c1
+size / quality: 1024x1024 / high
+image sha256:   7a50b719d2b3333f05fe1b00e1cd67f68d5c2745e04e88a716689cf04094160f
+
+--- provenance ---
+The fourth supplied master, and the cheapest one to conform: it arrived as
+dome.png, 2048x2048, already in the deck's idiom and already agreeing with the
+anchor's geometry. Supplied on 2026-08-12 after three generated attempts were
+rejected.
+
+**Conforming cost one operation.** A LANCZOS resample from 2048 to 1024, and
+nothing else. No padding, no cropping, no channel scale, no recentring. The
+source measured 40.6% seal radius against the anchor's 41.0% (a 1.0% drift where
+4.0 is the limit), 81.6% plate against the anchor's 81.1%, 0.74% off centre and
+100% palette agreement, all before anything was touched. Compare birthday, which
+needed a 60px mirror-tiled pad on every side, and thirty_day_streak, which needed
+a 0.975 channel scale. This is what a conforming job looks like when there is
+nothing to conform.
+
+Legibility at 40px is 40.1 stddev against a 16.0 floor, and it is the highest in
+the deck's recent additions — the dome's swollen silhouette inside the band is a
+single closed shape, which is exactly what survives the reduction. For contrast,
+the three generated attempts scored 24.4 (a lattice screen, unreadable), 32.6 and
+30.8 (a staircase).
+
+Two things stand and neither is worth touching the art for:
+
+  - 6 vermilion share reads 0.00% against a wanted 0.02-3.00. The mark is there —
+    a discrete blob low on the dome's right flank, 681 px at 1024, 0.065% of the
+    image by a looser hue test — but its hue sits outside the checker's vermilion
+    definition, being browner and less saturated than #8A3324. So this is an
+    instrument disagreement rather than a missing second pass, and it is a warn
+    rather than a hard check.
+  - 9c mean colour distance 43.3 against a wanted 40.0, loose by design.
+
+THE ONE PLACE THIS ART CONTRADICTS THE STYLE BLOCK, recorded the way birthday's
+sidecar records its own: **the dome shell carries an arabesque interlace that
+reads as script.** The style block's NO TEXT rule forbids "any glyph or mark that
+could be read as writing in any alphabet" and calls it an automatic rejection,
+and check_badge_art.py's own report says text is NOT MEASURED — there is no OCR,
+so no check fires and the contract is kept by eye alone. This was the constraint
+that ruled a calligraphic salawat out of the scene line in the first place. It is
+written down here because a regeneration has to choose between the two rules, and
+because the deck is now internally inconsistent on exactly one point.
+
+THE SCENE LINE BELOW WAS WRITTEN FROM THIS MASTER, not the other way round, so
+the prompt has never been sent and **will not reproduce this image** — the same
+caveat birthday's sidecar carries, and for the same reason. It replaced a line
+describing minbar steps, which is what the third generated attempt drew. The line
+is the v1 contract this art is measured against and the starting point for any
+regeneration, nothing more.
 
 --- prompt as sent ---
 A single printed keepsake ticket, square, in the manner of a nineteenth-century
@@ -68,6 +116,4 @@ whole set; what sits inside the ring belongs to this badge alone. Do not fall
 back on an open book, a quill, a wreath or a star as a default centre. Thirteen
 badges built from the same object is the way this set fails.
 
-SUBJECT FOR THIS BADGE: A short flight of wooden pulpit steps standing alone on a bare rule, seen from the side, four treads rising from left to right to a small empty platform at the top, a low turned handrail running up beside them, the timber drawn in firm engraved contour with cross-hatch in the shadow under each tread, and the treads worn hollow at their centres. VERMILION: a small mark on the lowest tread.
-
-CORRECTION FOR THIS ATTEMPT: PAPER, THE ONE THING TO GET RIGHT: the cream stock is a single flat even tone edge to edge and corner to corner, exactly as light as the reference image's paper and no darker, with no vignette, no shading toward any edge, no darkening at the bottom or the left, and no tonal difference whatever between the four margins outside the seal. The bare paper around the seal is untouched stock.
+SUBJECT FOR THIS BADGE: A single great mosque dome seen straight on and standing alone on a bare rule, its swollen onion profile rising to a slender finial of stacked spheres, the shell built entirely from fine engraved hatch with an arabesque interlace worked over it, and a plain drum of even vertical ruling carrying it at the base. VERMILION: a small mark low on the shell's right flank.
