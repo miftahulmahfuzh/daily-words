@@ -167,10 +167,52 @@ python3 tools/gen_badge_art.py --dry-run --all      # assemble every prompt; no 
 python3 tools/gen_badge_art.py --dry-run --all --kind level   # the same, for the level deck
 python3 tools/gen_badge_art.py <key> --reference assets/badges/_anchor.png
 python3 tools/gen_badge_art.py <key> --kind level --reference assets/levels/_anchor.png
+python3 tools/gen_badge_art.py <key> --provider openai --reference assets/badges/_anchor.png
 python3 tools/check_badge_art.py <candidate.png>    # 9 measurements + the 3 crops to look at
 python3 tools/check_badge_art.py <candidate.png> --anchor assets/levels/_anchor.png
 python3 tools/make_badge_assets.py                  # promote BOTH decks → public/** + both manifests
 ```
+
+**Two providers, and `--provider` picks the whole tuple** — base URL, key
+variable, default model and how the anchor is carried — the way `--kind` picks
+the deck. The default is **`openrouter` with `qwen/qwen-image-3-pro`**;
+`--provider openai` is the original `gpt-image-2` path, kept because the twenty
+masters that predate this were made with it.
+
+They are not the same request with a different host, and that is the part worth
+knowing before touching `PROVIDERS`:
+
+| | `openrouter` (default) | `openai` |
+|---|---|---|
+| Anchor rides in | `input_references` on `/images/generations` | multipart upload to `/images/edits` |
+| `--seed` | honoured — a master is reproducible | ignored |
+| Latency | ~4–5 min per image | ~1 min |
+
+**Do not repeat the claim that Qwen holds the paper better — it was measured on
+too few samples and it is wrong.** Three anchored runs gave plate drifts of 0.4,
+1.1 and **3.9** points, the last one within a rounding error of check 9b's 4.0
+ceiling; that is the same 2–5 point band §"Aim a new deck's anchor high" already
+records for OpenAI's edits endpoint, not an improvement on it. On paper
+*flatness* it is measurably **worse**: the promoted OpenAI masters hold check 3's
+edge spread at 0.7–1.7 (the anchor itself 3.9), while three Qwen candidates came
+back at 4.5, 4.8 and 5.5 — all rejects. Budget a `--note` reinforcing the flat
+even paper, and expect check 3 to be the check that costs attempts here.
+
+**OpenRouter has no `/images/edits`** — a bare 404, not an "unknown model" error
+— so a port that only swapped the base URL would generate fine and fail on every
+anchored call, which is every real call. **And OpenRouter's image models are not
+in `/api/v1/models`**: that endpoint returns 406 models, none of which generate
+an image, and reading it is how you conclude `qwen/qwen-image-3-pro` does not
+exist when it does. The image catalog is `/api/v1/images/models`.
+
+`provider:` and `seed:` are recorded in each candidate's `.txt` sidecar and
+deliberately **not** asserted anywhere. A mixed-provider deck is a real risk, but
+the check that catches it already exists and measures the artefact rather than
+its label: `check_badge_art.py` 9a and 9b compare seal radius and plate luminance
+against the anchor. Enforcing one provider per deck was considered and dropped —
+the twenty masters predating the line would all have needed regenerating, and
+three of them were supplied by hand and cannot be. **A sidecar with no
+`provider:` line means OpenAI.**
 
 **Read the prompts before generating.** `--dry-run --all --kind level` costs
 nothing and is the last free moment: it is what caught a scene line hanging keys
@@ -182,12 +224,22 @@ endpoint drifts the paper 2–5 points darker than its reference, and no prompt
 holds it — measured, and it cost four regenerations. `levels.md` records the
 distribution.
 
-**`OPENAI_API_KEY` is a different key from `LLM_API_KEY`.** The app's model access
-is GLM via z.ai; this is OpenAI's image API, a different provider and a different
-bill. It lives in `.env.local` and is read by `tools/gen_badge_art.py` **and by
-nothing else** — `src/lib/env.ts` has no entry, and `grep OPENAI_API_KEY src/`
-must stay empty. `npm run badges:check` asserts that emptiness, so the rule is
-checked rather than remembered. **One key for both decks**: F22 added seventeen
+**`OPENAI_API_KEY` and `OPENROUTER_API_KEY` are different keys from
+`LLM_API_KEY`.** The app's model access is GLM via z.ai; these are image APIs,
+different providers and different bills. Both live in `.env.local` and are read
+by `tools/gen_badge_art.py` **and by nothing else** — `src/lib/env.ts` has no
+entry for either, and `grep OPENAI_API_KEY src/` and `grep OPENROUTER_API_KEY
+src/` must both stay empty. `npm run badges:check` asserts both, so the rule is
+checked rather than remembered.
+
+**The second key was not covered for free, and the near-miss is the lesson.**
+That scan walks the whole of `src/` rather than a list of files, which is why
+F22's three new files needed no change to it — and it is tempting to read that
+as "the check generalises". It generalises over *files*, not over *variable
+names*: it matched one literal string, so `OPENROUTER_API_KEY` could have gone
+into `src/lib/env.ts` with every check green. `KEY_VARS` in
+`scripts/check-badge-art.ts` is now the list, and a third provider is a row in
+it. **One key for both decks**: F22 added seventeen
 images, no runtime model call, no environment variable and no entry anywhere, and
 its three new files under `src/` are covered by that scan for free because it
 walks the tree rather than a list.

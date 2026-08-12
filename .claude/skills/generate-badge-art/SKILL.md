@@ -50,8 +50,47 @@ python3 tools/gen_badge_art.py <key> [--reference assets/badges/_anchor.png]
 ```
 
 Writes `assets/badges/_candidates/<key>.aNN.png` and a `.txt` sidecar holding
-the exact prompt, the model, the style version and the reference used. The
-sidecar is why a candidate you like six weeks from now can be explained.
+the exact prompt, the provider, the model, the seed, the style version and the
+reference used. The sidecar is why a candidate you like six weeks from now can
+be explained.
+
+**Two providers, and the default is OpenRouter.** `--provider` selects the base
+URL, the key variable, the default model and how the anchor is carried:
+
+| | `openrouter` (default) | `openai` |
+|---|---|---|
+| Key | `OPENROUTER_API_KEY` | `OPENAI_API_KEY` |
+| Default model | `qwen/qwen-image-3-pro` | `gpt-image-2` |
+| Anchor rides in | `input_references` on `/images/generations` | a multipart upload to `/images/edits` |
+| `--seed` | honoured — masters are reproducible | ignored |
+| Cost / latency | ~$0.04, **4–5 min** | — |
+
+**Qwen does not hold the paper better, and an early note here said it did.** That
+claim came from two samples; the third anchored run drifted the plate **3.9**
+points against check 9b's 4.0 ceiling (the three were 0.4, 1.1, 3.9), which is
+the same band OpenAI's edits endpoint already drifts in. On paper *flatness* it
+is worse: promoted OpenAI masters sit at 0.7–1.7 on check 3's edge spread, and
+three Qwen candidates came back 4.5, 4.8 and 5.5 — every one a reject. **Expect
+check 3 to be what costs you attempts on this provider**, and reach for a
+`--note` about flat, evenly toned paper before spending attempt 2.
+
+Two traps live in that table, and both cost real time to find:
+
+- **OpenRouter has no `/images/edits`.** It is a bare 404, not an "unknown
+  model" error, so a provider port that only swaps the base URL appears to work
+  for generation and dies on every anchored call — which is every real call.
+- **OpenRouter's image models are not in `/api/v1/models`.** That endpoint
+  returns 406 models and not one of them generates an image; the image catalog
+  is a *separate* endpoint. Reading the wrong one is how you conclude a model
+  does not exist when it does:
+
+  ```bash
+  curl -s https://openrouter.ai/api/v1/images/models | python3 -m json.tool | grep '"id"'
+  ```
+
+`--dry-run` assembles and prints the prompt without reading the key, touching
+the network or writing a file. Use it whenever you have edited `style.md` and
+want to see what would be sent.
 
 `--dry-run` assembles and prints the prompt without reading the key, touching
 the network or writing a file. Use it whenever you have edited `style.md` and
@@ -200,8 +239,19 @@ script.
 
 ## The one thing that must never happen
 
-`OPENAI_API_KEY` is read by `tools/gen_badge_art.py` and by nothing else. **No
-application code may read it** — it is not `LLM_API_KEY`, `src/lib/env.ts` has no
-entry for it, and `grep OPENAI_API_KEY src/` must stay empty. Never print the
-value, never echo it into a report, never paste it into a file. The tool prints
-*which source* it came from and not what it is.
+`OPENAI_API_KEY` **and `OPENROUTER_API_KEY`** are read by
+`tools/gen_badge_art.py` and by nothing else. **No application code may read
+either** — neither is `LLM_API_KEY`, neither is `EMBEDDING_API_KEY`,
+`src/lib/env.ts` has no entry for either, and `grep -E 'OPENAI_API_KEY|OPENROUTER_API_KEY' src/`
+must stay empty. `npm run badges:check` asserts that emptiness, once per
+variable.
+
+**It did not come for free, and the reason is worth keeping.** That scan walks
+the whole of `src/` rather than a list of files, so new *files* are covered
+automatically — and it is tempting to assume a new *key* is too. It was not: the
+check read one literal string, so `OPENROUTER_API_KEY` could have been pasted
+into `src/lib/env.ts` with every check green. A third provider means a third row
+in `KEY_VARS` in `scripts/check-badge-art.ts`.
+
+Never print the value, never echo it into a report, never paste it into a file.
+The tool prints *which source* it came from and not what it is.
