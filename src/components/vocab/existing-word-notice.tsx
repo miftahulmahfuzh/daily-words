@@ -33,6 +33,9 @@ export function ExistingWordNotice({
   typedTerm,
   onAddAnyway,
   addingAnyway = false,
+  onAttachOrigin,
+  attachingOrigin = false,
+  originTerm,
   className,
 }: {
   /** The row the user **already holds** — never the word they just typed. */
@@ -48,6 +51,21 @@ export function ExistingWordNotice({
   /** Present only on the near-duplicate path: the warning never blocks (D5). */
   onAddAnyway?: () => void;
   addingAnyway?: boolean;
+  /**
+   * The non-English lookup's collision: `melumuri` resolved to a word already in
+   * the collection, so there is nothing to create and the foreign word is
+   * offered to the row that already exists.
+   *
+   * Deliberately **not** folded into `onAddAnyway`. That action creates a second
+   * row and this one amends the row named above it — the same two verbs the API
+   * keeps in two routes, and one button that did either depending on a sibling
+   * prop is how a user ends up with a duplicate they were told they were
+   * avoiding.
+   */
+  onAttachOrigin?: () => void;
+  attachingOrigin?: boolean;
+  /** The foreign word `onAttachOrigin` would attach. Labels that button. */
+  originTerm?: string;
   className?: string;
 }) {
   /**
@@ -121,6 +139,12 @@ export function ExistingWordNotice({
         {onAddAnyway && (
           <Button size="sm" loading={addingAnyway} onClick={onAddAnyway}>
             <span className="min-w-0 truncate">Add {typedTerm} anyway</span>
+          </Button>
+        )}
+
+        {onAttachOrigin && (
+          <Button size="sm" loading={attachingOrigin} onClick={onAttachOrigin}>
+            <span className="min-w-0 truncate">Add {originTerm} to it</span>
           </Button>
         )}
       </div>

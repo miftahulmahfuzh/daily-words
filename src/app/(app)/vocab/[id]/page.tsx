@@ -166,6 +166,35 @@ export default async function WordPage({
           </>
         )}
 
+        {/* Where the word came from, when it came from a non-English lookup.
+            Below the entry rather than above it: this row is an English word
+            and everything above describes it as one. The trail is why it is
+            here, not what it means.
+
+            Drawn wherever the entry is, which is the lesson F14 wrote down
+            about `suggested_correction` — a fact recorded only on the screen
+            that created it is a fact lost to a reload.
+
+            `originContext` is deliberately quoted and unlabelled beyond "as
+            in". It is the user's own sentence in their own language, and it
+            never leaves this page: `lib/share/serialize.ts` excludes all three
+            of these columns for the reason it excludes a journal entry's
+            source note. */}
+        {entry.originTerm && (
+          <div className="flex flex-col gap-1.5 pb-7">
+            <Eyebrow>Added from</Eyebrow>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 pt-1">
+              <span className="text-lg tracking-title">{entry.originTerm}</span>
+              {entry.originLanguage && <Meta>{entry.originLanguage}</Meta>}
+            </div>
+            {entry.originContext && (
+              <Prose size="sm" className="border-l border-rule pl-3.5 text-ink-2">
+                as in: {entry.originContext}
+              </Prose>
+            )}
+          </div>
+        )}
+
         {/* F4 renders exactly one chat entry point, and it stays for a mastered
             word: mastering retires a word from daily cards, not from practice.
             F6 owns the route and must re-verify ownership itself — the button
