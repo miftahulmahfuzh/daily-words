@@ -10,6 +10,166 @@ Entries name the feature plan (`F<n>`) that shipped the work, because the plans 
 Where a decision has a reconciliation number — `[R1]`, `[S3]` — it is cited rather
 than restated.
 
+## [v0.2.0] - 2026-08-12
+
+Thirty-four commits on top of the first release. Two user-facing features — a
+word met in another language, and today's card opening instantly — plus seven new
+badges, one removed, and a second image provider for the art pipeline. Two
+additive migrations (0007, 0008). No breaking change to any route, column or
+environment variable.
+
+### Added
+
+**Non-English lookup on the add path** (`docs/plans/2026-08-12-non-english-lookup-design.md`)
+
+- A toggle on `/vocab/new` and an optional "as in" context sentence: `melumuri`
+  plus a sentence goes to `lib/llm/prompts/vocab-translate.ts` and comes back as
+  `smear` with a full English entry, in one model call.
+- **The row holds the English word.** `origin_term`, `origin_language` and
+  `origin_context` (migration 0008, three nullable columns and a CHECK that a
+  context cannot exist without a term) keep the trail. Rejected on the downstream
+  contracts rather than on taste: `pronunciation` is British RP and all three
+  `examples` must contain the term, and neither has a meaning for an Indonesian
+  headword.
+- `vocab-enrich.ts` is untouched, byte for byte — the context sentence is exactly
+  the per-user data that file's "takes only the term" property forbids, and F17's
+  claim-discloses-nothing argument rests on it. The lookup is a second prompt
+  module, not a mode.
+- The model call precedes the insert, so the result travels through the browser
+  under an HMAC (`lib/vocab/lookup-token.ts`, secret as a parameter so
+  `vocab:check` stays offline) and `POST /api/vocab` inserts `ready` in one
+  statement. Signed is model output; validated is user input.
+- `POST /api/vocab/lookup` writes no row, so the 50-a-day cap cannot protect it:
+  `lib/vocab/lookup-rate-limit.ts` is a second in-memory limiter, checked before
+  the model call.
+- `LookupResultCard`, a new component rather than a mode on `EnrichmentCard`, and
+  `POST /api/vocab/[id]/origin` to attach an origin to an existing row.
+- `npm run vocab:dry-run` joins `chat:dry-run` and `discover:dry-run`. It earned
+  itself immediately: its first calibration set drew from the prompt's own
+  few-shot examples and came back word-perfect because the model was reciting.
+
+**The birthday, asked exactly once** (migration 0007)
+
+- `profiles.birthday` and `profiles.birthday_asked_at`, and a one-question
+  `/birthday` screen — a sibling of the `(app)` group for the reason
+  `/onboarding` is one. `birthday_asked_at` is the load-bearing half: on the date
+  column alone, a user who skipped would be asked on every app open for life.
+  Answering and skipping both stamp it; `/profile/edit` is where it changes
+  afterwards.
+- **Not a sixth onboarding question** — the roadmap caps that flow at five, so one
+  screen serves a brand-new user and a user who has been here since F1, and
+  `app/(app)/layout.tsx` gains a gate rather than a branch.
+- The timezone is detected, never asked; the birthday is asked, never guessed.
+  `scripts/profile-peek.ts birthday <date|skip|ask>` is the switch a
+  `DW_TEST_SESSION` run needs.
+
+**Instant word detail from today's card** (`docs/plans/2026-08-11-today-card-prefetch-design.md`)
+
+- A client-side nav to a word went from **855ms to 73ms**, measured on a
+  production build against the live database. The render was never the problem:
+  `/vocab/[id]` was six serial Neon round trips.
+- `getSessionUser` and `getProfile` are wrapped in React's `cache()` — the plain
+  reads, not the guards that `redirect()`. Per-request, so `userId` stays the
+  cache key and rule 3 of the queries convention is untouched. That is one round
+  trip off **every** page in the `(app)` group.
+- `getVocabEntryDetail` is one statement again, via `exists()` with a query
+  builder rather than a raw `sql` fragment. Both readings were run side by side
+  over all 37 live rows, 18 carded and 19 not, with zero disagreements — rendered
+  SQL was not accepted as proof, because the bug this replaces rendered clean SQL
+  too.
+- `prefetch` is threaded `/today` → `DailyCard` → `DailyCardRow` → `<Link>`,
+  defaulted to Next's `auto` so it is additive: the same row also draws F18's
+  public shared card, and prefetching six snapshot pages for a stranger is a
+  decision nobody asked for. A row still enriching is excluded — a FULL prefetch
+  would pin "finding it…" in the router cache for 300s.
+
+**Seven more badges, and the two counters they needed**
+
+- Badges #14–#21: `three_in_a_week` (Three Times the Charm), `thirty_day_streak`
+  (This Is the Way), `dumbledore` (Avada Kedavra), `dobby` (Dobby The Free Elf),
+  `five_shares` (The Good Samaritan), `ten_journal_lines` (Maester of the Seven
+  Kingdoms), `birthday` (A Man Needs a Card) and `friday_blessing` (Friday
+  Blessing). The deck is 21 badges, 17 levels, style v1.
+- `lib/gamification/tallies.ts`: `five_shares` and `ten_journal_lines` are the
+  first badges in the deck that read a fact about a table other than
+  `daily_cards`.
+- `birthday` is the first whose trigger is a fact about the *user* — the whole
+  date rides in `BadgeContext` rather than a precomputed boolean, because the
+  comparison *is* the badge. Changing a birthday is additive and never
+  retroactive; `stats:db` walks the whole sequence against a real Postgres rather
+  than reasoning about it.
+- `friday_blessing` is `dow === 5` where `sunday` is `dow === 0`, off the same
+  value — so a rule written against the wrong constant passes every single-date
+  test you would think to write. Pinned in both directions on one week, verified
+  by flipping the constant.
+- Several masters were supplied by hand and conformed to the v1 contract rather
+  than generated; their sidecars are the record of what that costs, including two
+  rules learned the hard way — centre a non-circular seal by what check 8a
+  measures, not by what a ruler measures, and a scene line written after the fact
+  does not reproduce the master.
+
+**Badge art through OpenRouter as well as OpenAI**
+
+- `--provider` selects a whole tuple — base URL, key variable, default model and
+  how the anchor is carried — the way `--kind` selects a deck. Default is
+  `openrouter` with `qwen/qwen-image-3-pro`; `--provider openai` is the original
+  `gpt-image-2` path, kept because the twenty masters that predate it were made
+  that way. New `--seed`, which Qwen honours and OpenAI ignores.
+- **OpenRouter has no `/images/edits`** — a bare 404 — so the anchor rides in
+  `input_references` on the ordinary generations call. A port that only swapped
+  the base URL would generate fine and die on every anchored call.
+- `KEY_VARS` in `scripts/check-badge-art.ts` is now a list rather than one literal
+  string: the key scan walks the whole of `src/`, so it generalises over files but
+  not over variable names, and `OPENROUTER_API_KEY` could have gone into
+  `src/lib/env.ts` with everything green.
+- `.env.example` now documents four keys across three providers, and that only
+  `LLM_API_KEY` is used by the running app for text.
+
+**Tooling and docs**
+
+- `/generate-new-badge` (`.claude/skills/generate-new-badge/`) drives the whole
+  badge checklist from a name and a rule in prose, including the two steps the
+  checklist leaves out, and stops at one gate before spending anything on art.
+- A repo `README.md`.
+
+### Changed
+
+- Four badges retitled, keys untouched — a key is identity (it is the value in
+  `badges_awarded`, the art filename and the scene-list entry) and is frozen once
+  art exists. `ten_journal_lines`' old title was a defect rather than a
+  preference: as an English idiom it meant close to the opposite of a maester's
+  chain, which the gloss and the art already had right.
+- `npm run vocab:check` runs under `--conditions=react-server`, like
+  `share:check` and `claim:check`, because `lookup-token.ts` is server-only. It
+  still needs no environment.
+- `CLAUDE.md`, `ROADMAP_v0.1.0.md` and `src/components/README.md` updated for all
+  of the above.
+
+### Removed
+
+- **The `christmas` badge, removed rather than retired** — key, title, rule,
+  metadata, scene line, collision-audit entry, master, sidecar, both public
+  webps, the roadmap's table row and every assertion that named it. Deleting a key
+  from the *middle* of `BADGE_CATALOG` is the one edit the append-only rule does
+  not cover: `year_end` inherited index 10 and `tolkien` moved 13 → 12. Nothing
+  persisted carries an index, so the blast radius is two positional assertions in
+  `check-gamification.ts`. An award row left under the dead key is inert — no
+  title, dropped from the shelf with a warning, deleted by `--prune`. The
+  production dry run found none.
+
+### Known gaps
+
+- `npm run dates:check` fails on Node 22's ICU, which formats "Sunday 9 August"
+  where the assertion expects the comma an older ICU emitted. It fails
+  identically on v0.1.0; no date file changed in this release.
+- The prefetch half of the `/today` change has **no** check-script coverage on
+  purpose: Playwright boots `npm run dev`, and Next returns early on viewport
+  prefetch outside production. The verification is a production build and the
+  Network panel, and the procedure is in the design doc.
+- Left-joining `shares` into `getVocabEntryDetail` would save a third round trip
+  for free, but `getShareForEntity` is a documented F16 decision; left as a
+  one-line follow-up rather than folded in silently.
+
 ## [v0.1.0] - 2026-08-09
 
 First tagged release. Twenty-two feature plans, F1 through F22, from an empty
@@ -221,3 +381,4 @@ during this release and both are recorded in place rather than quietly dropped:
   and refuses to combine with `--all` without `--force`.
 
 [v0.1.0]: https://github.com/miftahulmahfuzh/daily-words/releases/tag/v0.1.0
+[v0.2.0]: https://github.com/miftahulmahfuzh/daily-words/releases/tag/v0.2.0
