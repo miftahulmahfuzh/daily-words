@@ -33,6 +33,7 @@ DW_TEST_SESSION=… npm run test:layout    # …plus onboarding and F15's duplic
 npm run db:generate && npm run db:migrate
 npm run llm:check                        # smoke-test z.ai through the shared client
 npm run vocab:enrich -- "genteell"       # run the F3 prompt, no database writes
+npm run vocab:dry-run -- "melumuri" --as-in "…"   # the non-English lookup prompt, no writes; --all, --runs N
 npm run vocab:check                      # F14's add-path outcome table and notice copy, offline
 npm run vocab:db                         # F14's correction matrix and near-duplicate layer; seeds a fixture user
 npm run dates:check                      # F5's day-boundary + calendar assertions, offline
@@ -441,6 +442,45 @@ throwing. Each cost real time.
   the same reason. `lib/vocab/dedup.ts` answers "are these the same word?" and is
   not `lib/vocab/normalize.ts`, which answers "what did the user type?"; the two
   disagree about case, diacritics and punctuation on purpose.
+- **The non-English lookup resolves a foreign word to an English one, and the
+  row holds the English word.** `melumuri` plus an optional "as in" sentence goes
+  to `lib/llm/prompts/vocab-translate.ts` and comes back as `smear` with a full
+  entry; `origin_term`, `origin_language` and `origin_context` (migration 0008)
+  keep the trail. Storing the foreign word as `term` was rejected on the
+  downstream contracts, not on taste: `pronunciation` is specified as British RP
+  and all three `examples` must contain the term, and neither has a meaning for
+  an Indonesian headword. `source` stays **`'manual'`** — the opposite call to
+  F17's `'shared'`, because the user typed this word themselves and F9's
+  collector level should count it.
+- **`vocab-enrich.ts` is byte-identical and must stay that way.** The context
+  sentence is exactly the per-user data that file's "takes only the term"
+  property forbids, and F17's `buildClaimEnrichment` argument rests on it. The
+  lookup is a *second prompt module*, not a mode — one model call either way.
+  **The known limit, named rather than buried:** a row created through the
+  translate prompt has four enrichment fields produced by a model that read the
+  user's sentence, and those four fields cross to a stranger on claim. What holds
+  them apart is a prompt rule ("never translate the context into the examples"),
+  not a structure. `npm run vocab:dry-run` is how it is checked, and a two-call
+  design is the fix if it ever fails.
+- **The model call precedes the insert here, and that inverts F3 D1 without
+  breaking it.** The term is what the model returns and the unique index is on
+  `lower(term)`, so no row can be written as `melumuri` and renamed. The result
+  travels through the browser under an HMAC (`lib/vocab/lookup-token.ts`, mirroring
+  `lib/share/intent.ts`, secret as a **parameter** so `vocab:check` runs offline),
+  and `POST /api/vocab` inserts `ready` in one statement. The line is: **signed is
+  model output, validated is user input** — the origin is the user's own typing
+  and is re-normalised rather than signed. Nothing the user typed is ever at risk,
+  because a failed lookup consumes nothing.
+- **`POST /api/vocab/lookup` writes no row, so the 50-a-day cap cannot protect
+  it.** `lib/vocab/lookup-rate-limit.ts` is a second in-memory limiter beside
+  F8's, checked **before** the model call. Without it, Look-up-then-Cancel is an
+  uncapped model-call endpoint that leaves no trace it ran.
+- **A calibration set drawn from the prompt measures memorisation.** `vocab-dry-run.ts`
+  led with `melumuri`, `gotong royong` and `gezellig` while all three were
+  few-shot examples in the prompt, and came back word-perfect because the model
+  was reciting — `melumuri`'s three examples were byte-identical to the prompt's.
+  Nothing in `CALIBRATION` may be one of the prompt's worked examples; re-check
+  that list whenever the examples change.
 - **The add path folds and the accept path does not, deliberately.** `POST
   /api/vocab` runs `findNearDuplicate` (`lib/vocab/near-duplicate.ts`, a wrapper
   — `dedup.ts` itself is never edited, `discover:check` calibrates it) and answers

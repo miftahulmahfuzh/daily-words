@@ -49,6 +49,7 @@ those belong to `Screen`, and duplicating them is how the height budget breaks.
 | `NoCardYet` | `@/components/daily/no-card-yet` | `{ action }` |
 | `DayStrip` | `@/components/daily/day-strip` | `{ days: DayStripItem[], label? }` |
 | `Chip`, `ChipSelect` | `@/components/profile/chip-select` | `{ pressed?, onClick? }` / `{ options, selected, onToggle }` |
+| `LookupResultCard` | `@/components/vocab/lookup-result-card` | `{ result, originTerm, saving, onAdd, onCancel }` — the non-English resolution, before any row exists |
 | `OptionRows` | `@/components/profile/option-rows` | `{ options: { value, label, gloss? }[], value, onChange }` |
 | `EntryRow` | `@/components/journal/entry-row` | `{ entry, href? }` |
 | `InsightPanel` | `@/components/journal/insight-panel` | `{ insight }` |
