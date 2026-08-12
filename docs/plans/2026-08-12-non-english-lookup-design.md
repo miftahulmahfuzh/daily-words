@@ -133,8 +133,19 @@ in the vocab feature.
 `lib/vocab/lookup-token.ts` mirrors `lib/share/intent.ts`:
 `v1.<base64url(payload)>.<base64url(hmac-sha256)>`, `AUTH_SECRET` passed **as a
 parameter rather than imported**, so the codec is exercisable offline against a
-fixture secret and the real secret keeps one visible call site. TTL 60s,
-enforced inside the signature rather than by the client.
+fixture secret and the real secret keeps one visible call site. TTL enforced
+inside the signature rather than by the client.
+
+The TTL is **600s, not the 60s this document first said**. The token authorises
+inserting an entry the caller has already legitimately been shown, into their own
+collection, where a replay is refused by `vocab_entries_user_term_uniq` anyway —
+so it is hygiene, not a control, and a user who reads the card, looks away and
+finds Add broken has lost a model call to a timer that was protecting nothing.
+
+The line the signature draws: **signed is model output, validated is user input.**
+The origin term and the "as in" sentence are the user's own typing and are
+deliberately *not* in the payload — they are re-normalised server-side instead.
+Signing user input would assert something about it that is not true.
 
 It lives in `lib/vocab/`, not in `lib/share/intent.ts`, which is share-specific
 and sits beside a `policy.ts` that imports nothing on purpose.

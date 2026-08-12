@@ -3,16 +3,25 @@ import { fail, ok, readJson } from "@/lib/api/respond";
 import { isUniqueViolation } from "@/lib/db/errors";
 import {
   countEntriesCreatedSince,
+  createLookedUpVocabEntry,
   createVocabEntry,
   findEntryByNormalizedTerm,
   listTermsForDedup,
   listVocabEntries,
   DAILY_ADD_LIMIT,
   type DedupRow,
+  type VocabOrigin,
 } from "@/lib/db/queries/vocab";
+import { env } from "@/lib/env";
 import { decodeCursor, encodeCursor } from "@/lib/vocab/cursor";
+import { decodeLookupToken } from "@/lib/vocab/lookup-token";
 import { findNearDuplicate } from "@/lib/vocab/near-duplicate";
-import { normalizeTerm, validateTerm } from "@/lib/vocab/normalize";
+import {
+  normalizeContext,
+  normalizeTerm,
+  validateContext,
+  validateTerm,
+} from "@/lib/vocab/normalize";
 import {
   createVocabRequestSchema,
   listVocabQuerySchema,
@@ -87,9 +96,80 @@ export async function POST(req: Request): Promise<Response> {
   const body = await readJson(req, createVocabRequestSchema);
   if (!body.ok) return body.response;
 
-  const term = normalizeTerm(body.data.term);
+  /**
+   * The non-English path, and the one branch in this route that is not the
+   * typed add. Its presence is decided by the token alone: a body carrying
+   * `originTerm` without a valid `lookup` is an ordinary typed add, because the
+   * origin columns must never be reachable without a resolution that produced
+   * them.
+   *
+   * **Still no model call here.** The entry was produced by
+   * `POST /api/vocab/lookup` and travelled through the browser under an HMAC, so
+   * this route remains "auth, validate, one INSERT" exactly as F3 D1 requires.
+   * What the signature buys is that `enrichment_status: 'ready'` continues to
+   * mean "these four fields were written by the model" — the property F17's
+   * claim path copies into a stranger's collection.
+   */
+  const lookup = body.data.lookup
+    ? decodeLookupToken(body.data.lookup, env.AUTH_SECRET)
+    : null;
+  if (body.data.lookup && !lookup) {
+    return fail(400, "That lookup has expired. Look the word up again.", "lookup_expired");
+  }
+
+  /**
+   * With a lookup, the term is the model's resolved English word — never
+   * `body.term`, which the client could disagree with. Re-normalised and
+   * re-validated regardless: the token proves we minted the value, not that the
+   * value is still one this route would accept.
+   */
+  const term = normalizeTerm(lookup ? lookup.term : body.data.term);
   const valid = validateTerm(term);
   if (!valid.ok) return fail(400, valid.message, valid.code);
+
+  /**
+   * The origin is the user's own typing and is deliberately outside the
+   * signature, so it is validated here exactly as it was on the way out. The
+   * language is taken from the token instead, because that half *is* model
+   * output.
+   */
+  let origin: VocabOrigin | null = null;
+  if (lookup) {
+    const originTerm = normalizeTerm(body.data.originTerm ?? "");
+    const validOrigin = validateTerm(originTerm);
+    if (!validOrigin.ok) return fail(400, validOrigin.message, validOrigin.code);
+
+    const rawContext = body.data.originContext ?? "";
+    const validContext = validateContext(rawContext);
+    if (!validContext.ok) return fail(400, validContext.message, validContext.code);
+
+    origin = {
+      term: originTerm,
+      language: lookup.language,
+      context: normalizeContext(rawContext) || null,
+    };
+  }
+
+  /**
+   * One name for "write the row", so the `23505` retry below stays a single line
+   * and cannot drift out of step with the first attempt — which is exactly how a
+   * looked-up word would come back from a lost race as a bare `pending` row with
+   * its origin silently dropped.
+   */
+  const insert = () =>
+    lookup && origin
+      ? createLookedUpVocabEntry(
+          userId,
+          term,
+          {
+            partOfSpeech: lookup.partOfSpeech,
+            pronunciation: lookup.pronunciation,
+            definition: lookup.definition,
+            examples: lookup.examples,
+          },
+          origin,
+        )
+      : createVocabEntry(userId, term);
 
   const recent = await countEntriesCreatedSince(userId, new Date(Date.now() - DAY_MS));
   if (recent >= DAILY_ADD_LIMIT) {
@@ -125,7 +205,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const entry = await createVocabEntry(userId, term);
+    const entry = await insert();
     return ok<CreateVocabResponse>({ ...toSummary(entry), outcome: "created" }, 201);
   } catch (err) {
     if (!isUniqueViolation(err)) {
@@ -142,7 +222,7 @@ export async function POST(req: Request): Promise<Response> {
     // is a delete landing between the two statements. One retry, then give up;
     // a loop here would be a spin against a live writer.
     try {
-      const entry = await createVocabEntry(userId, term);
+      const entry = await insert();
       return ok<CreateVocabResponse>({ ...toSummary(entry), outcome: "created" }, 201);
     } catch (retryErr) {
       console.error("[api/vocab] insert failed after 23505 retry", retryErr);

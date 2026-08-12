@@ -36,7 +36,72 @@ export const createVocabRequestSchema = z.object({
    * holds. The only thing it skips is the morphological fold.
    */
   allowNearDuplicate: z.boolean().default(false),
+  /**
+   * The non-English path's two extras, both optional so the English path's
+   * request body is byte-identical to what it was before this feature.
+   *
+   * `originContext` is 220 pre-normalization for `term`'s reason one field up:
+   * `normalizeContext` collapses and trims, and the real cap is
+   * `MAX_CONTEXT_CHARS`.
+   *
+   * The **signed** half is `lookup`. See `lib/vocab/lookup-token.ts` — signed is
+   * model output, validated is user input, and these two fields are the user's
+   * own typing, so they are re-normalised server-side rather than trusted.
+   */
+  originTerm: z.string().max(120).optional(),
+  originContext: z.string().max(220).optional(),
+  /**
+   * The token `POST /api/vocab/lookup` minted. Its presence is what selects the
+   * looked-up insert path; without it this is an ordinary typed add, whatever
+   * else the body carries.
+   */
+  lookup: z.string().max(4096).optional(),
 });
+
+/* --------------------------------- Lookup --------------------------------- */
+
+/**
+ * `POST /api/vocab/lookup`. One model call, no write.
+ *
+ * Separate from `createVocabRequestSchema` rather than a mode on it, because the
+ * two requests genuinely differ: this one may not write and that one may not
+ * call the model, and a single schema covering both would make each route's
+ * refusal a comment rather than a type.
+ */
+export const lookupVocabRequestSchema = z.object({
+  term: z.string().min(1, "Type a word.").max(120, "Too long."),
+  context: z.string().max(220).optional(),
+});
+
+/**
+ * Every outcome is a `200` with a discriminant, in F14 D6's shape and for F14
+ * D6's reason: `resolved` is the only one carrying an entry, and the other three
+ * each owe the user a different line of copy rather than an error.
+ *
+ * `already_english` is a real answer, not a validation failure — the user has
+ * the toggle in the wrong position, which is one tap to fix, and telling them
+ * "that word doesn't exist" would be a lie about a word that does.
+ */
+export const lookupVocabResponseSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("resolved"),
+    term: z.string(),
+    language: z.string(),
+    fit: z.enum(["exact", "loose"]),
+    partOfSpeech: z.string(),
+    pronunciation: z.string(),
+    definition: z.string(),
+    examples: z.array(z.string()),
+    /** Opaque to the client. Handed back to `POST /api/vocab` verbatim. */
+    lookup: z.string(),
+  }),
+  z.object({ outcome: z.literal("already_english"), term: z.string() }),
+  z.object({ outcome: z.literal("not_a_word") }),
+  z.object({ outcome: z.literal("failed"), code: z.string() }),
+]);
+
+export type LookupVocabRequest = z.infer<typeof lookupVocabRequestSchema>;
+export type LookupVocabResponse = z.infer<typeof lookupVocabResponseSchema>;
 
 export const vocabEntrySummarySchema = z.object({
   id: z.uuid(),

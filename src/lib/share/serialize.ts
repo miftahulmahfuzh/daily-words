@@ -29,7 +29,22 @@ import type {
  *     `suggestedCorrection` — internal machinery, and "the model failed three
  *     times on this" is not something to publish.
  *   - `createdAt` — a timestamp tells a stranger what hours the owner keeps.
+ *   - `originTerm`, `originLanguage`, `originContext` — the non-English
+ *     lookup's trail. `originContext` is the "as in" sentence, a line from the
+ *     owner's own life, and it is excluded for the same reason a journal
+ *     entry's `sourceNote` is: it is about the person, not about the word. The
+ *     other two follow it rather than being weighed separately — which language
+ *     the owner reads in, and which of its words they did not know, is a
+ *     profile of the reader.
  *   - anything about `users` — the public query never joins that table at all.
+ *
+ * **The four enrichment fields below are the known limit of that rule.** On a
+ * row created through the non-English lookup they were produced by a prompt that
+ * had read the owner's context sentence, and they do cross — here, and again
+ * into a stranger's own collection through F17's claim. What holds them apart is
+ * a rule in `vocab-translate.ts` (the context disambiguates and is never
+ * translated into the examples), not a structure. Named here rather than left
+ * for someone to rediscover.
  *
  * **F18 added the card and journal serialisers below rather than the two new
  * `lib/share/*-dto.ts` files its plan proposed.** The plan was written before
