@@ -1,0 +1,73 @@
+badge:          friday_blessing
+provider:       openrouter
+model:          qwen/qwen-image-3-pro
+seed:           31
+style version:  v1
+reference:      assets/badges/_anchor.png
+size / quality: 1024x1024 / high  (sent as 1K 1:1)
+image sha256:   dc1593f9beccf92681a92661ca68108ba81bdbb4647b1ddb3bb3a6b9dd01c9c1
+
+--- prompt as sent ---
+A single printed keepsake ticket, square, in the manner of a nineteenth-century
+letterpress ration coupon.
+
+FULL BLEED — THIS IS THE MOST IMPORTANT RULE. The ticket's own paper fills the
+entire image, edge to edge and corner to corner. Do not render a photograph of a
+ticket. No table, no desk, no background surface, no mat, no border of empty
+space, no drop shadow, no rounded corners, no torn or deckled edge, no curl, no
+white or black margin on any side. The image IS the paper.
+
+NO TEXT ANYWHERE. No title, no motto, no date, no year, no numeral, no initial,
+no monogram, no signature, no watermark, no ring of lettering around the seal,
+no glyph or mark that could be read as writing in any alphabet. The application
+prints the title beneath the picture. Any text is an automatic rejection.
+
+PAPER: flat, evenly toned cream stock, warm and very slightly grey — the colour
+of a clean index card, about 92 percent luminance, a touch of yellow in it,
+never bleached to pure white. A very fine paper tooth and nothing else: no
+stain, no foxing, no ring marks, no sepia, no tea-brown ageing, no scorched
+edge. This is fresh stock, printed this morning.
+
+THE SEAL: one circular impression, centred, occupying about 76 percent of the
+image width, with a quiet margin of bare paper all around it. Its edge is a
+double rule — one heavier line and one hair line — enclosing a narrow band. That
+band carries a repeating engraved chain of small lozenges and dots and nothing
+else; it never carries words. Inside the band sits this badge's own subject,
+alone, with generous space around it.
+
+INK: exactly two inks, the way a small press runs them.
+The first ink is a deep pine green, desaturated and quiet, near #2F5D50. It
+draws everything — the rules, the band, the subject, all of it.
+The second ink is a dull brick vermilion, near #8A3324, and it appears once and
+once only: a single small mark sitting very slightly off register from the
+green, the fingerprint of a second pass through the press. It never colours the
+subject and it never outlines anything.
+No third colour appears anywhere. Green ink, one vermilion mark, cream paper.
+
+RENDERING: line engraving. Every tone is built from engraved line — contour,
+cross-hatch, stipple — the way a dictionary plate or a banknote vignette is
+built, the ink sitting on the paper and biting very slightly into it. Even
+weight throughout, nothing darker than a firm mid-tone. No painting, no wash, no
+soft gradient, no airbrush, no glow, no bevel, no embossing, no metallic sheen,
+no three-dimensional rendering, no photographic realism, and no shadow anywhere
+inside the seal.
+
+TONE: quiet, dry, matter-of-fact, fond without sentiment. A clerk's object and a
+working desk, not an award. The vocabulary of this set is engraved line, plain
+rules, and ordinary things that have been used. It contains no ribbons, no
+rosettes, no laurel wreaths, no stars, no trophies, no cups, no crowns and no
+ticks.
+
+READ AT FORTY PIXELS. The application draws this forty pixels wide in a list and
+about two hundred and twenty in a panel. One clear silhouette, generous internal
+spacing, heavy enough line to survive the reduction, and no detail that exists
+only at full resolution.
+
+ONE SUBJECT, ITS OWN SUBJECT. The paper, the ring and the two inks belong to the
+whole set; what sits inside the ring belongs to this badge alone. Do not fall
+back on an open book, a quill, a wreath or a star as a default centre. Thirteen
+badges built from the same object is the way this set fails.
+
+SUBJECT FOR THIS BADGE: A short flight of wooden pulpit steps standing alone on a bare rule, seen from the side, four treads rising from left to right to a small empty platform at the top, a low turned handrail running up beside them, the timber drawn in firm engraved contour with cross-hatch in the shadow under each tread, and the treads worn hollow at their centres. VERMILION: a small mark on the lowest tread.
+
+CORRECTION FOR THIS ATTEMPT: PAPER, THE ONE THING TO GET RIGHT: the cream stock is a single flat even tone edge to edge and corner to corner, exactly as light as the reference image's paper and no darker, with no vignette, no shading toward any edge, no darkening at the bottom or the left, and no tonal difference whatever between the four margins outside the seal. The bare paper around the seal is untouched stock.
