@@ -34,12 +34,24 @@ stdlib + PIL only, on purpose (F12 D8). This machine has PIL and has neither
 multipart body is the whole cost of not adding a dependency to an art tool that
 runs offline on one developer's machine.
 
-THE KEY. `OPENAI_API_KEY` is read here and nowhere else. It is NOT `LLM_API_KEY`
-— the app's model access is GLM via z.ai through `src/lib/llm/client.ts`, and
-this is a different provider, a different key and a different bill. No file
-under `src/` may ever name this variable; `grep OPENAI_API_KEY src/` staying
-empty is a checked property of the repository. This script prints which SOURCE
-the key came from and never prints the key.
+THE KEYS. `OPENAI_API_KEY` **or** `OPENROUTER_API_KEY` is read here and nowhere
+else — which one depends on `--provider`, and only the selected one is read.
+Neither is `LLM_API_KEY`: the app's model access is GLM via z.ai through
+`src/lib/llm/client.ts`, and these are different providers, different keys and
+different bills. Neither is `EMBEDDING_API_KEY` either, which F15 reads at
+runtime. No file under `src/` may ever name either variable, and both greps
+staying empty is a checked property of the repository — `KEY_VARS` in
+`scripts/check-badge-art.ts` is the list, one assertion per variable. That scan
+walks the whole of `src/`, so it covers new FILES for free; it did NOT cover the
+second KEY for free, and reading "it walks the tree" as "it generalises" is the
+mistake worth not repeating. This script prints which SOURCE the key came from
+and never prints the key.
+
+TWO PROVIDERS, TWO TRANSPORTS. See `PROVIDERS` below. The short version is that
+OpenRouter has no `/images/edits` endpoint at all, so the anchor travels as an
+`input_references` field on the ordinary generations call. Everything downstream
+— the response shape, the candidate file, the sidecar, the checker — is
+identical, because both providers answer with `data[0].b64_json`.
 """
 
 import argparse
@@ -87,10 +99,56 @@ KINDS = {
     },
 }
 
-API_BASE = "https://api.openai.com/v1"
-DEFAULT_MODEL = "gpt-image-2"
 SIZE = "1024x1024"
 QUALITY = "high"
+
+# The same 1024² as `SIZE`, in the vocabulary OpenRouter accepts. Spelled out
+# rather than derived from `SIZE` by string surgery: the two are the same number
+# today and a derivation would read as though that were guaranteed. `RESOLUTION`
+# is an enum there ('1K' | '2K'), not a pixel count.
+RESOLUTION = "1K"
+ASPECT_RATIO = "1:1"
+
+# The whole of what `--provider` selects, in the shape `KINDS` above already
+# uses: a second provider is a row here, not a branch anywhere below.
+#
+# **The two differ in transport, not just in base URL, and that is the one thing
+# worth knowing before editing this table.** OpenAI carries the anchor as a
+# multipart file upload to `/images/edits`. **OpenRouter has no `/images/edits`
+# at all** — it is a plain 404 — and carries the anchor as an `input_references`
+# array on `/images/generations` instead, one endpoint for both jobs. That is
+# why `reference` below names a strategy rather than a path.
+#
+# Measured on 2026-08-12 against `assets/badges/_anchor.png`. `qwen/qwen-image-3-pro`
+# honours `seed`, which `gpt-image-2` does not, so a master generated here is
+# reproducible rather than merely recorded.
+#
+# **It does NOT hold the paper better, and the first version of this comment
+# said it did on the strength of two runs.** Three anchored runs drifted the
+# plate 0.4, 1.1 and 3.9 points — the last within a rounding error of
+# `check_badge_art.py` 9b's 4.0 ceiling, and the same band OpenAI's edits
+# endpoint already drifts in. On check 3's paper *flatness* it is worse than the
+# promoted OpenAI deck (0.7-1.7) at 4.5-5.5. Expect check 3 to be what costs
+# attempts here.
+PROVIDERS = {
+    "openrouter": {
+        "base": "https://openrouter.ai/api/v1",
+        "key_var": "OPENROUTER_API_KEY",
+        "model": "qwen/qwen-image-3-pro",
+        "reference": "input_references",
+    },
+    "openai": {
+        "base": "https://api.openai.com/v1",
+        "key_var": "OPENAI_API_KEY",
+        "model": "gpt-image-2",
+        "reference": "multipart",
+    },
+}
+DEFAULT_PROVIDER = "openrouter"
+
+# Kept as a module-level name because the error text and the docstring both
+# quote it, and because `--provider openai` must still reach F12 D4's default.
+DEFAULT_MODEL = PROVIDERS["openai"]["model"]
 
 
 # --------------------------------------------------------------------------- #
@@ -235,12 +293,15 @@ def build_prompt(style_block, scene, subject, note=None):
 # The key
 # --------------------------------------------------------------------------- #
 
-def read_api_key():
+def read_api_key(var):
     """`.env.local` first, then the environment. Prints WHICH, never the value.
 
     The order and the announcement are both scar tissue: a stale exported shell
     variable silently winning over the file you just edited is a confusing hour,
     and one printed word ends it.
+
+    `var` is the provider's own variable name. Both of them are offline tooling
+    keys and neither may appear under `src/`.
     """
     env_file = ROOT / ".env.local"
     if env_file.exists():
@@ -249,29 +310,32 @@ def read_api_key():
             if line.startswith("#") or "=" not in line:
                 continue
             name, _, value = line.partition("=")
-            if name.strip() != "OPENAI_API_KEY":
+            if name.strip() != var:
                 continue
             value = value.strip().strip('"').strip("'")
             if value:
-                print("key source: .env.local")
+                print(f"key source: .env.local ({var})")
                 return value
 
-    value = os.environ.get("OPENAI_API_KEY", "").strip()
+    value = os.environ.get(var, "").strip()
     if value:
-        print("key source: environment")
+        print(f"key source: environment ({var})")
         return value
 
-    die("OPENAI_API_KEY is in neither .env.local nor the environment.\n"
-        "  It is a DIFFERENT key from LLM_API_KEY — the app's model access is\n"
-        "  GLM via z.ai and this is OpenAI's image API. Add it to .env.local,\n"
-        "  which is already gitignored.")
+    other = [p for p, c in PROVIDERS.items() if c["key_var"] != var]
+    die(f"{var} is in neither .env.local nor the environment.\n"
+        f"  It is a DIFFERENT key from LLM_API_KEY — the app's model access is\n"
+        f"  GLM via z.ai and this is an image API. It is also a different key\n"
+        f"  from EMBEDDING_API_KEY. Add it to .env.local, which is already\n"
+        f"  gitignored.\n"
+        f"  Or generate through the other provider: --provider {other[0]}.")
 
 
 # --------------------------------------------------------------------------- #
 # The request
 # --------------------------------------------------------------------------- #
 
-def post_generation(key, model, prompt):
+def post_generation(base, key, model, prompt):
     body = json.dumps({
         "model": model,
         "prompt": prompt,
@@ -280,7 +344,7 @@ def post_generation(key, model, prompt):
         "n": 1,
     }).encode("utf-8")
     req = urllib.request.Request(
-        f"{API_BASE}/images/generations",
+        f"{base}/images/generations",
         data=body,
         method="POST",
         headers={
@@ -288,11 +352,58 @@ def post_generation(key, model, prompt):
             "Content-Type": "application/json",
         },
     )
-    return send(req)
+    return send(req, base)
 
 
-def post_edit(key, model, prompt, reference: Path):
-    """The reference path: /v1/images/edits with the anchor as the input image.
+def post_openrouter(base, key, model, prompt, reference: Path | None, seed=None):
+    """OpenRouter's single endpoint, with or without the anchor.
+
+    **There is no `/images/edits` here.** It 404s — not "unknown model", the
+    route does not exist — so the anchor rides in `input_references`, an array
+    of the same `image_url` objects a chat message would carry, on the ordinary
+    generations call. One endpoint does both jobs, which is less code than the
+    OpenAI path rather than more.
+
+    **`resolution` and `aspect_ratio`, not `size`.** OpenRouter ignores `size`
+    and the default is 2K, so omitting these silently returns a 2048x2048 master
+    that `check_badge_art.py` rejects on check 1 after the money is spent.
+
+    The chat-completions route — `modalities: ["image", "text"]` — also produces
+    images on this provider, but `qwen/qwen-image-3-pro` refuses it with "no
+    endpoints found that support the requested output modalities". Do not
+    reach for it: this endpoint is the one both models answer.
+    """
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "resolution": RESOLUTION,
+        "aspect_ratio": ASPECT_RATIO,
+        "n": 1,
+    }
+    if seed is not None:
+        payload["seed"] = seed
+    if reference:
+        data_url = "data:image/png;base64," + base64.b64encode(
+            reference.read_bytes()
+        ).decode("ascii")
+        payload["input_references"] = [
+            {"type": "image_url", "image_url": {"url": data_url}}
+        ]
+
+    req = urllib.request.Request(
+        f"{base}/images/generations",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+    )
+    return send(req, base)
+
+
+def post_edit(base, key, model, prompt, reference: Path):
+    """OpenAI's reference path: /v1/images/edits with the anchor as the input image.
 
     Multipart is hand-built because this script has no `requests`. The boundary
     is derived from the payload rather than random so that a rerun of the same
@@ -323,7 +434,7 @@ def post_edit(key, model, prompt, reference: Path):
     body = b"".join(parts)
 
     req = urllib.request.Request(
-        f"{API_BASE}/images/edits",
+        f"{base}/images/edits",
         data=body,
         method="POST",
         headers={
@@ -331,22 +442,28 @@ def post_edit(key, model, prompt, reference: Path):
             "Content-Type": f"multipart/form-data; boundary={boundary}",
         },
     )
-    return send(req)
+    return send(req, base)
 
 
-def send(req):
+def send(req, base):
     started = time.monotonic()
     try:
+        # An anchored Qwen call has been measured at just over two minutes, so
+        # this ceiling is doing real work rather than guarding a hypothetical.
         with urllib.request.urlopen(req, timeout=300) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:2000]
         die(f"HTTP {exc.code} from the image API\n{detail}\n\n"
-            f"  If this says the model is unknown, try --model gpt-image-1.\n"
-            f"  {DEFAULT_MODEL!r} is F12 D4's default, inherited from the tarot\n"
-            f"  tool and NOT confirmed against this account (F12 §12).")
+            f"  If this says the model is unknown, list what the provider\n"
+            f"  actually serves — and note that OpenRouter's image models are\n"
+            f"  NOT in /api/v1/models, which is why they look absent:\n"
+            f"    curl -s {base}/images/models | python3 -m json.tool | grep '\"id\"'\n"
+            f"  On --provider openai, {DEFAULT_MODEL!r} is F12 D4's default,\n"
+            f"  inherited from the tarot tool and NOT confirmed against this\n"
+            f"  account (F12 §12); try --model gpt-image-1.")
     except urllib.error.URLError as exc:
-        die(f"could not reach {API_BASE}: {exc.reason}")
+        die(f"could not reach {base}: {exc.reason}")
 
     elapsed = time.monotonic() - started
     data = payload.get("data") or []
@@ -370,7 +487,8 @@ def next_attempt_path(candidates, key):
     return candidates / f"{key}.a{(max(used) + 1) if used else 1:02d}.png"
 
 
-def write_sidecar(png_path, noun, key, model, version, reference, prompt):
+def write_sidecar(png_path, noun, key, provider, model, version, reference, prompt,
+                  seed=None):
     """The exact prompt beside the exact image.
 
     This is what lets a candidate you like six weeks from now be explained, and
@@ -384,10 +502,25 @@ def write_sidecar(png_path, noun, key, model, version, reference, prompt):
             # put. Only `style version:` below is ever parsed
             # (`make_badge_assets.py`); the rest is for a human six weeks later.
             f"{noun + ':':<16}{key}",
+            # `provider:` is RECORDED and deliberately NOT CHECKED. A deck built
+            # by two providers is a real risk — the same prompt draws
+            # differently — but the checks that already exist measure the thing
+            # that actually matters: `check_badge_art.py` 9a and 9b compare seal
+            # radius and plate luminance against the anchor, and a provider that
+            # drifts fails those on its own evidence rather than on its name.
+            # Enforcing one provider per deck was considered and dropped: the
+            # twenty masters that predate this line would all have had to be
+            # regenerated to make it green, and three of them were supplied by
+            # hand and cannot be. A sidecar with no `provider:` line is one of
+            # those twenty, and means OpenAI.
+            f"provider:       {provider}",
             f"model:          {model}",
+            f"seed:           {seed if seed is not None else '(none)'}",
             f"style version:  {version}",
             f"reference:      {rel(reference) if reference else '(none — anchor run)'}",
-            f"size / quality: {SIZE} / {QUALITY}",
+            f"size / quality: {SIZE} / {QUALITY}"
+            + (f"  (sent as {RESOLUTION} {ASPECT_RATIO})"
+               if provider == "openrouter" else ""),
             f"image sha256:   {hashlib.sha256(png_path.read_bytes()).hexdigest()}",
             "",
             "--- prompt as sent ---",
@@ -438,9 +571,24 @@ def main():
     parser.add_argument("--reference", type=Path,
                         help="anchor image, normally assets/<deck>/_anchor.png")
     parser.add_argument("--note", help="a correction appended after the scene line")
-    parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=f"image model (default {DEFAULT_MODEL})")
+    parser.add_argument("--provider", choices=sorted(PROVIDERS), default=DEFAULT_PROVIDER,
+                        help=f"which image API (default {DEFAULT_PROVIDER}). "
+                             f"Selects base URL, key variable, default model and "
+                             f"how the --reference anchor is carried")
+    parser.add_argument("--model", default=None,
+                        help="image model (default: the provider's, "
+                             + ", ".join(f"{p}={c['model']}" for p, c in sorted(PROVIDERS.items()))
+                             + ")")
+    parser.add_argument("--seed", type=int,
+                        help="reproducibility, where the provider honours it "
+                             "(openrouter/qwen does; openai's images API does not)")
     args = parser.parse_args()
+
+    provider = PROVIDERS[args.provider]
+    model = args.model or provider["model"]
+    if args.seed is not None and provider["reference"] != "input_references":
+        warn(f"--seed is ignored by --provider {args.provider}; it is recorded "
+             f"in the sidecar but did not reach the request.")
 
     kind = KINDS[args.kind]
     noun = kind["noun"]
@@ -476,8 +624,8 @@ def main():
     if args.dry_run:
         for key in targets:
             prompt = build_prompt(style_block, scene_by_key[key], kind["subject"], args.note)
-            print(f"\n{'=' * 76}\n{key}  (style {version}, model {args.model}, "
-                  f"{len(prompt)} chars)\n{'=' * 76}\n{prompt}")
+            print(f"\n{'=' * 76}\n{key}  (style {version}, {args.provider} "
+                  f"{model}, {len(prompt)} chars)\n{'=' * 76}\n{prompt}")
         print(f"\n{'-' * 76}\ndry run: {len(targets)} prompt(s) assembled. "
               f"No key was read, nothing was sent, nothing was written.")
         return
@@ -494,19 +642,26 @@ def main():
         else:
             print("no --reference and no anchor on disk: this is an ANCHOR RUN.")
 
-    api_key = read_api_key()
+    api_key = read_api_key(provider["key_var"])
+    base = provider["base"]
     prompt = build_prompt(style_block, scene_by_key[key_name], kind["subject"], args.note)
-    print(f"{noun} {key_name}, style {version}, model {args.model}, "
+    print(f"{noun} {key_name}, style {version}, {args.provider} {model}, "
           f"{len(prompt)} chars of prompt")
 
-    if args.reference:
-        png = post_edit(api_key, args.model, prompt, args.reference)
+    # The one branch `--provider` buys, and it is about transport rather than
+    # about which endpoint is "the edit one": OpenRouter has no /images/edits,
+    # so both of its calls go to /images/generations and the anchor is a field.
+    if provider["reference"] == "input_references":
+        png = post_openrouter(base, api_key, model, prompt, args.reference, args.seed)
+    elif args.reference:
+        png = post_edit(base, api_key, model, prompt, args.reference)
     else:
-        png = post_generation(api_key, args.model, prompt)
+        png = post_generation(base, api_key, model, prompt)
 
     out = next_attempt_path(candidates, key_name)
     out.write_bytes(png)
-    sidecar = write_sidecar(out, noun, key_name, args.model, version, args.reference, prompt)
+    sidecar = write_sidecar(out, noun, key_name, args.provider, model, version,
+                            args.reference, prompt, args.seed)
 
     print(f"\nwrote {rel(out)}  ({len(png) / 1024:.0f} kB)")
     print(f"      {rel(sidecar)}")

@@ -168,6 +168,25 @@ export const BADGE_META: Record<BadgeKey, BadgeMeta> = {
     gloss:
       "On the day that we are born the Many-Faced God sends each of us a dark angel to walk through life beside us. When our sins and our sufferings grow too great to be borne, the angel takes us by the hand to lead us to the nightlands",
   },
+  /**
+   * **The verse is rendered in the third person, and that is a constraint rather
+   * than a preference.** The passage this badge was asked for reads "O you who
+   * believe"; the register check in `check-gamification.ts` greps
+   * `\byou\b` over every string of copy in the feature, so it cannot appear
+   * verbatim. "those who believe are asked to do the same" is the same sentence
+   * with the address removed — which is also the register the rest of this file
+   * keeps, where a condition is a fact about cards and never a thing the reader
+   * did (F13 D2).
+   *
+   * Note that this is the opposite call to `birthday` directly above, which
+   * carries its passage across intact. That one could: nothing in it trips a
+   * check. This one cannot, and paraphrasing beat requesting an exemption.
+   */
+  friday_blessing: {
+    condition: "A card made on a Friday.",
+    gloss:
+      "Al-Ahzab 33:56 — God and His angels bless the Prophet, and those who believe are asked to do the same. The greeting is given most on Fridays, a day that arrives once a week without being sent for.",
+  },
 };
 
 /**

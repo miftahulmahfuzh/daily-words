@@ -337,14 +337,18 @@ check('midnight_oil + at 03:59', on({ localHour: 3 }), ['midnight_oil'])
 check('midnight_oil + at 00:00', on({ localHour: 0 }), ['midnight_oil'])
 check('midnight_oil − at 04:00 exactly [R12]', on({ localHour: 4 }), [])
 
-check('new_year    + 2027-01-01', on({ cardDate: '2027-01-01' }), ['new_year'])
+check('new_year    + 2027-01-01', on({ cardDate: '2027-01-01' }), ['new_year', 'friday_blessing'])
 check('new_year    − 2027-01-02', on({ cardDate: '2027-01-02' }), [])
 
 check('womens_day  + 2026-03-08 (a Sunday)', on({ cardDate: '2026-03-08' }), ['sunday', 'womens_day'])
 check('womens_day  − 2026-03-09', on({ cardDate: '2026-03-09' }), [])
 
 check('world_book_day + 2026-04-23', on({ cardDate: '2026-04-23' }), ['world_book_day'])
-check('world_book_day − 2026-04-24', on({ cardDate: '2026-04-24' }), [])
+// The day after, and a Friday — so the negative is `world_book_day` absent
+// rather than an empty list. Kept on this date rather than moved to a quieter
+// one: "the day after" is the assertion, and a `−` case that has to dodge the
+// rest of the deck to stay empty is testing the calendar, not the rule.
+check('world_book_day − 2026-04-24', on({ cardDate: '2026-04-24' }), ['friday_blessing'])
 
 check('fathers_day + 2026-06-21 (third Sunday)', on({ cardDate: '2026-06-21' }), ['sunday', 'fathers_day'])
 check('fathers_day − 2026-06-14 (second Sunday)', on({ cardDate: '2026-06-14' }), ['sunday'])
@@ -362,7 +366,13 @@ check('ibu         − 2026-12-23', on({ cardDate: '2026-12-23' }), [])
 // statement than the absence of an assertion: a rule left behind in
 // `evaluateBadges` after its catalog entry was deleted would not typecheck, but a
 // rule re-added by a merge would, and this is what fails then.
-check('christmas   − 2026-12-25, the key is gone', on({ cardDate: '2026-12-25' }), [])
+// 2026-12-25 is a Friday, so this list stopped being empty when #22 landed. The
+// assertion is unchanged in force — `christmas` is absent — but it is worth
+// saying out loud that an empty list was never what made it work, and reaching
+// for a non-Friday Christmas to keep the `[]` would have been the wrong repair.
+check('christmas   − 2026-12-25, the key is gone', on({ cardDate: '2026-12-25' }), [
+  'friday_blessing',
+])
 
 check('year_end    + 2026-12-31', on({ cardDate: '2026-12-31' }), ['year_end'])
 check('year_end    − 2026-12-30', on({ cardDate: '2026-12-30' }), [])
@@ -524,6 +534,32 @@ check(
 check('birthday    − a shaped non-date', on({ cardDate: '2026-08-11', birthday: '2026-13-99' }), [])
 check('birthday    − not a date at all', on({ cardDate: '2026-08-11', birthday: 'sometime' }), [])
 check('birthday    − an empty string', on({ cardDate: '2026-08-11', birthday: '' }), [])
+
+// #22. A card made on a Friday, and the second rule in the deck keyed on a bare
+// day of the week.
+//
+// **The pair is the point.** `sunday` reads `dow === 0` and this reads
+// `dow === 5` off the same value, so a rule written against the wrong constant
+// passes every single-date test you would think to write — the same trap the
+// `leap_day`/`tolkien` and `dobby`/`dumbledore` pairs already exist for, and
+// the reason those two are asserted in both directions rather than once each.
+// The three dates below are one week in September 2026, so the contrast is
+// legible without arithmetic: the 11th is a Friday and the 13th is a Sunday.
+check('friday_blessing + 2026-09-11 (a Friday)', on({ cardDate: '2026-09-11' }), ['friday_blessing'])
+check('friday_blessing − 2026-09-12 (the Saturday after)', on({ cardDate: '2026-09-12' }), [])
+check('friday_blessing − 2026-09-10 (the Thursday before)', on({ cardDate: '2026-09-10' }), [])
+// Neither direction, so neither is the lucky one. A Sunday must not earn the
+// Friday badge and a Friday must not earn the Sunday one.
+check('friday_blessing − 2026-09-13, which is the Sunday', on({ cardDate: '2026-09-13' }), ['sunday'])
+// Ordering, not just membership. `friday_blessing` is last in `BADGE_CATALOG`,
+// so it comes last however many fire with it — which is what fails if its
+// `earned.push` is ever moved up beside `sunday`'s line in `evaluateBadges`,
+// where it reads more naturally and is wrong.
+check(
+  'friday_blessing + comes last on a first card made on a Friday',
+  on({ cardDate: '2026-09-11', isFirstCardEver: true }),
+  ['first_card', 'friday_blessing'],
+)
 check(
   'and a broken birthday costs the card nothing else',
   on({ cardDate: '2026-08-11', birthday: 'sometime', isFirstCardEver: true, runLength: 7 }),
@@ -656,6 +692,11 @@ section('§8.4 [R12] — how often each repeating badge repeats on a 100-day run
   check('first_card        ×1 — once, ever', tally.get('first_card'), 1)
   check('full_week         ×14 — one per completed week', tally.get('full_week'), 14)
   check('sunday            ×14', tally.get('sunday'), 14)
+  // Fourteen for the same reason `sunday` is: fourteen whole weeks, and the two
+  // days over are a Monday and a Tuesday. That the two counts match is a
+  // property of the window rather than of the rules, so it is not evidence that
+  // both read the day correctly — the September pair above is what shows that.
+  check('friday_blessing   ×14', tally.get('friday_blessing'), 14)
   // Fourteen, not fifteen: the run ends on a Tuesday, so the fifteenth week
   // never reaches a third card.
   check('three_in_a_week   ×14 — one per week that reaches three', tally.get('three_in_a_week'), 14)
@@ -670,6 +711,7 @@ section('§8.4 [R12] — how often each repeating badge repeats on a 100-day run
   check('and nothing else fires at all', [...tally.keys()].sort(), [
     'dobby',
     'first_card',
+    'friday_blessing',
     'full_week',
     'sunday',
     'thirty_day_streak',
@@ -718,13 +760,13 @@ section('§8.4 [R12] — how often each repeating badge repeats on a 100-day run
 
 section('§8.1 badges — the catalog')
 
-check('twenty badges, no more', BADGE_CATALOG.length, 20)
-check('keys are unique', new Set(BADGE_CATALOG.map((b) => b.key)).size, 20)
-check('titles are unique', new Set(BADGE_CATALOG.map((b) => b.title)).size, 20)
+check('twenty-one badges, no more', BADGE_CATALOG.length, 21)
+check('keys are unique', new Set(BADGE_CATALOG.map((b) => b.key)).size, 21)
+check('titles are unique', new Set(BADGE_CATALOG.map((b) => b.title)).size, 21)
 // Appending is what preserves the index tuple asserted above, and the toast
 // ordering of everything that came before. Badges #15–#20 went on the end for
 // that reason, so `tolkien` keeps index 13 and the tuple keeps its meaning.
-check('birthday is last in the catalog', BADGE_CATALOG.at(-1)?.key, 'birthday')
+check('friday_blessing is last in the catalog', BADGE_CATALOG.at(-1)?.key, 'friday_blessing')
 // **`christmas` was removed from the middle, and that is the one edit appending
 // does not protect against.** It held index 10, so everything after it moved down
 // one: `tolkien` from 13 to 12. Indices 0–9 did not move, nothing persisted

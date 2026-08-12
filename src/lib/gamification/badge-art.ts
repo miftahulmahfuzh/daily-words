@@ -188,4 +188,11 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     plate: "#f1e7ce",
     styleVersion: "v1",
   },
+  friday_blessing: {
+    src: "/badges/friday_blessing.dc1593f9.webp",
+    small: "/badges/friday_blessing.dc1593f9.sm.webp",
+    sha256: "dc1593f9beccf92681a92661ca68108ba81bdbb4647b1ddb3bb3a6b9dd01c9c1",
+    plate: "#f6ebd3",
+    styleVersion: "v1",
+  },
 };

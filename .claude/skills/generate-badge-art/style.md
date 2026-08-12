@@ -148,6 +148,7 @@ numerals, and numerals are text. Turn the face away.
 - five_shares: A squat earthenware flask, unstoppered, its stopper lying where it was set down, standing beside a folded travelling blanket on a bare road rule. VERMILION: a small spill running from the flask's lip onto the rule.
 - ten_journal_lines: A short length of heavy chain lying in a loose curve on a bare rule, its links interlocked and overlapping one another in one continuous unbroken run, each link a slightly different section from its neighbour — one round, one square, one flat and drawn out long — and the run ending in a last link lying free at the near end. VERMILION: a small bright mark on that last link.
 - birthday: A bust portrait of one person facing the viewer squarely, head and shoulders only, filling the seal's interior, the hair falling loose past the jaw, built entirely from fine engraved hatch with the paper left bare for the light on the brow and the cheekbones. VERMILION: one small dab high on each cheek.
+- friday_blessing: A short flight of wooden pulpit steps standing alone on a bare rule, seen from the side, four treads rising from left to right to a small empty platform at the top, a low turned handrail running up beside them, the timber drawn in firm engraved contour with cross-hatch in the shadow under each tread, and the treads worn hollow at their centres. VERMILION: a small mark on the lowest tread.
 <!-- /SCENES -->
 ```
 
@@ -305,6 +306,55 @@ art, the build is red on purpose. Generate, promote both the `.png` and its
 defining feature in every reference image this model has ever seen is an
 inscription, and an inscription is text, and text is an automatic rejection. It
 held: the generated candidate carries no lettering anywhere.
+
+---
+
+## The twenty-second, and what its scene line is dodging
+
+`friday_blessing` carries the same risk `tolkien` does, from a different
+direction, and the mitigation is again inside the scene line rather than in a
+negative.
+
+**The obvious subject is unavailable.** A calligraphic salawat is what this badge
+is *about*, and the style block rejects "any glyph or mark that could be read as
+writing in any alphabet". So the scene names a carved window screen instead, and
+never goes near the word. As with `tolkien`, the fix is to describe a picture
+that has no text in it rather than to ask for a picture without text.
+
+**The subject is an object and not a figure.** No depiction of the Prophet and
+none of the angels. The deck's own register wants that anyway — "a clerk's
+object and a working desk" — so the constraint costs this badge nothing.
+
+**The scene line was a carved lattice window screen first, and it was measured
+and rejected.** This is the worked example of the forty-pixel rule costing a
+subject rather than a redraw, so it is written down rather than quietly
+replaced.
+
+The line asked for `a small number of large interlocking geometric openings with
+broad heavy bars` — coarse on purpose, because a screen's real charm is fine
+lattice and fine lattice is exactly what READ AT FORTY PIXELS forbids. The
+coarseness was not the problem. **`interlocking` was**: the model resolved it as
+*nested*, and returned a labyrinth of rectangles inside rectangles rather than a
+pierced flat screen. At 220px it reads as a maze; at 40px it is a blob.
+
+The numbers, because they are the argument. On the same model and the same
+anchor, a plain jug probe scored **36.4** on check 7 legibility and the lattice
+scored **24.4** — above the 16.0 floor and still unreadable on a shelf, which is
+worth knowing about that floor. Everything else was fine: plate 0.4 points off
+the anchor, seal centred to 0.47%, palette 99.9%. **The provider and the
+pipeline were never the problem, and no other model fixes a subject that is too
+busy.**
+
+So the repair was the pre-committed one — a different subject, not another
+generation. Minbar steps: the pulpit the Friday sermon is given from, a stepped
+profile that is the one silhouette absent from this deck, and an object rather
+than a figure. `four treads` and `a small empty platform` fix the count and the
+emptiness; `from left to right` fixes the orientation so two attempts are
+comparable.
+
+Adding a scene is not a style change: `v1` stays `v1`. The version marker exists
+so a deck generated under two different style blocks is detectable, and this file
+gained a line rather than changing one.
 
 ---
 

@@ -391,7 +391,7 @@ const badgeVersion = checkDeck({
 
 /* --------------------- §6 the key never reached the app -------------------- */
 
-section('§6 OPENAI_API_KEY never reached application code')
+section('§6 no image-API key ever reached application code')
 
 /**
  * [S1], asserted rather than trusted. The art key is a different key from
@@ -406,7 +406,16 @@ section('§6 OPENAI_API_KEY never reached application code')
  *
  * **F22's three new files under `src/` are covered for free**, which is the
  * point of having written this as a walk rather than a list.
+ *
+ * **The walk was free for new files; the second KEY was not.** When
+ * `gen_badge_art.py` gained `--provider openrouter` this scan still read one
+ * literal string, so `OPENROUTER_API_KEY` could have been pasted into
+ * `src/lib/env.ts` with every check green. A walk generalises over files, not
+ * over variable names — the two are easy to conflate and only one of them was
+ * ever true. Adding a third provider means adding a row here.
  */
+const KEY_VARS = ['OPENAI_API_KEY', 'OPENROUTER_API_KEY'] as const
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name)
@@ -416,12 +425,14 @@ function walk(dir: string, out: string[] = []): string[] {
   return out
 }
 
-const leaks = walk(join(root, 'src'))
-  .filter((p) => readFileSync(p, 'utf8').includes('OPENAI_API_KEY'))
-  .map((p) => p.slice(root.length + 1).replaceAll('\\', '/'))
-  .sort()
-
-check('files under src/ naming OPENAI_API_KEY', leaks, [])
+const srcFiles = walk(join(root, 'src'))
+for (const variable of KEY_VARS) {
+  const leaks = srcFiles
+    .filter((p) => readFileSync(p, 'utf8').includes(variable))
+    .map((p) => p.slice(root.length + 1).replaceAll('\\', '/'))
+    .sort()
+  check(`files under src/ naming ${variable}`, leaks, [])
+}
 
 /* -------------------------- §7–§11 the level deck -------------------------- */
 
