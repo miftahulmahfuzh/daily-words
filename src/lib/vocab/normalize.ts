@@ -85,6 +85,78 @@ export function normalizeTerm(raw: string): string {
   return stripped.trim() || straightened;
 }
 
+/* --------------------------- The "as in" context --------------------------- */
+
+/**
+ * A sentence, not a term, so it gets its own pair of functions rather than a
+ * flag on the ones above. It is longer, it may contain digits and commas and
+ * question marks, and it is never deduped, never indexed and never compared.
+ *
+ * What it shares with a term is where it ends up: inside `<context>` tags in
+ * `lib/llm/prompts/vocab-translate.ts`. So it gets the same first layer of
+ * F3 §11's injection defence, and the property to assert is the one
+ * `claim:check` learned the hard way — **not** "hostile strings are rejected",
+ * which is false and was measured to be false, but that no newline, angle
+ * bracket or backtick can reach the tags. A sentence saying "ignore all
+ * previous instructions" is admissible input; a sentence that can *close the
+ * tag* is not.
+ */
+export const MAX_CONTEXT_CHARS = 200;
+
+/**
+ * Strip what could break out of the tags, collapse what a paste drags in.
+ *
+ * Unlike `normalizeTerm` this is deliberately lossy and silent: the context is
+ * a hint to the model, not the user's own word, so quietly dropping a stray
+ * backtick is kinder than an error message about punctuation in a sentence
+ * nobody will ever read again. `normalizeTerm` cannot do this — there, changing
+ * the characters changes which word gets looked up.
+ */
+export function normalizeContext(raw: string): string {
+  return raw
+    .normalize("NFC")
+    .replace(/[<>`]/g, "")
+    .replace(/[‘’ʼ]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, MAX_CONTEXT_CHARS)
+    .trim();
+}
+
+export type ContextErrorCode = "context_too_long";
+
+export type ContextValidation =
+  | { ok: true }
+  | { ok: false; code: ContextErrorCode; message: string };
+
+const CONTEXT_MESSAGES: Record<ContextErrorCode, string> = {
+  context_too_long: "That's too long. One sentence is enough.",
+};
+
+/**
+ * Run on the **raw** input, before normalizing — the opposite order to
+ * `validateTerm`, and for a reason worth stating.
+ *
+ * `normalizeContext` truncates to `MAX_CONTEXT_CHARS`, so running this after it
+ * could never fail: a pasted paragraph would be silently cut mid-word and sent
+ * to the model as though the user had written it. Checking the raw length is
+ * what makes the cap visible to the person who tripped it.
+ *
+ * An empty context is valid. The field is optional and most lookups will not
+ * use it; only the term is required.
+ */
+export function validateContext(raw: string): ContextValidation {
+  if (raw.trim().length > MAX_CONTEXT_CHARS) {
+    return {
+      ok: false,
+      code: "context_too_long",
+      message: CONTEXT_MESSAGES.context_too_long,
+    };
+  }
+  return { ok: true };
+}
+
 /** Word count for the six-word cap. `half-hearted` is one word. */
 export function countWords(term: string): number {
   return term.split(" ").filter(Boolean).length;

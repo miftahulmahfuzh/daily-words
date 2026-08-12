@@ -41,6 +41,8 @@ import {
 } from '../src/lib/db/schema'
 import {
   applyCorrection,
+  attachOrigin,
+  createLookedUpVocabEntry,
   createVocabEntry,
   getEntryForUser,
   listTermsForDedup,
@@ -109,6 +111,8 @@ async function countRows(userId: string): Promise<number> {
 async function main() {
   const email = `f14-vocab-check-${process.pid}@example.invalid`
   let userId: string | null = null
+  /** Section 12's second user, so the ownership assertion has someone else. */
+  let strangerId: string | null = null
 
   try {
     const [user] = await db.insert(users).values({ email }).returning({ id: users.id })
@@ -268,6 +272,124 @@ async function main() {
     check('mastered rows come back', masteredTerms.sort(), ['sober', 'winnow'])
     check('and so does everything else', terms.length, await countRows(userId))
 
+    /* ------------- 11–13. the non-English lookup (2026-08-12) ------------- */
+
+    section('11 — a looked-up word lands ready, with its origin, in ONE statement')
+
+    /**
+     * The property that matters is `enrichment_status`. F17 established why:
+     * between an insert and a follow-up update the row is `pending`, and
+     * `pending` is exactly the state `/vocab/[id]/chat` refuses to render. The
+     * add form links straight there, so a two-statement version would race its
+     * own navigation.
+     */
+    const smear = await createLookedUpVocabEntry(
+      userId,
+      'smear',
+      {
+        partOfSpeech: 'verb',
+        pronunciation: '/smɪə/',
+        definition: 'to spread a greasy substance over a surface',
+        examples: ['She smeared butter across the warm toast.'],
+      },
+      {
+        term: 'melumuri',
+        language: 'Indonesian',
+        context: 'mereka melumuri budi dengan minyak panas',
+      },
+    )
+
+    check('it is ready on arrival, never pending', smear.enrichmentStatus, 'ready')
+    check('the definition is there in the same row', smear.definition, 'to spread a greasy substance over a surface')
+    check('the origin term is stored', smear.originTerm, 'melumuri')
+    check('the detected language is stored', smear.originLanguage, 'Indonesian')
+    check('and the as-in sentence', smear.originContext, 'mereka melumuri budi dengan minyak panas')
+
+    /**
+     * The one that is easy to get wrong by tidying. F17 chose `'shared'` so a
+     * claimed word would not inflate F9's collector level; this is the inverse
+     * case and must count, because the user typed the foreign word themselves.
+     */
+    check('source stays manual — F9 counts this word', smear.source, 'manual')
+
+    section('12 — attachOrigin is conditional, and the first origin wins')
+
+    const held = await createVocabEntry(userId, 'daub')
+    check('a fresh row has no origin', held.originTerm, null)
+
+    const attached = await attachOrigin(userId, held.id, {
+      term: 'melumuri',
+      language: 'Indonesian',
+      context: null,
+    })
+    check('the first attach lands', attached?.originTerm, 'melumuri')
+    check('with no context when none was given', attached?.originContext, null)
+
+    // Conditional in the statement, not in a read-then-write. Two lookups
+    // resolving to the same held word cannot both attach.
+    const second = await attachOrigin(userId, held.id, {
+      term: 'mengoles',
+      language: 'Indonesian',
+      context: null,
+    })
+    check('a second attach matches nothing', second, null)
+    const stillFirst = await getEntryForUser(userId, held.id)
+    check('and the row keeps the first origin', stillFirst?.originTerm, 'melumuri')
+
+    // `userId` is first and in the WHERE clause, like every function in
+    // queries/vocab.ts. Another user's row is not reachable.
+    const [stranger] = await db
+      .insert(users)
+      .values({ email: `f14-vocab-stranger-${process.pid}@example.invalid` })
+      .returning({ id: users.id })
+    strangerId = stranger.id
+    check(
+      "another user's row cannot be given an origin",
+      await attachOrigin(strangerId, smear.id, {
+        term: 'x',
+        language: 'Indonesian',
+        context: null,
+      }),
+      null,
+    )
+
+    section('13 — the CHECK refuses a context with no term')
+
+    /**
+     * Migration 0008's constraint. Asserted against the database rather than
+     * reasoned about, because the whole point of putting it in DDL was that no
+     * future caller can represent the state — including one that does not go
+     * through `createLookedUpVocabEntry`.
+     */
+    let refused = false
+    try {
+      await db.insert(vocabEntries).values({
+        userId,
+        term: 'orphaned-context',
+        source: 'manual',
+        originContext: 'a sentence with nothing to be the context of',
+      })
+    } catch {
+      refused = true
+    }
+    check('the database refuses it', refused, true)
+
+    // And the legal converse: an origin term with no sentence is the common
+    // case, not an error — most lookups will not supply one.
+    const noContext = await createLookedUpVocabEntry(
+      userId,
+      'coat',
+      {
+        partOfSpeech: 'verb',
+        pronunciation: '/kəʊt/',
+        definition: 'to cover a surface with a layer of something',
+        examples: ['Coat the pan with oil.'],
+      },
+      { term: 'melapisi', language: 'Indonesian', context: null },
+    )
+    check('an origin with no sentence is legal', noContext.originContext, null)
+    check('and still carries its term', noContext.originTerm, 'melapisi')
+
     /* ----------------------- the ledger, at the end ----------------------- */
 
     section('the collection, at the end of all that')
@@ -280,6 +402,8 @@ async function main() {
       'exactly the words the run should have left',
       finalRows.map((r) => r.term).sort(),
       [
+        'coat',
+        'daub',
         'genteel',
         'laconic',
         'laconicc',
@@ -287,6 +411,10 @@ async function main() {
         'naïve',
         'peruse',
         'quixotic',
+        /* Sections 11–13. `smear` and `coat` arrived through the lookup, `daub`
+           was typed and then given an origin. `orphaned-context` is deliberately
+           absent: the CHECK refused it, which is section 13's whole point. */
+        'smear',
         'sober',
         'study',
         'studying',
@@ -301,6 +429,7 @@ async function main() {
     check('and no merged typo survived anywhere', orphan.length, 0)
   } finally {
     if (userId) await db.delete(users).where(eq(users.id, userId))
+    if (strangerId) await db.delete(users).where(eq(users.id, strangerId))
   }
 
   console.log()

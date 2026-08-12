@@ -180,6 +180,30 @@ export const vocabEntries = pgTable(
     /** [R9] */
     enrichmentAttempts: integer('enrichment_attempts').notNull().default(0),
     lastShownOn: localDate('last_shown_on'),
+    /**
+     * Where a non-English lookup started. All three are null for every row
+     * added in English, which is every row written before migration 0008 — not
+     * a placeholder, but the truth about how those words got here.
+     *
+     * The **term is the English word**: `melumuri` resolves to `smear` and
+     * `smear` is what this row holds, because `pronunciation` is specified as
+     * British RP and all three `examples` must contain the term, neither of
+     * which has a defined meaning for an Indonesian headword. These three
+     * columns are the trail back to why the word is in the collection.
+     *
+     * `source` stays `'manual'` for these rows, which is the *opposite* call to
+     * F17's and deliberate: a claimed word got `'shared'` so F9's collector
+     * level would not count a stranger's word, and this is the inverse — the
+     * user typed it, chose it and kept it, so it counts.
+     *
+     * `origin_language` is the model's detection, never a question asked of the
+     * user. Flat columns rather than one jsonb, matching the grain above:
+     * `examples` is jsonb because it is a list, these are three scalars.
+     */
+    originTerm: text('origin_term'),
+    originLanguage: text('origin_language'),
+    /** The "as in" sentence. Never crosses into a share payload — see D6. */
+    originContext: text('origin_context'),
     createdAt: tsz('created_at').notNull().defaultNow(),
     masteredAt: tsz('mastered_at'),
     // NO deleted_at. There is no soft delete in v0.1.0 — see [R1].
@@ -205,6 +229,16 @@ export const vocabEntries = pgTable(
      * so a claimed word does not inflate the collector level.
      */
     index('vocab_entries_user_source_idx').on(t.userId, t.source),
+    /**
+     * A context sentence with nothing to be the context *of* is a bug, and it is
+     * cheaper to make it unrepresentable than to test for it everywhere a row
+     * is written. The converse is legal: an origin term with no sentence is a
+     * lookup where the user did not supply one, which is the common case.
+     */
+    check(
+      'vocab_entries_origin_context_needs_term',
+      sql`${t.originContext} is null or ${t.originTerm} is not null`,
+    ),
   ],
 )
 

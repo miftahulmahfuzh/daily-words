@@ -303,6 +303,17 @@ const POISONED: VocabEntry = {
   enrichmentError: 'LEAK-error',
   enrichmentAttempts: 3,
   lastShownOn: 'LEAK-date',
+  /**
+   * The non-English lookup's origin, and the sharpest of the markers on this
+   * fixture. `originContext` is the "as in" sentence — a line from the owner's
+   * own life, exactly like a journal entry's `sourceNote`, and excluded for
+   * exactly that reason. `originTerm` and `originLanguage` follow it: together
+   * they say which language the owner reads in and which words they did not
+   * know, which is a profile of the reader rather than a fact about the word.
+   */
+  originTerm: 'LEAK-origin-term',
+  originLanguage: 'LEAK-origin-language',
+  originContext: 'LEAK-origin-context',
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
   masteredAt: new Date('2026-02-02T00:00:00.000Z'),
 }

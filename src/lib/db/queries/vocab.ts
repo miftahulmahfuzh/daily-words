@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, exists, gte, lt, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, isNull, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { chatSessions, dailyCardItems, vocabEntries } from "@/lib/db/schema";
 import type { VocabEntry, VocabSource, VocabStatus } from "@/lib/db/types";
@@ -90,6 +90,102 @@ export async function createClaimedVocabEntry(
     })
     .returning();
   return row;
+}
+
+/** What a non-English lookup remembers about where it started. */
+export type VocabOrigin = {
+  term: string;
+  language: string;
+  context: string | null;
+};
+
+/**
+ * A word that arrived through the non-English lookup: the resolved English term,
+ * the entry the model produced for it, and the origin — **in one INSERT**, for
+ * `createClaimedVocabEntry`'s reason above and not a different one. Nothing here
+ * may be observable in the `pending` state, because the add form links straight
+ * to the detail page.
+ *
+ * `source` is `'manual'`, which is the *opposite* call to the claim's and is
+ * deliberate. F17 chose `'shared'` so F9's collector level would not count a
+ * stranger's word as the claimer's. This is the inverse case: the user typed the
+ * foreign word, read the resolution and chose to keep it. It counts. A fourth
+ * `source` value here would quietly *remove* these words from the collector
+ * level — a badge regression wearing the costume of a schema tidy.
+ *
+ * The enrichment is not optional the way the claim's is. A lookup that produced
+ * no entry never reaches this function: the route answers the user instead, so
+ * there is no half-filled row to represent.
+ *
+ * **Can throw `23505`** against `UNIQUE (user_id, lower(term))` — the resolved
+ * English word may already be held. The caller catches and re-reads, exactly as
+ * the typed add path does; the duplicate logic is not forked.
+ */
+export async function createLookedUpVocabEntry(
+  userId: string,
+  term: string,
+  enrichment: {
+    partOfSpeech: string;
+    pronunciation: string;
+    definition: string;
+    examples: string[];
+  },
+  origin: VocabOrigin,
+): Promise<VocabEntry> {
+  const [row] = await db
+    .insert(vocabEntries)
+    .values({
+      userId,
+      term,
+      source: "manual" satisfies VocabSource,
+      partOfSpeech: enrichment.partOfSpeech,
+      pronunciation: enrichment.pronunciation,
+      definition: enrichment.definition,
+      examples: enrichment.examples,
+      enrichmentStatus: "ready" as const,
+      originTerm: origin.term,
+      originLanguage: origin.language,
+      originContext: origin.context,
+    })
+    .returning();
+  return row;
+}
+
+/**
+ * Attach an origin to a word the user already holds — the collision path, when
+ * `melumuri` resolves to a `smear` that is already in the collection.
+ *
+ * **Conditional on `origin_term IS NULL`, in the statement rather than in a
+ * read-then-write**, the same discipline as `claimEnrichment` and the chat's
+ * turn cap. Two lookups resolving to the same held word cannot both attach; the
+ * second matches nothing and is told what is already there.
+ *
+ * Returns `null` for all three of "no such row", "not yours" and "already has an
+ * origin", because one atomic statement cannot say which. The caller re-reads to
+ * tell them apart — and for this path the distinction barely matters, since the
+ * user is looking at the row either way.
+ */
+export async function attachOrigin(
+  userId: string,
+  id: string,
+  origin: VocabOrigin,
+): Promise<VocabEntry | null> {
+  const [row] = await db
+    .update(vocabEntries)
+    .set({
+      originTerm: origin.term,
+      originLanguage: origin.language,
+      originContext: origin.context,
+    })
+    .where(
+      and(
+        eq(vocabEntries.userId, userId),
+        eq(vocabEntries.id, id),
+        isNull(vocabEntries.originTerm),
+      ),
+    )
+    .returning();
+  return row ?? null;
 }
 
 export async function findEntryByNormalizedTerm(

@@ -7,6 +7,7 @@ import type {
   DismissCorrectionResponse,
   EnrichResponse,
   ListVocabResponse,
+  LookupVocabResponse,
   SuggestResponse,
   VocabDetailResponse,
   VocabStatus,
@@ -38,6 +39,66 @@ export function createEntry(
 
 export function enrichEntry(id: string): Promise<ApiResult<EnrichResponse>> {
   return request(`/api/vocab/${id}/enrich`, "POST");
+}
+
+/* ----------------------------- Non-English lookup --------------------------- */
+
+/**
+ * Resolve a foreign term to an English word. **Writes nothing** — the entry it
+ * returns is not a row and has no id, which is the whole difference between this
+ * and `createEntry`.
+ *
+ * The `lookup` string on a `resolved` answer is opaque here and stays that way:
+ * held, handed back, never read. It is an HMAC over the model's output, and the
+ * moment this file tried to interpret it the server's guarantee would become a
+ * suggestion.
+ */
+export function lookupTerm(
+  term: string,
+  context: string,
+): Promise<ApiResult<LookupVocabResponse>> {
+  return request("/api/vocab/lookup", "POST", {
+    term,
+    ...(context.trim() ? { context } : {}),
+  });
+}
+
+/**
+ * Keep a resolution. Same route as the typed add and the same response shape, so
+ * the duplicate and near-duplicate outcomes need no second handler in the form.
+ *
+ * `term` is sent for symmetry and is **not** what the row gets named — the
+ * server takes that from the signed token. Sending it makes the request legible
+ * in a network log; trusting it would defeat the signature.
+ */
+export function createEntryFromLookup(args: {
+  term: string;
+  originTerm: string;
+  originContext: string;
+  lookup: string;
+}): Promise<ApiResult<CreateVocabResponse>> {
+  return request("/api/vocab", "POST", {
+    term: args.term,
+    originTerm: args.originTerm,
+    ...(args.originContext.trim() ? { originContext: args.originContext } : {}),
+    lookup: args.lookup,
+  });
+}
+
+/**
+ * The collision path: the English word is already held, so attach the foreign
+ * word that led back to it rather than creating anything. A no-op when that row
+ * already carries an origin — one per row, first one wins.
+ */
+export function attachOriginToEntry(
+  id: string,
+  args: { originTerm: string; originContext: string; lookup: string },
+): Promise<ApiResult<CreateVocabResponse>> {
+  return request(`/api/vocab/${id}/origin`, "POST", {
+    originTerm: args.originTerm,
+    ...(args.originContext.trim() ? { originContext: args.originContext } : {}),
+    lookup: args.lookup,
+  });
 }
 
 export function acceptCorrection(
