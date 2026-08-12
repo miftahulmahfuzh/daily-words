@@ -189,10 +189,10 @@ export const BADGE_ART: Record<BadgeKey, BadgeArt> = {
     styleVersion: "v1",
   },
   friday_blessing: {
-    src: "/badges/friday_blessing.dc1593f9.webp",
-    small: "/badges/friday_blessing.dc1593f9.sm.webp",
-    sha256: "dc1593f9beccf92681a92661ca68108ba81bdbb4647b1ddb3bb3a6b9dd01c9c1",
-    plate: "#f6ebd3",
+    src: "/badges/friday_blessing.7a50b719.webp",
+    small: "/badges/friday_blessing.7a50b719.sm.webp",
+    sha256: "7a50b719d2b3333f05fe1b00e1cd67f68d5c2745e04e88a716689cf04094160f",
+    plate: "#efe9d8",
     styleVersion: "v1",
   },
 };
