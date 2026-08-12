@@ -95,6 +95,16 @@ export const BADGE_CATALOG = [
   // no title, `getProfileStats` drops it from the shelf with a warning, and
   // `stats:recompute --prune` deletes it.
   { key: "birthday", title: "A Man Needs a Card" },
+  // #22, and the second badge in the deck keyed on a plain day of the week.
+  // `sunday` is the first, and the two are `dow === 0` and `dow === 5` read off
+  // the same value — a rule written against the wrong constant still passes any
+  // single-date test, so `check-gamification.ts` pins the pair the way it
+  // already pins `dobby` (3, 30) against `dumbledore` (6, 30).
+  //
+  // The key names the trigger *and* what the day is for, which is a shade more
+  // than `sunday` spends. Kept deliberately: the title here is literal, and of
+  // the two the key should not be the more evocative.
+  { key: "friday_blessing", title: "Friday Blessing" },
 ] as const;
 
 export type BadgeKey = (typeof BADGE_CATALOG)[number]["key"];
@@ -305,6 +315,16 @@ export function evaluateBadges(ctx: BadgeContext): BadgeKey[] {
     const born = parseLocalDate(ctx.birthday);
     if (born.month === month && born.day === day) earned.push("birthday");
   }
+
+  // A card made on a Friday, in the zone the card was made in — `dow === 5`
+  // against the same value `sunday` reads as 0, twenty lines above.
+  //
+  // **Last in the function because it is last in the catalog.** This function's
+  // contract is that its order follows `BADGE_CATALOG`, which is also shelf
+  // order and toast order. Beside `sunday`'s line is where this reads most
+  // naturally and it would break that contract silently, on every card that
+  // earns more than one badge.
+  if (dow === 5) earned.push("friday_blessing");
 
   return earned;
 }
