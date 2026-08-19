@@ -66,3 +66,7 @@ assets/levels/_controls/*.centre.png
 # Python bytecode from tools/. One .pyc was committed by accident before this
 # line existed; it is untracked in the same commit.
 __pycache__/
+
+# Playwright's raw .webm, written by scripts/capture-media.ts and deleted by it
+# on the way out. Listed for the run that crashes between the two.
+/.media-tmp/
