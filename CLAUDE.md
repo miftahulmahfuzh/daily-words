@@ -103,6 +103,8 @@ npm run badges:check                     # F12's badge-art and F22's level-art m
 npm run stats:check                      # F9's streaks, levels, badges and reveal queue, plus F22's tier keys, offline
 npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
 npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay badges
+npm run demo:seed                        # the README's demo account; --clean removes it
+npm run demo:capture                     # rewrite docs/media/* from the running app
 ```
 
 `npm run stats:recompute` takes `--user=<uuid|email>`, `--all`, `--dry-run`,
@@ -110,6 +112,19 @@ npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay bad
 and refuses to combine with `--all` without `--force`. Run it after any change to
 `lib/gamification/badges.ts`, and never on a schedule — there is no cron in
 v0.1.0.
+
+`npm run demo:seed` and `npm run demo:capture` are the only two scripts in the
+list that serve the documentation rather than the app, and they are a pair: the
+seed writes one account under `barnaby@demo.invalid` with a fixed session token,
+and the capture drives a real browser against `localhost:3200` with that token in
+a cookie. **They photograph the real screens, never `/kitchen-sink`** — those
+fixtures carry a 35-character term and a 140-character definition on every row
+because their job is to prove no string can change a row's height, which is the
+right content to measure and the wrong content to put in a README. The seed goes
+through `createCard` and `recomputeUserGamification` for the same reason: a
+screenshot of a `user_stats` row written by hand is a screenshot of a state the
+app cannot produce. `docs/media/README.md` is the record, and re-shooting the set
+costs ninety seconds — do that rather than editing a PNG.
 
 `npm run journal:similarity` is how `NEAR_DUPLICATE_MAX_DISTANCE` was chosen and
 the only way to change it: the numbers are the deliverable, read against F15

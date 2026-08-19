@@ -10,6 +10,88 @@ change it as easily as flipping the back of our hand.
 Phone-first, iOS Safari specifically. One device held in one hand. Live at
 **[dword.site](https://dword.site)**.
 
+Six words a day, and **nothing is generated until you press the button** — no
+cron, no creation on page load, no card waiting for you when you open the app.
+The press is the exercise:
+
+<p align="center">
+  <img src="docs/media/today.gif" width="300" alt="The /today screen showing a dashed empty card reading “No card yet. Six words are waiting to be written out.” Pressing “Make today’s card” shows a spinner, then six words with their definitions fill the card, the streak pill moves from 13 to 14 days, and two badge reveals appear under it in turn.">
+</p>
+
+<p align="center"><em>Real capture: one real <code>POST /api/cards</code> against a seeded account. The six words are drawn from the collection by least-recently-shown, and the two badges under the card were earned by that press.</em></p>
+
+---
+
+## Demo
+
+Everything below is the running app at **375×667** — the iPhone SE 3rd gen the
+layout budget was measured against, which is also `playwright.config.ts`'s `se3`
+project — with a seeded account. `docs/media/README.md` says how to reproduce it.
+
+<table>
+<tr>
+<td width="33%" align="center">
+  <img src="docs/media/search.gif" width="230" alt="Typing “shadow” into the Collection's search field filters twenty-nine words down to penumbra, matched on its definition rather than its term; clearing it and typing “polite” leaves genteel.">
+  <br><strong>Search by meaning</strong><br>
+  <sub>Typing issues no request at all.<br>“shadow” finds <em>penumbra</em> by its definition.</sub>
+</td>
+<td width="33%" align="center">
+  <img src="docs/media/profile.gif" width="230" alt="Tapping the streak level row on /profile opens a dialog with the Margin Scribbler panel illustration and its rule; scrolling to the badge shelf and tapping National Speaker opens the same dialog with that badge's medal and the day it was earned.">
+  <br><strong>Levels and badges</strong><br>
+  <sub>One <code>&lt;dialog&gt;</code> for both.<br>Seventeen panels, twenty-one medals.</sub>
+</td>
+<td width="33%" align="center">
+  <img src="docs/media/02-calendar.png" width="230" alt="The calendar for August 2026: ticks on the days a card was made, crosses on two missed days, a ring on today, dashes on the rest of the month, and “17 of 19 days” beneath the key.">
+  <br><strong>The record</strong><br>
+  <sub>Ticks, crosses, and the days<br>that have not happened yet.</sub>
+</td>
+</tr>
+<tr>
+<td width="33%" align="center">
+  <img src="docs/media/06-journal.png" width="230" alt="A journal entry reading “A fall in a pit, a gain in one’s wit”, its source note, and an insight panel with What It Means and three When It Applies lines, closing with “Written by the machine. Keep or discard.”">
+  <br><strong>Journal</strong><br>
+  <sub>The insight is generated once,<br>by an explicit tap. Never on load.</sub>
+</td>
+<td width="33%" align="center">
+  <img src="docs/media/05-chat.png" width="230" alt="The practice chat for “genteel”: the model opens with a scenario about a colleague's non-answer, the user misuses the word, and the model corrects it — genteel describes a manner, not a speed. Eight dots in the header count the turns.">
+  <br><strong>Practice</strong><br>
+  <sub>The model speaks first, in role.<br>Eight turns, then a verdict.</sub>
+</td>
+<td width="33%" align="center">
+  <img src="docs/media/09-share.png" width="230" alt="The public share page for petrichor: the wordmark, the term, its pronunciation and part of speech, the definition, two usage examples, and one full-width “Practise this word” action. No header, no tab bar, no owner identity.">
+  <br><strong>Shared, no session</strong><br>
+  <sub><code>/s/[slug]</code> — 80 bits of slug<br>is the whole capability.</sub>
+</td>
+</tr>
+</table>
+
+<details>
+<summary>The collection, a word, Discover, a past card, a claimed non-English lookup, and dark mode</summary>
+<br>
+<p align="center">
+  <img src="docs/media/03-vocab.png" width="245" alt="The Collection's Mine tab: a search field reading “Search 29 words”, then words grouped under initial letters with their definitions on one truncated line.">
+  &nbsp;&nbsp;
+  <img src="docs/media/04-word.png" width="245" alt="The word detail for petrichor: pronunciation, part of speech, definition, two usage examples, a Practise this word button, a Mastered toggle, and a live share URL with Copy link and Stop sharing.">
+  &nbsp;&nbsp;
+  <img src="docs/media/08-discover.png" width="245" alt="The Discover tab: a Pick a new word for me button above the line “Nothing here until you ask. The app does not choose for you.”, and two words kept from earlier suggestions.">
+</p>
+<p align="center">
+  <img src="docs/media/13-lookup.png" width="245" alt="The word detail for smear, showing an Added from block naming the Indonesian melumuri and the sentence it was looked up from.">
+  &nbsp;&nbsp;
+  <img src="docs/media/10-card.png" width="245" alt="A past card: 18 August 2026, “6 words”, the six rows as they were that day, and the card's own share URL.">
+  &nbsp;&nbsp;
+  <img src="docs/media/11-today-dark.png" width="245" alt="The same daily card rendered in dark mode.">
+</p>
+<p align="center">
+  <img src="docs/media/01-today.png" width="245" alt="The daily card as a still: six words with two lines each, the last-seven-days strip beneath it, and the tab bar.">
+  &nbsp;&nbsp;
+  <img src="docs/media/07-profile.png" width="245" alt="The profile screen: the Margin Scribbler and Shelf of Odds level rows with their illustrations, a four-cell stats grid reading 14, 21, 40 and 26, and the top of the badge shelf.">
+  &nbsp;&nbsp;
+  <img src="docs/media/12-share-card.png" width="245" alt="A shared daily card as a stranger sees it: the date, six words with definitions, and no owner identity anywhere.">
+</p>
+<p align="center"><em>Dark comes from <code>prefers-color-scheme</code>. There is no toggle, on purpose.</em></p>
+</details>
+
 ---
 
 ## What it does
@@ -22,7 +104,7 @@ Phone-first, iOS Safari specifically. One device held in one hand. Live at
 | `/vocab/new` | Add a word. One model call validates the term, corrects likely typos (`genteell` → *genteel*), and returns part of speech, pronunciation, a one-line definition and examples — all persisted on write. |
 | `/vocab/[id]/chat` | Proactive practice. The model speaks first, in role, with a scenario drawn from the user's profile, and steers them into using the word. Capped at eight turns, closing with a verdict. |
 | `/journal`, `/journal/[id]` | Paste a line worth keeping — *"a fall in a pit, a gain in one's wit"* — and ask, by an explicit tap, for an insight on its meaning and the situations it fits. Near-duplicates warn; they never block. |
-| `/profile` | Streaks, streak and collector levels with their illustrations, and fourteen badges with their medals. |
+| `/profile` | Streaks, streak and collector levels with their illustrations, and twenty-one badges with their medals. |
 | `/s/[slug]`, `/s/[slug]/[1..6]` | Public share pages for a word, a daily card, one word of a card, or a journal entry. No session required. |
 | `/s/[slug]/claim` → `/claim` | A stranger follows a shared word, signs in with Google, and the word is theirs — with the sharer's enrichment copied and zero model calls. |
 | `/onboarding` | Five questions, one per screen, every one skippable. Timezone is detected, never asked. |
@@ -105,7 +187,15 @@ npm run typecheck      # tsc --noEmit
 npm run lint
 npm run build
 npm run test:layout    # Playwright, boots its own dev server on 3200
+
+npm run demo:seed      # the demo account the README's media was shot against
+npm run demo:capture   # rewrite docs/media/* from the running app
 ```
+
+`demo:seed` and `demo:capture` are the only two scripts here that exist for the
+documentation rather than for the app; `docs/media/README.md` is the long
+version, including why they photograph the real screens rather than
+`/kitchen-sink`'s deliberately hostile fixtures.
 
 Beyond that, each feature ships its own verification script, and the suffix says
 what it costs:
@@ -205,7 +295,7 @@ anything. The short version:
 
 ## Badge and level art
 
-Two decks of raster art, generated offline and committed: fourteen circular badge
+Two decks of raster art, generated offline and committed: twenty-one circular badge
 **seals** and seventeen rectangular level **panels**, one per band in
 `STREAK_LEVELS` and `COLLECTOR_LEVELS`. Both come out of the same pipeline —
 `tools/gen_badge_art.py`, the `/generate-badge-art` skill, and a style contract

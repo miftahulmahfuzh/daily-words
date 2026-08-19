@@ -45,6 +45,8 @@
     "badges:check": "tsx scripts/check-badge-art.ts",
     "stats:check": "tsx scripts/check-gamification.ts",
     "stats:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-gamification-db.ts",
+    "demo:capture": "tsx --conditions=react-server --env-file=.env.local scripts/capture-media.ts",
+    "demo:seed": "tsx --conditions=react-server --env-file=.env.local scripts/seed-demo.ts",
     "stats:recompute": "tsx --conditions=react-server --env-file=.env.local scripts/recompute-stats.ts"
   },
   "dependencies": {
