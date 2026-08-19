@@ -21,6 +21,50 @@ processes and hides the actual problem. Two specific ways this bites:
 - `pkill -f "port 3298"` does not match `next dev --turbopack --port 3200 --port 3298`.
   Kill by pid, not by pattern.
 
+## Production runs in `sin1`, and `vercel.json` is the only thing saying so
+
+Neon is in `ap-southeast-1` — every connection string in `.env.local` and in the
+Vercel project reads `…c-3.ap-southeast-1.aws.neon.tech`. **`vercel.json` pins
+the functions to `sin1` so they run beside it.** The file has two lines and no
+other purpose; deleting it does not break a build, it just moves the whole app
+back across the Pacific.
+
+The project's dashboard setting still reads `serverlessFunctionRegion: iad1`
+(Washington DC) and always did. `regions` in `vercel.json` overrides it per
+deployment, which is why the file rather than the dashboard is the record: it
+lives in the repo, it is reviewable, and a preview deploy gets it for free.
+
+**This is the one performance property of the app that nothing in the code can
+show you.** It shipped wrong for the whole of v0.1.0 and nothing failed — the
+app was correct, every test was green, and each database round trip simply cost
+~230 ms instead of ~5. That is not a per-page tax but a per-*query* one, and
+this app's round trips are sequential: `/today` alone is `auth()`'s
+database-session lookup, then `getProfile`, then a second `auth()` inside the
+page, then `getCardContext`, then the card and streak batch — five-plus
+serialised crossings, ≈1.2 s of pure network, plus a cold postgres-js
+connection paying TCP, TLS and Postgres startup (~3 more crossings) on top.
+
+Verify a deploy rather than assuming it, because there is no other symptom:
+
+```bash
+curl -sI https://dword.site/signin | grep -i x-vercel-id
+# x-vercel-id: sin1::sin1::…   correct — edge and function both in Singapore
+# x-vercel-id: sin1::iad1::…   the regression: the edge is near the user, the function is not
+```
+
+Two things this deliberately does **not** change:
+
+- **The driver stays `postgres-js`.** The Neon HTTP driver
+  (`@neondatabase/serverless` + `drizzle-orm/neon-http`) is faster on a cold
+  cross-region call and is what the sibling expense-tracking repo uses, but it
+  has no interactive transactions and there are seven `db.transaction(…)` call
+  sites here — card creation, gamification, chat, profiles, vocab. The distance
+  was the bottleneck, never the driver.
+- **Sessions stay `strategy: 'database'`.** Each `auth()` is still a Neon round
+  trip (`src/lib/auth/session.ts` says so), which was a large share of the old
+  latency and is a rounding error at 5 ms. Switching to `'jwt'` would buy
+  little and would cost instant session revocation.
+
 ## Commands
 
 ```bash
