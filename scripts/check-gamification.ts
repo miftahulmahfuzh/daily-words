@@ -442,14 +442,14 @@ check(
 
 // #17. 2026-06-30 is a Tuesday and 1997-06-30 — the day itself — was a Monday,
 // so both expectations are about the date and nothing else.
-check('dumbledore  + 2026-06-30 (a Tuesday)', on({ cardDate: '2026-06-30' }), ['dumbledore'])
-check('dumbledore  + 1997-06-30, the day itself', on({ cardDate: '1997-06-30' }), ['dumbledore'])
-check('dumbledore  − 2026-06-29', on({ cardDate: '2026-06-29' }), [])
-check('dumbledore  − 2026-07-30 (right day, wrong month)', on({ cardDate: '2026-07-30' }), [])
+check('voldy       + 2026-06-30 (a Tuesday)', on({ cardDate: '2026-06-30' }), ['voldy'])
+check('voldy       + 1997-06-30, the day itself', on({ cardDate: '1997-06-30' }), ['voldy'])
+check('voldy       − 2026-06-29', on({ cardDate: '2026-06-29' }), [])
+check('voldy       − 2026-07-30 (right day, wrong month)', on({ cardDate: '2026-07-30' }), [])
 check(
-  'dumbledore  + midnight_oil at 00:30, which is when it happened',
+  'voldy       + midnight_oil at 00:30, which is when it happened',
   on({ cardDate: '2026-06-30', localHour: 0 }),
-  ['midnight_oil', 'dumbledore'],
+  ['midnight_oil', 'voldy'],
 )
 
 // #18. 2026-03-30 and 1998-03-30 are both Mondays. The 29th is a Sunday in 2026,
@@ -467,7 +467,7 @@ check('dobby       − 2026-03-31 (the funeral, not the death)', on({ cardDate: 
   const june = on({ cardDate: '2026-06-30' })
   check('30 March and 30 June do not leak into each other', [march, june], [
     ['dobby'],
-    ['dumbledore'],
+    ['voldy'],
   ])
 }
 
@@ -514,7 +514,7 @@ check('birthday    − the day before', on({ cardDate: '2026-08-10', birthday: '
 // declined the question stays in. It must be silent rather than lucky.
 check('birthday    − no birthday given', on({ cardDate: '2026-08-11', birthday: null }), [])
 // The transposition trap, the same one the `leap_day`/`tolkien` and
-// `dobby`/`dumbledore` pairs exist for. Compared the wrong way round, this fires
+// `dobby`/`voldy` pairs exist for. Compared the wrong way round, this fires
 // and every single-date assertion above still passes. Both directions, so neither
 // is the lucky one — and 2027 for the second, because 8 November 2026 is a Sunday.
 check(
@@ -541,7 +541,7 @@ check('birthday    − an empty string', on({ cardDate: '2026-08-11', birthday: 
 // **The pair is the point.** `sunday` reads `dow === 0` and this reads
 // `dow === 5` off the same value, so a rule written against the wrong constant
 // passes every single-date test you would think to write — the same trap the
-// `leap_day`/`tolkien` and `dobby`/`dumbledore` pairs already exist for, and
+// `leap_day`/`tolkien` and `dobby`/`voldy` pairs already exist for, and
 // the reason those two are asserted in both directions rather than once each.
 // The three dates below are one week in September 2026, so the contrast is
 // legible without arithmetic: the 11th is a Friday and the 13th is a Sunday.
@@ -615,7 +615,7 @@ check(
 check(
   'the third card of the week, on a thirty-day run, on 30 June',
   on({ cardDate: '2026-06-30', cardsThisLocalWeek: 3, runLength: 30 }),
-  ['three_in_a_week', 'thirty_day_streak', 'dumbledore'],
+  ['three_in_a_week', 'thirty_day_streak', 'voldy'],
 )
 
 check(

@@ -191,7 +191,7 @@ one per key in `BADGE_CATALOG`, twenty of them now — live in that skill's
 marker only counts when it is alone on its own line.
 
 **Three of the twenty masters were supplied by hand rather than generated**
-(`thirty_day_streak`, `dumbledore`, `birthday`), and their sidecars are the record
+(`thirty_day_streak`, `voldy`, `birthday`), and their sidecars are the record
 of what conforming one costs. The job is framing and tone, never redrawing: pad or
 crop to the anchor's seal radius, mirror-tile the ink-free margins rather than
 filling them flat, resample to 1024, then read `check_badge_art.py`. Two rules
@@ -201,6 +201,43 @@ and centring on its bounding box made both geometry checks worse), and **a scene
 line written after the fact does not reproduce the master**, which `birthday`'s
 says out loud because its vermilion is on the subject's cheeks where the style
 block forbids exactly that.
+
+**`voldy`'s master has been replaced once — 2026-08-28, the elder wand on
+the parapet for a supplied portrait — and a replacement is more than new bytes.**
+The subject changed, so `style.md`'s scene line, its line in the collision audit
+and the `birthday` paragraph that used to call itself the deck's only face all
+moved with it: a scene line still describing superseded art is the one drift
+`badges:check` cannot see, because it measures files and hashes and never reads
+prose. Three things that conform added to the two rules above. **The side of the
+square crop is solved for, not chosen** — measure the tool's reading of one trial
+crop and scale it, which took a 2116px trial at 42.2% to 2178px at the anchor's
+41.0% exactly. **A circle's centre is found by iterating 8a's own harmonic fit**
+rather than by a ruler, which is `birthday`'s rule generalised: fit, move the
+centre, refit. And **paper too dark is fixed the way paper too bright is**, one
+channel multiply — 1.02 here, a 3.8-point rise in plate luminance once the WCAG
+gamma is applied, where `thirty_day_streak` needed 0.975 in the other direction.
+
+**A badge key can also be RENAMED, and `dumbledore` → `voldy` is the worked
+example — 2026-08-28, in the same pass that replaced its art.** It is the only
+key in `BADGE_CATALOG` that has ever moved; `ibu`, `dobby`,
+`ten_journal_lines` and this badge itself were all retitled instead, and the
+comments there say why. **That argument was paid rather than overruled.** The key
+is the value in `badges_awarded.badge_key`, so the rename is entirely a data
+change: it emits **no DDL** — `npm run db:generate` must stay silent, exactly as
+it does for a widened `$type<>` union — and `drizzle-kit generate --custom` is
+therefore the only way to write it. `drizzle/0009_rename_dumbledore_badge_key.sql`
+is that file, guarded with a `NOT EXISTS` against `badges_awarded_uniq` so a
+second pass is a no-op rather than an error, and it leaves a colliding old row
+alone rather than deleting it. **Skipping the migration throws nowhere**: a row
+under a dead key is inert, so the whole cost of forgetting it is a badge silently
+missing from somebody's shelf, which is the reason retitling is still the
+default. The rest is the same sweep a removal needs, minus the index shift — the
+rule, the metadata, the scene line, the collision audit, the master **and its
+filename**, the sidecar, the `public/badges/*` pair (`make_badge_assets.py`
+generates the new names and warns about the old ones without touching them, so
+they go by hand), and `check-gamification.ts`'s pin of `dobby` (3, 30) against
+this key's (6, 30). A rename does **not** shift any index, which is the one thing
+that makes it cheaper than a removal.
 
 **A badge can also be removed, and `christmas` is the worked example.** Deleting a
 key from the *middle* of `BADGE_CATALOG` is the one edit the append-only rule does
