@@ -143,7 +143,7 @@ numerals, and numerals are text. Turn the face away.
 - tolkien: A plain heavy iron ring set down on a bare table beside a briar pipe gone cold, the ring's band entirely smooth and unmarked, a thin coil of smoke still rising from the bowl. VERMILION: a wax seal on the table beside the ring.
 - three_in_a_week: A wooden tally stick lying across a bare rule with three fresh notches cut into its upper edge and clean wood showing in each, a few curled shavings fallen beside it, and a clasp knife laid flat with its blade folded away. VERMILION: a short mark struck across the stick's near end.
 - thirty_day_streak: A plain steel sallet standing upright and alone on a bare rule, seen nearly in profile with its rounded skull toward the left and its long tapered tail sweeping back and down to the right, a low medial ridge running front to back over the crown, the single vision slit foreshortened to one short unbroken horizontal line at the brow with clear hammered metal above it and below it, the form built entirely from firm engraved contour with dense parallel cross-hatch under the tail and along the far side and stipple where the crown turns. VERMILION: one small dent low on the tail, struck a little off register from the green.
-- dumbledore: A single slender wand of elder wood lying at a slight angle across the flat coping stone of a high parapet, the wand's shaft tapering from a knobbled grip and interrupted along its length by three knobbed swellings where the wood once budded, the coping's blocks drawn in firm contour and running out of frame on both sides, with nothing below them but bare paper. VERMILION: a single short curled feather lying on the stone beside it.
+- voldy: A bust portrait of one bald man facing the viewer squarely, head and shoulders only, filling the seal's interior, the hairless skull finely crazed and the brow drawn down, the mouth open wide in the middle of a shouted word, the standing collar of a heavy robe closed around the throat and worked as a dense field, all of it built from fine engraved hatch with the paper left bare for the light on the crown and the cheekbones. VERMILION: one small dab on the left cheek.
 - dobby: A single knitted woollen sock, alone, laid out flat on a bare rule with its ribbed cuff turned back once, the knit drawn stitch by stitch in engraved line, the wool gone thin and open at the heel. VERMILION: a darn worked across that thin place in a coarser stitch.
 - five_shares: A squat earthenware flask, unstoppered, its stopper lying where it was set down, standing beside a folded travelling blanket on a bare road rule. VERMILION: a small spill running from the flask's lip onto the rule.
 - ten_journal_lines: A short length of heavy chain lying in a loose curve on a bare rule, its links interlocked and overlapping one another in one continuous unbroken run, each link a slightly different section from its neighbour — one round, one square, one flat and drawn out long — and the run ending in a last link lying free at the near end. VERMILION: a small bright mark on that last link.
@@ -160,7 +160,7 @@ noticing convergence on badge eleven:
 hand-and-pocket / fanned coupons / columns-and-mug / oil lamp /
 hourglass-and-ink-pot / mimosa-and-envelope / stage-and-stool / coiled wristwatch
 / microphone-and-pole / cupped hands / stack of leaves / hare-and-wall /
-ring-and-pipe / tally-stick-and-knife / helmet / wand-on-parapet / sock /
+ring-and-pipe / tally-stick-and-knife / helmet / one shouting face / sock /
 flask-and-blanket / open chain / one face.
 
 `door knocker` left this list with `christmas`, which was removed outright — key,
@@ -190,21 +190,27 @@ seven wooden tally sticks bound with twine is the prepared alternative.
   `tolkien`'s ring, and it is drawn as *unlike* links so that it cannot be
   mistaken for one at forty pixels.
 
-**A fourth, added when `dumbledore` was retitled `Avada Kedavra` and its scene
-went from spectacles to the Elder Wand.** The wand is now the second slender
-wooden object in the deck lying flat across a horizontal line, after
-`three_in_a_week`'s tally stick, and at forty pixels "one stroke on a band" is a
-fair description of both. Three things separate them and all three are in the
-lines: the tally stick lies on a thin bare rule with a knife and shavings beside
-it, so it reads as a cluster; the wand is alone on a thick course of masonry
-blocks; and the wand lies **at a slight angle** where the stick lies flat. That
-angle is doing double duty — it is also the only reason the wand does not merge
-into the coping's own horizontal contours, which was the failure mode this scene
-was rewritten to avoid. If the two converge anyway, `dumbledore` is the one to
-change, and the prepared alternative is the wand laid on the coping *with the
-half-moon spectacles folded shut beside it*: the spectacles are unmistakable,
-nothing else in the deck has them, and they were the scene here until v1's
-retitle.
+**A fourth, and it is now the sharpest one in the deck: `voldy` and
+`birthday` are both bust portraits.** That scene has moved twice — half-moon
+spectacles until the v1 retitle, then the Elder Wand lying on the parapet
+coping, and now a face, because a supplied master replaced the generated one on
+2026-08-28 and the scene line was rewritten from it. The wand's own adjacency
+argument (a second slender wooden object lying across a horizontal line, after
+`three_in_a_week`'s tally stick) is gone with it, and so is its prepared
+alternative; the spectacles are free again if this scene ever needs replacing.
+The key moved with the subject — this line read `- dumbledore:` until
+2026-08-28, and renaming a key costs a data migration, so read
+`assets/badges/voldy.txt` before doing it again.
+
+What separates the two portraits is in both lines and holds at forty pixels: one
+is a bald crown, a brow drawn down and a mouth open wide, carried by the dense
+standing collar of a heavy robe; the other is loose hair falling past the jaw and
+a closed, level face. The silhouettes differ before the faces do — one is an egg
+against a black field, the other a head inside its own hair — which is the level
+the shelf reads at. They are still the only two faces here, `first_card` and
+`ibu` being hands, so if a third portrait is ever proposed it should be refused
+rather than differentiated. If these two converge, `voldy` is the one to
+change.
 
 **`ten_journal_lines` says `interlocked and overlapping` because separated links
 are letters.** The first draft asked for a loose open S of unlike links "with the
@@ -262,24 +268,25 @@ under a conical extinguisher, on the grounds that a second flame after
 not hold a silhouette at 40 px. **The flame is still spoken for**, and a future
 scene line reaching for one should read that sentence first.
 
-**`birthday` is the only human face in the deck, and it is the only badge here
-whose art was supplied rather than generated.** The scene line above is a
-description of the master that exists — written *after* it, so that a
-regeneration has somewhere to start and `gen_badge_art.py`'s key-set check has
-its line — and it is deliberately a bust portrait: head and shoulders squarely
-on, the interior filled, nothing else in the frame. That is what keeps it apart
-from `first_card` and `ibu`, which are the deck's other pictures of a person and
-are both hands.
+**`birthday` was the first human face in the deck and is now one of two, beside
+`voldy`.** Both are supplied masters rather than generated ones, and in both
+cases the scene line above is a description of the master that exists — written
+*after* it, so that a regeneration has somewhere to start and
+`gen_badge_art.py`'s key-set check has its line. Both are deliberately bust
+portraits: head and shoulders squarely on, the interior filled, nothing else in
+the frame. That is what keeps them apart from `first_card` and `ibu`, which are
+the deck's other pictures of a person and are both hands.
 
-**And it contradicts the style block on one point, knowingly.** The ink rule three
-paragraphs up says the vermilion "never colours the subject"; this master's second
-pass is two small dabs high on the cheeks, which is exactly that. It is recorded
-here rather than smoothed over because the contradiction is the kind a generator
-resolves arbitrarily: **regenerating `birthday` from this scene line will not
-reproduce the supplied master**, and whoever does it must decide which of the two
-rules to keep before spending anything. The dabs are also the smallest vermilion
-in the deck — 0.07% against a wanted 0.02–3.00, so it passes, but only just, and
-on a mark that reads as colour on skin rather than as an object.
+**And both contradict the style block on the same point, knowingly.** The ink rule
+three paragraphs up says the vermilion "never colours the subject"; `birthday`'s
+second pass is two small dabs high on the cheeks and `voldy`'s is one dab on
+the left cheek, which is exactly that. It is recorded here rather than smoothed
+over because the contradiction is the kind a generator resolves arbitrarily:
+**regenerating either badge from its scene line will not reproduce the supplied
+master**, and whoever does it must decide which of the two rules to keep before
+spending anything. Those dabs are also the smallest vermilion in the deck —
+0.07% and 0.06% against a wanted 0.02–3.00, so both pass, but only just, and on
+a mark that reads as colour on skin rather than as an object.
 
 ---
 

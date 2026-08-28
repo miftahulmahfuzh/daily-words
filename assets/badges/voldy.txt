@@ -1,0 +1,164 @@
+badge:          voldy
+model:          supplied by hand (not gen_badge_art.py)
+style version:  v1
+reference:      assets/badges/_anchor.png
+size / quality: 1024x1024 / high
+image sha256:   73f3d85c6f29665d2ee9fdc4a6e3b7737fead1466e0c906aab88299e98149db4
+
+--- provenance ---
+THE SECOND SUPPLIED MASTER FOR THIS KEY, and it replaced the first one — the
+elder wand on the parapet coping, f815e53a..., conformed on 2026-08-11. Its
+sidecar is superseded by this file; the title "Avada Kedavra" was already
+correct for what is drawn here.
+
+THE KEY CHANGED WITH IT, `dumbledore` to `voldy`, on 2026-08-28, and that is the
+first key rename in the deck — `ibu` and `dobby` and this badge itself were all
+RETITLED rather than rekeyed, on the argument that the key is identity. The
+argument still holds; what changed is that the identity itself moved. The old
+key named the trigger (30 June, the day the man died, which is unchanged) and
+the new one names the subject drawn here, and it took a data migration —
+`drizzle/0009_rename_dumbledore_badge_key.sql` — to carry the awards across
+rather than orphan them. `assets/badges/dumbledore.{png,txt}` and
+`public/badges/dumbledore.f815e53a.*` are gone; nothing under the old name
+survives except this paragraph and the v0.2.0 changelog entry, which is history
+and was left alone.
+
+THE SUBJECT CHANGED, NOT ONLY THE ART. This master is a bust portrait of the
+man who is not named, mouth open in the middle of the curse — so the deck now
+carries two faces, and `style.md`'s scene line, its collision audit and its
+`birthday` paragraph were all rewritten to say so. The scene line was written
+FROM these bytes rather than the other way round and has never been sent; the
+prompt below is the v1 contract this art was measured against and the starting
+point for any regeneration, not what produced it. Nothing was redrawn.
+
+It arrived as avara-kedavra.png, 2048x2048 RGB, kept untouched at
+assets/badges/_candidates/voldy.supplied-source.png (that directory is
+gitignored, so it is a local record and not a shipped file), already in the
+deck's idiom:
+cream stock, one pine green ink, engraved hatch throughout, the double rule and
+the band of lozenges and dots, and a single vermilion mark. Two hard checks
+failed on the source and both were correctable without touching a line of the
+drawing:
+
+  - 1 geometry: 2048x2048 against the master size of 1024;
+  - 3 bare-paper edge: the four edge strips measured 76.8-78.3% against a
+    band of 78-96, i.e. the stock was very slightly too dark. Plate luminance
+    was 77.6% against the anchor's 81.1% — inside check 9b's 4.0 by 0.4 of a
+    point, which is exactly the margin that says "fix this now rather than
+    leave it for the next reading of the deck".
+
+So, in order:
+
+  - the ring is a true circle. Its centre was found by ITERATING the harmonic
+    fit that check 8a uses — 720 rays, median filter, solve for (dx, dy), move
+    the centre, repeat — rather than by a ruler across the outer rule, which is
+    `birthday`'s rule carried forward: centre a seal by what 8a measures. It
+    converged at (1021.9, 1012.8) in the source, 10.7px above the image's own
+    centre, with R = 875.1;
+  - a 2178px square was cropped around THAT centre, which is 130px larger than
+    the source and so needed padding on all four sides: 68 left, 77 top, 63
+    right, 54 bottom. The side length is not a taste: 2178 is what lands the
+    seal at the anchor's own radius, and it was solved for by measuring the
+    tool's reading of a 2116px trial (42.2% of image width) and scaling. The
+    padding is a mirror-tile of the ink-free margins rather than a flat fill,
+    as it was for the three earlier supplied masters and for the same reason —
+    a flat fill stops the paper tooth at a seam that sits inside the outer 5%
+    frame the plate is sampled from. Ink starts at row 94 and column 186 in the
+    source, so every reflected strip is pure paper;
+  - resampled to 1024x1024 (LANCZOS), then every channel multiplied by 1.02.
+    That is a 3.8-point RISE in plate luminance once the WCAG gamma is applied,
+    and it is the mirror image of thirty_day_streak's 0.975: paper too dark
+    rather than too bright, one number, no curve.
+
+Result against tools/check_badge_art.py: all hard checks pass, and the geometry
+is the closest agreement with the anchor in the deck alongside `birthday` —
+seal radius 41.0% vs the anchor's 41.0%, 0.0% drift; plate 81.4% vs 81.1%, 0.3
+of a point; 0.13% off centre. Edge strips 80.9-82.2%, spread 1.4. Palette
+agreement 100% with no unauthorised blue at all.
+
+Two things stand and neither is worth another pass:
+
+  - 9c mean colour distance 54.8 against a wanted 40.0, which is loose by
+    design — the subjects are supposed to differ, and a face differs more than
+    most. `birthday` sits at 57.5 for the same reason;
+  - 6 vermilion share 0.06%, inside the wanted 0.02-3.00 but near the bottom of
+    the deck's range. The second pass is ONE DAB ON THE LEFT CHEEK, which is
+    THE ONE PLACE THIS ART CONTRADICTS THE STYLE BLOCK — it says the vermilion
+    "never colours the subject". `birthday` contradicts it in precisely the same
+    way and it is recorded in style.md beside both scene lines, because a
+    regeneration has to choose between the two rules rather than discover the
+    conflict while spending.
+
+The .ring.png crop carries no lettering of any kind, which is what that crop is
+read for. It drifts across the strip because the outer rule is very slightly
+elliptical while the annulus sampler assumes a circle — the same reading
+`birthday` produced, and not a centring fault: 8a fits at 0.13%.
+
+Legibility at 40px is 51.1 stddev against a 16.0 floor. Like the master it
+replaces this subject is tonally heavy — the robe is a large dense field — so
+the pale head reads against it at shelf size, and this is still one of the
+darkest badges on the shelf.
+
+--- prompt as sent ---
+A single printed keepsake ticket, square, in the manner of a nineteenth-century
+letterpress ration coupon.
+
+FULL BLEED — THIS IS THE MOST IMPORTANT RULE. The ticket's own paper fills the
+entire image, edge to edge and corner to corner. Do not render a photograph of a
+ticket. No table, no desk, no background surface, no mat, no border of empty
+space, no drop shadow, no rounded corners, no torn or deckled edge, no curl, no
+white or black margin on any side. The image IS the paper.
+
+NO TEXT ANYWHERE. No title, no motto, no date, no year, no numeral, no initial,
+no monogram, no signature, no watermark, no ring of lettering around the seal,
+no glyph or mark that could be read as writing in any alphabet. The application
+prints the title beneath the picture. Any text is an automatic rejection.
+
+PAPER: flat, evenly toned cream stock, warm and very slightly grey — the colour
+of a clean index card, about 92 percent luminance, a touch of yellow in it,
+never bleached to pure white. A very fine paper tooth and nothing else: no
+stain, no foxing, no ring marks, no sepia, no tea-brown ageing, no scorched
+edge. This is fresh stock, printed this morning.
+
+THE SEAL: one circular impression, centred, occupying about 76 percent of the
+image width, with a quiet margin of bare paper all around it. Its edge is a
+double rule — one heavier line and one hair line — enclosing a narrow band. That
+band carries a repeating engraved chain of small lozenges and dots and nothing
+else; it never carries words. Inside the band sits this badge's own subject,
+alone, with generous space around it.
+
+INK: exactly two inks, the way a small press runs them.
+The first ink is a deep pine green, desaturated and quiet, near #2F5D50. It
+draws everything — the rules, the band, the subject, all of it.
+The second ink is a dull brick vermilion, near #8A3324, and it appears once and
+once only: a single small mark sitting very slightly off register from the
+green, the fingerprint of a second pass through the press. It never colours the
+subject and it never outlines anything.
+No third colour appears anywhere. Green ink, one vermilion mark, cream paper.
+
+RENDERING: line engraving. Every tone is built from engraved line — contour,
+cross-hatch, stipple — the way a dictionary plate or a banknote vignette is
+built, the ink sitting on the paper and biting very slightly into it. Even
+weight throughout, nothing darker than a firm mid-tone. No painting, no wash, no
+soft gradient, no airbrush, no glow, no bevel, no embossing, no metallic sheen,
+no three-dimensional rendering, no photographic realism, and no shadow anywhere
+inside the seal.
+
+TONE: quiet, dry, matter-of-fact, fond without sentiment. A clerk's object and a
+working desk, not an award. The vocabulary of this set is engraved line, plain
+rules, and ordinary things that have been used. It contains no ribbons, no
+rosettes, no laurel wreaths, no stars, no trophies, no cups, no crowns and no
+ticks.
+
+READ AT FORTY PIXELS. The application draws this forty pixels wide in a list and
+about two hundred and twenty in a panel. One clear silhouette, generous internal
+spacing, heavy enough line to survive the reduction, and no detail that exists
+only at full resolution.
+
+ONE SUBJECT, ITS OWN SUBJECT. The paper, the ring and the two inks belong to the
+whole set; what sits inside the ring belongs to this badge alone. Do not fall
+back on an open book, a quill, a wreath or a star as a default centre. Thirteen
+badges built from the same object is the way this set fails.
+
+SUBJECT FOR THIS BADGE: A bust portrait of one bald man facing the viewer squarely, head and shoulders only, filling the seal's interior, the hairless skull finely crazed and the brow drawn down, the mouth open wide in the middle of a shouted word, the standing collar of a heavy robe closed around the throat and worked as a dense field, all of it built from fine engraved hatch with the paper left bare for the light on the crown and the cheekbones. VERMILION: one small dab on the left cheek.
+

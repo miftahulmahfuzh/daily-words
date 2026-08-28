@@ -10,6 +10,36 @@ Entries name the feature plan (`F<n>`) that shipped the work, because the plans 
 Where a decision has a reconciliation number — `[R1]`, `[S3]` — it is cited rather
 than restated.
 
+## [Unreleased]
+
+**The `Avada Kedavra` badge is redrawn, and rekeyed `dumbledore` → `voldy`**
+
+- New master for the badge, supplied by hand rather than generated — the fourth
+  in the deck after `thirty_day_streak`, `birthday` and this badge's own first
+  one, and the second face on the shelf. The subject moved from the Elder Wand on
+  the parapet coping to a bust portrait of the caster, so `style.md`'s scene line
+  was rewritten *from* the master, and its collision audit and `birthday`
+  paragraph moved with it. Conformed to the v1 contract without redrawing a line:
+  cropped to 2178px around a ring centre found by iterating check 8a's own
+  harmonic fit, mirror-tiled padding, LANCZOS to 1024, then every channel ×1.02
+  because the stock was slightly too dark — the mirror of `thirty_day_streak`'s
+  0.975. All hard checks pass, with the deck's closest agreement to the anchor:
+  **0.0% seal-radius drift**, plate 81.4% against 81.1%, 0.13% off centre.
+- **The key was renamed, which no key in `BADGE_CATALOG` had ever been.** The old
+  one named the man who died on the trigger date; the art now draws the man who
+  casts the curse, and the trigger — 30 June — is unchanged. Renaming emits no
+  DDL, so the whole change is data:
+  `drizzle/0009_rename_dumbledore_badge_key.sql`, authored via
+  `drizzle-kit generate --custom`, idempotent, and guarded against
+  `badges_awarded_uniq`. It matched **0 rows** in production — nobody had made a
+  card on a 30 June yet — so no award was carried and none was lost. Retitling
+  remains the default; the comment in `badges.ts` says what the exception cost.
+- `assets/badges/voldy.{png,txt}`, `public/badges/voldy.73f3d85c.*`. The old
+  `public/badges/dumbledore.*` pair was deleted by hand, because
+  `make_badge_assets.py` warns about a file it does not recognise and leaves it
+  alone. The v0.2.0 entry below still names the old key: it is history and was
+  left as written.
+
 ## [v0.2.0] - 2026-08-12
 
 Thirty-four commits on top of the first release. Two user-facing features — a

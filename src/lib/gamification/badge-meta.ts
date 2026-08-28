@@ -127,7 +127,7 @@ export const BADGE_META: Record<BadgeKey, BadgeMeta> = {
     gloss:
       "The line belongs to a covered order who repeat it whenever somebody does the plainly correct thing, which is most of what a creed is for. Thirty days is about where a habit stops needing to be argued with. A missed day restarts the count and takes nothing away.",
   },
-  dumbledore: {
+  voldy: {
     condition: "A card made on 30 June, the day Albus Dumbledore died.",
     gloss:
       "Rowling took the incantation from an Aramaic phrase meaning let the thing be destroyed, and said abracadabra descends from the same root — a conjurer’s nonsense word with a killing curse for an ancestor. Spoken on the Astronomy Tower shortly after midnight on 30 June 1997, by the man who had been asked to speak it.",

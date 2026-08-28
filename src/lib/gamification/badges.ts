@@ -58,18 +58,28 @@ export const BADGE_CATALOG = [
   // `daily_cards`; see the note above `crossedMultipleOf` for what that costs.
   { key: "three_in_a_week", title: "Three Times the Charm" },
   { key: "thirty_day_streak", title: "This Is the Way" },
-  // Title names the incantation; the key still names the man, and stays that
-  // way for `ibu`'s reason above — it is the value in `badges_awarded`, in the
-  // art filename and in `style.md`'s scene list. The title carries no meaning
-  // for the reader who has not read the books, so `condition` names the day and
-  // the man instead of leaning on it.
-  { key: "dumbledore", title: "Avada Kedavra" },
+  // REKEYED, `dumbledore` to `voldy`, and it is the only key in this array that
+  // has ever moved. Every other correction here was a retitle — `ibu`, `dobby`,
+  // `ten_journal_lines` — on the argument three lines above: the key is the
+  // value in `badges_awarded`, in the art filename and in `style.md`'s scene
+  // list, so renaming it orphans every award already made under it.
+  //
+  // That argument was not overruled, it was PAID: the awards were carried across
+  // by `drizzle/0009_rename_dumbledore_badge_key.sql`, which is what a rename
+  // costs and the reason the default is still to retitle. What moved was the
+  // identity — the art is no longer the Elder Wand on the parapet but the face
+  // of the man who casts this curse, so a key naming the man who died on the
+  // trigger date now names neither the subject nor anything a reader would
+  // recognise in a recompute diff. The TRIGGER is unchanged: 30 June, and
+  // `condition` still names the day and the man rather than leaning on the
+  // title, which carries no meaning for a reader who has not read the books.
+  { key: "voldy", title: "Avada Kedavra" },
   // Retitled. The key stays `dobby` for `ibu`'s reason above. The old title
   // quoted the moment of the freeing and needed the sock to be known; this one
   // names the state instead, and is four of the six words on the stone that
   // `gloss` counts without quoting. The gloss is left alone deliberately: its
   // move is that the date is reconstructed rather than read, which the title
-  // does not spend — unlike `dumbledore` above, where it did.
+  // does not spend — unlike `voldy` above, where it did.
   { key: "dobby", title: "Dobby The Free Elf" },
   { key: "five_shares", title: "The Good Samaritan" },
   // Retitled. The key stays `ten_journal_lines` for `ibu`'s reason above — it is
@@ -99,7 +109,7 @@ export const BADGE_CATALOG = [
   // `sunday` is the first, and the two are `dow === 0` and `dow === 5` read off
   // the same value — a rule written against the wrong constant still passes any
   // single-date test, so `check-gamification.ts` pins the pair the way it
-  // already pins `dobby` (3, 30) against `dumbledore` (6, 30).
+  // already pins `dobby` (3, 30) against `voldy` (6, 30).
   //
   // The key names the trigger *and* what the day is for, which is a shade more
   // than `sunday` spends. Kept deliberately: the title here is literal, and of
@@ -268,13 +278,14 @@ export function evaluateBadges(ctx: BadgeContext): BadgeKey[] {
 
   // Albus Dumbledore, killed on the Astronomy Tower shortly after midnight on
   // 30 June 1997. "Shortly after midnight" is why the gloss can promise this
-  // one arrives with `midnight_oil` for anyone who keeps the hour.
-  if (month === 6 && day === 30) earned.push("dumbledore");
+  // one arrives with `midnight_oil` for anyone who keeps the hour. The key names
+  // the caster the art draws rather than the man who died — see the catalog.
+  if (month === 6 && day === 30) earned.push("voldy");
 
   // Dobby, killed at Shell Cottage on 30 March 1998; buried the next morning.
   // The books give no date — this is the Harry Potter Lexicon's reconstruction
   // from the Easter 1998 chronology, unlike `tolkien`, which is a fact about a
-  // real person. Note the pair: this is (3, 30) and `dumbledore` above is
+  // real person. Note the pair: this is (3, 30) and `voldy` above is
   // (6, 30). Written with the month dropped, either one fires on both days.
   if (month === 3 && day === 30) earned.push("dobby");
 
