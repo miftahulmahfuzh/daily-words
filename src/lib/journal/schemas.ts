@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { JOURNAL_SEARCH_MAX_CHARS } from "@/lib/journal/search";
 import {
   JOURNAL_PAGE_SIZE,
   JOURNAL_SOURCE_NOTE_MAX,
@@ -85,6 +86,18 @@ export const patchEntrySchema = z
  */
 export const listJournalQuerySchema = z.object({
   cursor: z.string().max(256).optional(),
+  /**
+   * The search, sliced rather than rejected — a pasted paragraph in the box
+   * should degrade to a search, not to an error page. `.catch("")` keeps the
+   * total-apart-from-the-cursor rule above: a `q` of the wrong type is no
+   * search, never a 400.
+   */
+  q: z
+    .string()
+    .trim()
+    .transform((s) => s.slice(0, JOURNAL_SEARCH_MAX_CHARS))
+    .catch("")
+    .optional(),
   limit: z.coerce.number().int().min(1).max(50).catch(JOURNAL_PAGE_SIZE),
 });
 

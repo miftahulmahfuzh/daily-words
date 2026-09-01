@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
-import { Screen, ScreenBody } from "@/components/layout/screen";
+import { Screen, ScreenBody, ScreenHeader } from "@/components/layout/screen";
 import { BackLink } from "@/components/layout/back-link";
 import { Button } from "@/components/ui/button";
+import { Pill } from "@/components/ui/pill";
 import { Eyebrow, Meta } from "@/components/ui/text";
 import { EntryRow } from "@/components/journal/entry-row";
 import { InsightPanel } from "@/components/journal/insight-panel";
@@ -21,7 +22,9 @@ import type { JournalEntryDto } from "@/lib/journal/schemas";
  * `?state=entry` draws the entry page with a ready insight; the default draws
  * the list. The composer is deliberately **not** here — it is a client component
  * with a live `POST` behind it, and a fixture that pretends to save is worse
- * than no fixture.
+ * than no fixture. [R23] moved it behind a pill, so what this fixture draws in
+ * its place is the header and the search field, which is the state `/journal`
+ * is actually in when a user arrives.
  */
 
 const TODAY = "2026-09-18";
@@ -120,11 +123,20 @@ export default async function KitchenSinkJournalPage({
         className="pb-3"
         top={
           <div className="pt-4.5 pb-3.5">
-            <h1 className="m-0 mb-3.5 text-2xl font-normal tracking-title">Journal</h1>
-            <div className="flex h-[46px] items-center rounded-[var(--r-field)] border border-rule bg-card px-3.5">
-              <span className="flex-1 text-base text-ink-3">Paste a line worth keeping</span>
+            <ScreenHeader
+              className="pb-3.5"
+              title="Journal"
+              trailing={
+                <Pill tone="ink" mono className="h-9">
+                  + Line
+                </Pill>
+              }
+            />
+            <div className="flex h-10 items-center gap-2 rounded-[var(--r-field)] border border-rule bg-card px-3.5">
+              <span className="font-mono text-mono-md text-ink-3">/</span>
+              <span className="flex-1 text-base text-ink-3">Search your lines</span>
             </div>
-            <Meta className="block pt-2">Composer is inert here — see /journal.</Meta>
+            <Meta className="block pt-2">Header and search are inert here — see /journal.</Meta>
           </div>
         }
       >

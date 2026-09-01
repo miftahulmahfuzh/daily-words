@@ -89,12 +89,27 @@ test.afterEach(async ({ page }) => {
  * than hoped for: the symptom without this is three tests timing out on
  * `getByLabel`, which reads as a broken composer.
  */
+/**
+ * Land on `/journal` **with the composer open**.
+ *
+ * [R23] put it behind a pill, so the tap is not incidental setup — without it
+ * every locator below resolves to nothing and the failure reads as a missing
+ * composer rather than as a closed one. The pill is a toggle, so it is only
+ * tapped when the composer is not already showing: `hasDraft()` opens it on
+ * mount, and a run that inherits a draft from a previous test would otherwise be
+ * closed by its own setup.
+ */
 async function openJournal(page: Page) {
   await page.goto("/journal");
   expect(
     new URL(page.url()).pathname,
     "the session's profile has never been asked its birthday — see the note at the top of this file",
   ).toBe("/journal");
+
+  if (!(await composer(page).isVisible())) {
+    await page.getByRole("button", { name: "+ Line" }).click();
+  }
+  await expect(composer(page)).toBeVisible();
 }
 
 const composer = (page: Page) => page.getByLabel("A line worth keeping");

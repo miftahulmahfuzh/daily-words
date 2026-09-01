@@ -33,7 +33,9 @@ export const runtime = "nodejs";
  *
  * `/journal` itself renders page 1 from the database in the server component;
  * this route serves `Load more` and nothing else, per the app's rule that a page
- * never fetches its own first paint.
+ * never fetches its own first paint. That holds under a search too — the field
+ * writes `?q=` to the URL and the server component renders the filtered page 1,
+ * so this route only ever appends to a page it did not draw.
  */
 export async function GET(req: Request): Promise<Response> {
   const auth = await requireApiUser();
@@ -42,7 +44,7 @@ export async function GET(req: Request): Promise<Response> {
   const params = new URL(req.url).searchParams;
   const query = listJournalQuerySchema.safeParse(Object.fromEntries(params));
   if (!query.success) return fail(400, "Could not read that request.", "invalid_query");
-  const { cursor: rawCursor, limit } = query.data;
+  const { cursor: rawCursor, limit, q } = query.data;
 
   const cursor = rawCursor ? decodeCursor(rawCursor) : null;
   if (rawCursor && !cursor) {
@@ -51,7 +53,15 @@ export async function GET(req: Request): Promise<Response> {
 
   const timezone = await getUserTimezone(auth.user.id);
   // limit + 1 probes for a further page without a second count query.
-  const rows = await listEntries(auth.user.id, { cursor, limit: limit + 1 });
+  // `q` is threaded through with the cursor and not instead of it: page 2 of a
+  // search must be filtered by the same string page 1 was, or the rows arrive in
+  // the right order and do not belong. `lib/journal/client.ts` is what has to
+  // send it, and `journal:check` asserts that it does.
+  const rows = await listEntries(auth.user.id, {
+    cursor,
+    limit: limit + 1,
+    q: q || undefined,
+  });
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1];

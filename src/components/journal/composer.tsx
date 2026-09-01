@@ -6,9 +6,9 @@ import { TextInput } from "@/components/ui/text-input";
 import { Meta } from "@/components/ui/text";
 import { DuplicateWarning } from "@/components/journal/duplicate-warning";
 import { cn } from "@/lib/ui/cn";
+import { clearDraft, readDraft, writeDraft } from "@/lib/journal/draft";
 import { counterFor } from "@/lib/journal/format";
 import {
-  JOURNAL_DRAFT_KEY,
   JOURNAL_SOURCE_NOTE_MAX,
   JOURNAL_TEXT_MAX,
   JOURNAL_TEXT_MIN,
@@ -20,14 +20,26 @@ import {
 import type { DuplicateMatchDto } from "@/lib/journal/schemas";
 
 /**
- * The whole point of `/journal`: a textarea that is always there.
- *
- * Not behind a button, a sheet or a FAB — [R3], and the reason `/journal` is the
- * one tab the app's add affordance skips. Paste, one tap, done.
+ * The whole point of `/journal`: a textarea, and as little else as possible.
  *
  * Everything below the textarea is hidden until there is text: no source-note
  * field, no counter, no Save. An empty composer is one field and a placeholder,
  * which is the screen a user opens forty times without saving anything.
+ *
+ * **Originally: "not behind a button, a sheet or a FAB — [R3], and the reason
+ * `/journal` is the one tab the app's add affordance skips. Paste, one tap,
+ * done."** That paragraph is kept rather than deleted because it is the argument
+ * [R23] had to answer, and the answer is narrower than a reversal: the composer
+ * is now expanded by a pill on the journal's header, and [R3]'s actual concern —
+ * two competing add affordances on one screen — is still honoured, because there
+ * is exactly one and it is that pill. What the move cost is one tap and the
+ * mount-time draft restore below, and the second is why `lib/journal/draft.ts`
+ * exists: `JournalFeed` asks it whether to open this component before the user
+ * has touched anything.
+ *
+ * Still true, and still load-bearing: this is not a modal, and [S4]'s warning is
+ * a block underneath it. `journal-duplicate.spec.ts` asserts `dialog[open]` has
+ * count 0.
  */
 
 const MIN_ROWS = 2;
@@ -110,28 +122,15 @@ export function Composer({
    * use this screen, and without this the paste would be gone on the way back.
    */
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(JOURNAL_DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw) as { text?: unknown; sourceNote?: unknown };
-      if (typeof draft.text === "string" && draft.text) setText(draft.text);
-      if (typeof draft.sourceNote === "string") setSourceNote(draft.sourceNote);
-    } catch {
-      // A corrupt draft is not worth a word to the user; the field is empty and
-      // that is a state they can act on.
-    }
+    const draft = readDraft();
+    if (!draft) return;
+    setText(draft.text);
+    setSourceNote(draft.sourceNote);
   }, []);
 
   /** Debounced so a fast typist is not writing to storage on every keystroke. */
   useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        if (!text && !sourceNote) sessionStorage.removeItem(JOURNAL_DRAFT_KEY);
-        else sessionStorage.setItem(JOURNAL_DRAFT_KEY, JSON.stringify({ text, sourceNote }));
-      } catch {
-        // Private mode, or a full quota. The draft is a convenience.
-      }
-    }, 300);
+    const timer = setTimeout(() => writeDraft({ text, sourceNote }), 300);
     return () => clearTimeout(timer);
   }, [text, sourceNote]);
 
@@ -175,11 +174,7 @@ export function Composer({
     setProblem(null);
     setDuplicate(null);
     if (wasReset) {
-      try {
-        sessionStorage.removeItem(JOURNAL_DRAFT_KEY);
-      } catch {
-        /* see above */
-      }
+      clearDraft();
       textRef.current?.focus();
     }
 

@@ -39,9 +39,23 @@ export function saveEntry(
   });
 }
 
-/** The cursor is opaque here on purpose — held, returned, never read. */
-export function listEntries(cursor: string): Promise<ApiResult<ListJournalResponse>> {
-  return request(`/api/journal?cursor=${encodeURIComponent(cursor)}`, "GET");
+/**
+ * The next page, under the same filter as the page before it.
+ *
+ * The cursor is opaque here on purpose — held, returned, never read. `q` is not:
+ * it must be the string the *current server render* was filtered by, and
+ * omitting it is the one bug in this feature that produces a plausible-looking
+ * list. The rows would come back in the correct `(created_at, id)` order and
+ * simply not match the search, appended under a filtered page 1 with nothing
+ * failing anywhere.
+ */
+export function listEntries(
+  cursor: string,
+  q?: string,
+): Promise<ApiResult<ListJournalResponse>> {
+  const params = new URLSearchParams({ cursor });
+  if (q) params.set("q", q);
+  return request(`/api/journal?${params.toString()}`, "GET");
 }
 
 export function getEntry(id: string): Promise<ApiResult<JournalEntryResponse>> {
