@@ -139,7 +139,14 @@ export const journalEntryDtoSchema = z.object({
   localDate: z.string(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
-  /** `updated_at` more than a second past `created_at`. Draws "· edited". */
+  /**
+   * The user changed this line and it has not been explained since. Draws
+   * "· edited".
+   *
+   * `updated_at` past `created_at` **and** `insightStatus !== 'ready'` — see
+   * `isEdited` in `lib/journal/serialize.ts` for why both halves are needed and
+   * which edge is deliberately left in.
+   */
   edited: z.boolean(),
 });
 

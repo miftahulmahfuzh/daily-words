@@ -260,6 +260,16 @@ export async function claimInsight(userId: string, id: string): Promise<InsightC
  *
  * `text` and `source_note` are never written here. This route may only ever move
  * insight state.
+ *
+ * **And `updated_at` is not written here either — F27.** That column answers
+ * "when did the *user* last change this", and it is what `edited` is derived
+ * from. Stamping it on a completion made every explained entry report itself as
+ * edited, on a line nobody had touched: `edited` came to mean "something
+ * happened to this row" rather than "a human changed this", which is the whole
+ * of the flag's purpose. Nothing else reads the column for freshness — the list
+ * orders and pages on `created_at` — so leaving it alone costs nothing and buys
+ * back the flag. `claimInsight` above never wrote it, which is why a `pending`
+ * row was already honest and only the two terminal writes were not.
  */
 export async function completeInsight(
   userId: string,
@@ -269,7 +279,7 @@ export async function completeInsight(
 ): Promise<JournalEntry | null> {
   const [row] = await db
     .update(journalEntries)
-    .set({ insight, insightStatus: "ready", updatedAt: NOW })
+    .set({ insight, insightStatus: "ready" })
     .where(
       and(
         eq(journalEntries.id, id),
@@ -282,7 +292,13 @@ export async function completeInsight(
   return row ?? null;
 }
 
-/** The same guard, for the failure path. `insight` is left exactly as it was. */
+/**
+ * The same guard, for the failure path. `insight` is left exactly as it was, and
+ * so is `updated_at` — see `completeInsight`. This is the write that made the
+ * gate in `toJournalEntryDto` insufficient on its own: a `failed` row is not
+ * `ready`, so a bumped clock here would have reported a never-edited entry as
+ * edited with nothing to clear it.
+ */
 export async function failInsight(
   userId: string,
   id: string,
@@ -290,7 +306,7 @@ export async function failInsight(
 ): Promise<JournalEntry | null> {
   const [row] = await db
     .update(journalEntries)
-    .set({ insightStatus: "failed", updatedAt: NOW })
+    .set({ insightStatus: "failed" })
     .where(
       and(
         eq(journalEntries.id, id),
