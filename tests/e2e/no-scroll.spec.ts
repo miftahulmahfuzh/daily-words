@@ -489,6 +489,43 @@ test("the journal list does not scroll sideways and keeps its tab bar", async ({
 });
 
 /**
+ * [R23]'s header, measured the way F18 D3 had to be.
+ *
+ * That decision is the worked example of a header control that fitted on a
+ * calculation and did not fit in a browser: a 32px Share pill beside the streak
+ * pill was estimated against ~33px of slack, and a three-digit streak took
+ * `/today`'s header to 117px with the title wrapped. Every no-scroll assertion
+ * stayed green, because a two-line header still leaves rows above the 52px
+ * floor.
+ *
+ * `/journal` now carries a title and a `+ Line` pill on the same line. The claim
+ * is the same one, and it is asserted the same way — by measuring the header
+ * rather than by trusting the arithmetic.
+ */
+test("the journal header keeps its title and pill on one row", async ({ page }) => {
+  await page.goto("/kitchen-sink/journal");
+
+  const header = page.locator("header").first();
+  const title = header.getByRole("heading", { name: "Journal" });
+  await expect(title).toBeVisible();
+  await expect(header.getByText("+ Line")).toBeVisible();
+
+  const box = await header.boundingBox();
+  const line = await title.evaluate(
+    (el) => parseFloat(getComputedStyle(el).lineHeight) || el.getBoundingClientRect().height,
+  );
+
+  // One row plus the pill's own height, never a wrapped title. The pill is 36px
+  // (h-9) and the title's line box is smaller, so anything approaching two of
+  // them is the failure this exists to catch.
+  expect(box, "the journal header has no box").not.toBeNull();
+  expect(
+    box!.height,
+    `the journal header wrapped: ${box!.height}px against a ${line}px line`,
+  ).toBeLessThan(line * 2);
+});
+
+/**
  * F18's two additions.
  *
  * The eighteen assertions above now measure a `/kitchen-sink/today` fixture that

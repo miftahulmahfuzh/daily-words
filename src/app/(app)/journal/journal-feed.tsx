@@ -1,43 +1,145 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ScreenBody } from "@/components/layout/screen";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ScreenBody, ScreenHeader } from "@/components/layout/screen";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Pill } from "@/components/ui/pill";
 import { Eyebrow, Meta } from "@/components/ui/text";
 import { Composer, type SaveResult } from "@/components/journal/composer";
 import { EntryRow } from "@/components/journal/entry-row";
+import { JournalSearch } from "@/components/journal/journal-search";
 import { listEntries, saveEntry } from "@/lib/journal/client";
+import { hasDraft } from "@/lib/journal/draft";
 import { groupByDate } from "@/lib/journal/format";
 import { JOURNAL_SCROLL_KEY } from "@/lib/journal/limits";
-import { journalEntryHref } from "@/lib/journal/links";
+import { journalEntryHref, journalListHref } from "@/lib/journal/links";
+import { searchNeedle } from "@/lib/journal/search";
 import type { JournalEntryDto } from "@/lib/journal/schemas";
 import type { LocalDate } from "@/lib/time/local-date";
 
 /**
- * The composer and the list, in one component because they share one array.
+ * The header, the composer, the search and the list, in one component because
+ * they share one array and one question about the URL.
  *
  * A saved line appears at the top of the list before the request returns. The
  * screen promises "paste, tap, done", and a spinner where the row should be
  * would break that promise on exactly the connection where it matters — a phone
  * on a train.
+ *
+ * ## What [R23] changed, and the two traps in it
+ *
+ * The composer used to be drawn permanently at the top of this screen; it is now
+ * expanded by the `+ Line` pill on the header, and the search field takes the
+ * space it used to occupy. **The two are mutually exclusive**, which is a
+ * decision rather than a layout accident:
+ *
+ *   > Opening the composer clears the search.
+ *
+ * A user adding a line is not looking for one, and the alternative — preserving
+ * the query across a compose — has an edge case with no good answer, because the
+ * optimistic row inserted on save need not match the filter it lands in. Either
+ * the list lies about the query or the user cannot see the line they just wrote.
+ * It also keeps [R19]'s budget: the `top` block never holds both.
+ *
+ * **Trap 1 — the draft.** `Composer` restores a `sessionStorage` draft *on
+ * mount*, which is how a paste survives iOS discarding a backgrounded tab. Behind
+ * a pill it never mounts, so the restore never runs and the paste sits behind a
+ * button the user has no reason to press. `hasDraft()` in the mount effect below
+ * is the whole of the fix. It is an effect and not a `useState` initialiser
+ * because `sessionStorage` does not exist during the server render.
+ *
+ * **Trap 2 — `Load more` under a search.** The cursor is `(created_at, id)` and
+ * the filter is a separate WHERE, so an unfiltered page 2 comes back in the
+ * correct order and simply does not belong. `sync.seen`, not `query`, is what is
+ * sent — the rows on screen were selected by what the server last answered, not
+ * by what is in the box this instant.
+ *
+ * ## Why this navigates where `MineClient` does not
+ *
+ * The Collection's local mode writes the URL with `history.replaceState`, which
+ * is safe there only because the RSC tree for `/vocab` and `/vocab?q=gen` is the
+ * same tree. Here it is not: `q` filters the server render, so the field must
+ * actually navigate. That makes this the twin of `MineClient`'s *server* mode,
+ * including its two-field `sync` — `requested` is what we last asked the URL to
+ * become and `seen` is what the server last told us it is. They differ for a
+ * whole round trip, and storing both in one slot is the bug F19 exists to fix.
  */
 export function JournalFeed({
   initialEntries,
   initialCursor,
   today,
+  serverQ,
 }: {
   initialEntries: JournalEntryDto[];
   initialCursor: string | null;
   /** The user's local date, computed server-side. Drives Today / Yesterday. */
   today: LocalDate;
+  /** The search this page was rendered for. `""` when there is none. */
+  serverQ: string;
 }) {
+  const router = useRouter();
+
   const [entries, setEntries] = useState(initialEntries);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, setLoading] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [query, setQuery] = useState(serverQ);
+  const [sync, setSync] = useState({ requested: serverQ, seen: serverQ });
   /** Only ever used to key optimistic rows; never sent anywhere. */
   const optimisticId = useRef(0);
+
+  /**
+   * A new server answer arrived. React's documented "adjust state when a prop
+   * changes": a state update in the render body, which React re-runs
+   * immediately rather than committing.
+   */
+  if (serverQ !== sync.seen) {
+    const external = serverQ !== sync.requested;
+    setSync({ requested: serverQ, seen: serverQ });
+    // This drops an in-flight optimistic row on the floor. `handleSave` puts the
+    // real one back when its POST resolves — see the note there; recovering in
+    // the arm that has the saved entry is cheaper and more certain than trying
+    // to carry a temporary row across a list it may not belong in.
+    setEntries(initialEntries);
+    setCursor(initialCursor);
+    setProblem(null);
+    // Only an answer we did not ask for may overwrite the field — the back
+    // button, or a tap on the Journal tab from elsewhere in the app.
+    if (external) setQuery(serverQ);
+  }
+
+  /** See "Trap 1" above. Runs once; a draft written later is the user's own. */
+  useEffect(() => {
+    if (hasDraft()) setComposing(true);
+  }, []);
+
+  /** Debounced, then a real navigation — `q` changes the server render. */
+  useEffect(() => {
+    const next = searchNeedle(query);
+    if (next === sync.requested) return;
+    const timer = setTimeout(() => {
+      setSync((s) => ({ ...s, requested: next }));
+      // `replace`, not `push` — otherwise back walks the user through "g", "ge",
+      // "gen" instead of leaving the screen.
+      router.replace(journalListHref({ q: next }), { scroll: false });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query, sync.requested, router]);
+
+  const clearSearch = useCallback(() => setQuery(""), []);
+
+  const toggleComposer = useCallback(() => {
+    setComposing((open) => {
+      // Opening clears the search; closing leaves it alone, because a user who
+      // searched, added a line and closed the composer is back to where they
+      // were rather than somewhere new.
+      if (!open) setQuery("");
+      return !open;
+    });
+  }, []);
 
   async function handleSave(
     text: string,
@@ -81,7 +183,20 @@ export function JournalFeed({
     }
 
     const saved = result.data.entry;
-    setEntries((prev) => prev.map((e) => (e.id === tempId ? saved : e)));
+    setEntries((prev) => {
+      if (prev.some((e) => e.id === tempId)) {
+        return prev.map((e) => (e.id === tempId ? saved : e));
+      }
+      /**
+       * The optimistic row is gone, which means a server answer landed while
+       * this save was in the air — opening the composer clears the search, and
+       * that clear is a navigation. A blind `map` would find nothing and the
+       * line would be saved, real, and invisible until the next navigation,
+       * which is the one failure this screen must not have. Put it back, unless
+       * the render that replaced the list already contains it.
+       */
+      return prev.some((e) => e.id === saved.id) ? prev : [saved, ...prev];
+    });
     return { status: "saved" };
   }
 
@@ -90,7 +205,8 @@ export function JournalFeed({
     setLoading(true);
     setProblem(null);
 
-    const result = await listEntries(cursor);
+    // `sync.seen`, never `query`. See "Trap 2" above.
+    const result = await listEntries(cursor, sync.seen || undefined);
     setLoading(false);
 
     if (!result.ok) {
@@ -109,6 +225,11 @@ export function JournalFeed({
   }
 
   const groups = groupByDate(entries, today);
+  /**
+   * The query the rows on screen were actually selected by, so the empty state
+   * cannot describe a result that has not arrived yet.
+   */
+  const shownQuery = sync.seen;
 
   return (
     <ScreenBody
@@ -117,20 +238,53 @@ export function JournalFeed({
       // the server-rendered first page only: `loadMore` appends into state that
       // a re-mount does not have, so a deeper offset clamps to the bottom of
       // page one rather than replaying the fetches. F24 §4.
+      //
+      // F25's search does not disturb this. A `router.replace` keeps the tree
+      // mounted, and a re-mount under a different `?q=` restores an offset into
+      // a list that is genuinely a different list — but the pane is at the top
+      // whenever a search has just changed, because the field is in the
+      // non-scrolling `top` block and the rows below it are new.
       restoreScroll={JOURNAL_SCROLL_KEY}
       className="pb-3"
       top={
         <div className="pt-4.5 pb-3.5">
-          <h1 className="m-0 mb-3.5 text-2xl font-normal tracking-title">Journal</h1>
-          <Composer onSave={handleSave} />
+          <ScreenHeader
+            className="pb-3.5"
+            title="Journal"
+            trailing={
+              /* [R23]: the journal's one add affordance, and still not a FAB. */
+              <Pill
+                onClick={toggleComposer}
+                aria-expanded={composing}
+                tone="ink"
+                mono
+                className="h-9"
+              >
+                {composing ? "Close" : "+ Line"}
+              </Pill>
+            }
+          />
+          {composing ? (
+            <Composer onSave={handleSave} />
+          ) : (
+            <JournalSearch value={query} onChange={setQuery} />
+          )}
         </div>
       }
     >
       {entries.length === 0 ? (
-        <EmptyState
-          title="Nothing kept yet"
-          body="Paste a saying, a line from a book, anything worth keeping."
-        />
+        shownQuery ? (
+          <EmptyState
+            title="Nothing matches"
+            body={`No line or source contains “${shownQuery}”.`}
+            action={{ label: "Clear search", onClick: clearSearch }}
+          />
+        ) : (
+          <EmptyState
+            title="Nothing kept yet"
+            body="Paste a saying, a line from a book, anything worth keeping."
+          />
+        )
       ) : (
         groups.map((group) => (
           <div key={group.date}>
@@ -155,7 +309,7 @@ export function JournalFeed({
         ))
       )}
 
-      {/* A button, not infinite scroll: the list is under a fixed composer and
+      {/* A button, not infinite scroll: the list is under a fixed top block and
           above a fixed tab bar, and a scroll that keeps loading makes both
           harder to reach. */}
       {cursor && (

@@ -704,6 +704,37 @@ throwing. Each cost real time.
   `evaluateBadges` is pure for one reason: the live award path and
   `npm run stats:recompute` call it, and a replay that disagreed with what was
   awarded on the day would be unfixable.
+- **The journal's composer is behind a pill, and that is [R23] amending [R21].**
+  `/journal` now has `/vocab`'s shape — a `ScreenHeader` with a trailing `+ Line`
+  pill, and a search field where the composer used to sit permanently. The two
+  are **mutually exclusive**: opening the composer clears the search, because a
+  user adding a line is not looking for one, and because [R19]'s budget does not
+  stretch to both. This reverses one clause of [R21] and nothing else — there is
+  still no floating "+", `add-word-fab.tsx` is still not built, and the warning
+  under the composer is still a block rather than the app's one modal. Two things
+  bite here and neither throws. **`Composer` restores its `sessionStorage` draft
+  on mount**, so behind a pill it never runs and a paste that survived an iOS tab
+  discard is stranded: `JournalFeed` asks `hasDraft()` (`lib/journal/draft.ts`,
+  the only module that reads the key) and opens the composer itself. And **`Load
+  more` must carry `q`** — the cursor is `(created_at, id)` and the filter is a
+  separate WHERE, so an unfiltered page 2 comes back in the correct order and
+  simply does not belong. `journal:check` asserts both, plus that `loadMore`
+  sends `sync.seen` rather than what is in the box.
+- **The journal's search is server-side; the Collection's is not, and the
+  difference is arithmetic.** `MineTab` ships the whole collection below
+  `VOCAB_CLIENT_INDEX_MAX` (1,500) because a `VocabListItem` is ~220 bytes on the
+  wire. A `JournalEntryDto` carries up to `JOURNAL_TEXT_MAX` (1,000) characters
+  plus an insight of ~600, so the same ceiling would be ~1.5 MB — which is why
+  `lib/journal/search.ts` is the *smaller* module of the two: a needle rule and
+  the SQL written down, with no ceiling, no `matchesSearch` and no
+  `filterBySearch`, because nothing filters in the browser. `searchNeedle` trims
+  and slices but deliberately **does not lowercase** — its only consumer is a
+  parameter handed to Postgres, and lowercasing first would disagree with
+  `lower()` on the Turkish dotted I. The insight is not searched: it is the
+  machine's paragraph about the line, not the line. `JournalFeed` therefore
+  navigates (`router.replace`) where `MineClient`'s local mode calls
+  `history.replaceState`, and it carries that mode's two-field `sync` for the
+  same reason — `requested` and `seen` differ for a whole round trip.
 - **A journal near-duplicate warns; it never blocks and never loses a save**
   ([S4]). `POST /api/journal` checks before it inserts and answers
   `{ status: 'duplicate', match }` with **no row written**; "Keep it anyway"

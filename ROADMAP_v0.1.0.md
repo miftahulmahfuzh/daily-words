@@ -734,6 +734,11 @@ is not built and the app shell takes no `showAddButton` prop.**
 corner is no longer taken, so the constraint F3 §10 placed on the journal composer is
 void, though F10's own always-present textarea is unchanged and still correct.
 
+**Amended by [R23].** The last clause of that sentence no longer holds: the journal's
+composer is now reached from a pill on the journal's own header. Everything else in
+this ruling stands, including the refusal of a floating button — which is why [R23] is
+an amendment to this decision rather than a reversal of it.
+
 ---
 
 ### [R22] The badge table has fourteen rows. The fourteenth post-dates v0.1.0.
@@ -773,6 +778,47 @@ and dated to the historic day, on the next `npm run stats:recompute --all`.
 
 **Overrides:** nothing. It adds a row and supersedes F9's "thirteen badges, all
 thirteen from the roadmap, no additions".
+
+---
+
+### [R23] The journal's composer is reached from a pill on its header.
+
+Decided when the journal was revamped to match the Collection, on a direct user
+request: *"we need to revamp journal page UI to look like vocab page UI. so now, user
+can search journal quickly, and if user wants to add a new journal, they can click a
+button on top right."*
+
+This amends the one clause of [R21] that survived [R3]. [R3] gave the journal an
+always-present textarea so that the screen would not have two competing add
+affordances; [R21] deleted the floating button that was the other one, and kept F10's
+textarea on the grounds that nothing had asked it to move. Something has now asked.
+
+**Ruling:** `/journal` grows a `ScreenHeader` with a trailing `+ Line` pill, and the
+composer is expanded by that pill rather than drawn permanently. The search field
+takes the space the composer used to occupy, and the two are **mutually exclusive** —
+opening the composer clears the search, because a user adding a line is not looking
+for one, and because the [R19] budget does not stretch to both.
+
+Four things this does **not** change, each of which was checked rather than assumed:
+
+- **There is still no floating "+".** [R21]'s ruling that
+  `components/shell/add-word-fab.tsx` is not built, and that the app shell takes no
+  `showAddButton` prop, is untouched. This is a pill on a screen's own header, which
+  is the shape [R21] chose over a FAB in the first place.
+- **The composer itself is unchanged in substance** — same component, same draft
+  restore, same optimistic insert into the same list, same `Cmd+Enter`. What moved is
+  when it mounts.
+- **[S4]'s near-duplicate warning is still a block under the composer**, never the
+  app's one modal. A `<dialog>` was considered for the composer and rejected on that
+  rule; `journal-duplicate.spec.ts` asserts `dialog[open]` has count 0 and still does.
+- **The draft still survives a backgrounded tab.** A composer that only mounts on a
+  tap would never run F10's `sessionStorage` restore, so the feed asks
+  `lib/journal/draft.ts` whether a draft exists and opens the composer if it does.
+  That is the one silent failure this ruling introduced, and it is closed rather than
+  documented.
+
+**Overrides:** the final clause of [R21]'s Overrides paragraph, and F10 §"not behind a
+button, sheet, or FAB". F10's composer is otherwise unchanged.
 
 ---
 

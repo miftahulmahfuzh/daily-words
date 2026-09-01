@@ -39,7 +39,7 @@ is the only screen that passes it.
 | `Card` | `@/components/ui/card` | `{ as?, variant?: raised\|outline\|dashed, padding?: none\|sm\|md\|lg }` |
 | `ListRow` | `@/components/ui/list-row` | `{ href?, onClick?, leading?, title, subtitle?, trailing?, layout?: inline\|stacked, muted?, strikethrough?, divider? }` |
 | `Button` | `@/components/ui/button` | `{ variant?: filled\|outline\|quiet, size?: sm\|md\|lg, shape?: field\|pill, fullWidth?, href?, type?, loading?, disabled?, onClick? }` |
-| `Pill` | `@/components/ui/pill` | `{ href?, tone?: outline\|accent\|ink, mono? }` |
+| `Pill` | `@/components/ui/pill` | `{ href?, onClick?, tone?: outline\|accent\|ink, mono? }` — `href` renders a `Link`, `onClick` a real `<button>`, neither a `<span>`; both is a type error |
 | `Field` | `@/components/ui/field` | `{ id, label, hint?, error?, hideLabel? }` |
 | `TextInput` | `@/components/ui/text-input` | `{ variant?: boxed\|underline\|pill, leading?, trailing?, ref?, inputClassName? }` + all `<input>` props |
 | `TextArea` | `@/components/ui/text-area` | all `<textarea>` props |
@@ -69,8 +69,10 @@ is the only screen that passes it.
 | `RoundDivider` | `@/components/chat/round-divider` | `{ round, startedAt, timezone }` |
 | `VerdictCard` | `@/components/chat/verdict-card` | `{ content }` |
 
-`Chip` is the tappable sibling of `Pill` — same radius and tones, a real
-`<button>` with `aria-pressed` and a 44px floor. `ChipSelect` reports *which*
+`Chip` is the tappable sibling of `Pill` for *selection* — same radius and tones,
+a real `<button>` with `aria-pressed` and a 44px floor. `Pill`'s own `onClick`
+(added by [R23] for `/journal`'s add control) is a plain action and carries
+neither: an action that opens a composer is not a chip that is on or off. `ChipSelect` reports *which*
 chip was tapped and never computes the next selection; the caller applies
 `toggleCapped` / `toggleExclusive` from `@/lib/profile/selection` inside a
 functional `setState`. Deriving it inside the component loses taps that land

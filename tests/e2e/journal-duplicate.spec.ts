@@ -89,12 +89,27 @@ test.afterEach(async ({ page }) => {
  * than hoped for: the symptom without this is three tests timing out on
  * `getByLabel`, which reads as a broken composer.
  */
+/**
+ * Land on `/journal` **with the composer open**.
+ *
+ * [R23] put it behind a pill, so the tap is not incidental setup — without it
+ * every locator below resolves to nothing and the failure reads as a missing
+ * composer rather than as a closed one. The pill is a toggle, so it is only
+ * tapped when the composer is not already showing: `hasDraft()` opens it on
+ * mount, and a run that inherits a draft from a previous test would otherwise be
+ * closed by its own setup.
+ */
 async function openJournal(page: Page) {
   await page.goto("/journal");
   expect(
     new URL(page.url()).pathname,
     "the session's profile has never been asked its birthday — see the note at the top of this file",
   ).toBe("/journal");
+
+  if (!(await composer(page).isVisible())) {
+    await page.getByRole("button", { name: "+ Line" }).click();
+  }
+  await expect(composer(page)).toBeVisible();
 }
 
 const composer = (page: Page) => page.getByLabel("A line worth keeping");
@@ -147,7 +162,17 @@ test("the draft survives the tab being discarded, before and after a warning", a
   // tab", and iOS Safari discarding a backgrounded tab is a reload.
   expect(await page.evaluate(() => localStorage.getItem("journal:draft"))).toBeNull();
   await page.reload();
-  expect((await composer(page).inputValue()).trim()).toBe(REPASTE.trim());
+  /**
+   * Polled rather than read once, and [R23] is why. The restore now takes two
+   * commits: `JournalFeed` asks `hasDraft()` in an effect and only then mounts
+   * the composer, whose own effect reads the draft. A single `inputValue()`
+   * resolves as soon as the field exists, which is after the first of those and
+   * before the second — the field is genuinely on screen and genuinely empty for
+   * one frame. What is being asserted is unchanged: the draft comes back.
+   */
+  await expect
+    .poll(async () => (await composer(page).inputValue()).trim())
+    .toBe(REPASTE.trim());
   expect(await sourceNote(page).inputValue()).toBe("Chinese proverb");
 
   await saveAndSettle(page);
@@ -158,7 +183,9 @@ test("the draft survives the tab being discarded, before and after a warning", a
   // The restore must also re-arm the draft, or the *next* discard loses it
   // silently — the failure that leaves no trace at all.
   await page.reload();
-  expect((await composer(page).inputValue()).trim()).toBe(REPASTE.trim());
+  await expect
+    .poll(async () => (await composer(page).inputValue()).trim())
+    .toBe(REPASTE.trim());
 });
 
 test("Keep it anyway saves the line that collided, not what is on screen", async ({ page }) => {

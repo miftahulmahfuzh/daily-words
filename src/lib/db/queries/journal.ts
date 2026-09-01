@@ -35,6 +35,31 @@ import type { Insight } from "@/lib/journal/schemas";
 const NOW = sql`now()`;
 
 /**
+ * The search predicate: case-insensitive substring over the two fields the user
+ * wrote. `lib/journal/search.ts` is the prose record of the rule and why the
+ * insight is not among them.
+ *
+ * `position(... in ...)` rather than `ILIKE`, matching `matchesQuery` in
+ * `queries/vocab.ts` — it has no metacharacters, so a search for `100%` is a
+ * search for `100%` and there is no escape rule for a caller to forget.
+ *
+ * Deliberately **not** an index. The scan is bounded by `user_id` first and by
+ * `journal_entries_user_created_idx`'s range when a cursor is present; at the
+ * stated scale a trigram index would be an extension plus an index for no
+ * measurable gain, which is the same call `queries/vocab.ts` records.
+ *
+ * The filter is an extra WHERE and touches neither the ordering nor the cursor
+ * predicate, so page 2 of a filtered list is the same index range scan as page 2
+ * of an unfiltered one — provided the caller passes the same `q` to both. It is
+ * the caller that can get that wrong, and silently: the rows would arrive in the
+ * right order and simply not belong.
+ */
+const matchesEntryQuery = (q: string) => sql`(
+  position(lower(${q}) in lower(${journalEntries.text})) > 0
+  or position(lower(${q}) in lower(coalesce(${journalEntries.sourceNote}, ''))) > 0
+)`;
+
+/**
  * One page, newest first.
  *
  * `(created_at, id) DESC` is exactly `journal_entries_user_created_idx`, so both
@@ -46,9 +71,10 @@ const NOW = sql`now()`;
  */
 export async function listEntries(
   userId: string,
-  opts: { cursor?: JournalCursor | null; limit: number },
+  opts: { cursor?: JournalCursor | null; limit: number; q?: string },
 ): Promise<JournalEntry[]> {
   const where = [eq(journalEntries.userId, userId)];
+  if (opts.q) where.push(matchesEntryQuery(opts.q));
   if (opts.cursor) {
     where.push(
       // The cursor's `createdAt` is an ISO **string**, not a Date. A Date

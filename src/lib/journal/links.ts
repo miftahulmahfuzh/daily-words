@@ -18,8 +18,17 @@
  * whitelist, not writing a template literal here.
  */
 
-export function journalListHref(): string {
-  return "/journal";
+/**
+ * The list, optionally filtered.
+ *
+ * `q` is the search box's contents, already reduced by `searchNeedle`. Omitted
+ * or empty gives the bare `/journal`, which matters: `JournalFeed` compares the
+ * result against `location.pathname + location.search` before replacing it, and
+ * `/journal?q=` would never equal `/journal`.
+ */
+export function journalListHref(opts: { q?: string } = {}): string {
+  const q = opts.q?.trim();
+  return q ? `/journal?q=${encodeURIComponent(q)}` : "/journal";
 }
 
 export function journalEntryHref(id: string): string {

@@ -38,6 +38,8 @@ import {
   TOO_LONG_MESSAGE,
 } from '../src/lib/journal/limits'
 import { cursorFor, decodeCursor, encodeCursor } from '../src/lib/journal/cursor'
+import { JOURNAL_SEARCH_MAX_CHARS, searchNeedle } from '../src/lib/journal/search'
+import { journalListHref } from '../src/lib/journal/links'
 import {
   counterFor,
   dateGroupLabel,
@@ -618,6 +620,72 @@ check('only embed.ts names an embeddings endpoint', namesEmbeddingsUrl, ['lib/ll
 // read it. `EMBEDDING_API_KEY` is a separate variable holding a separate OpenAI
 // project key, which is what keeps this grep empty as a *property*.
 check('OPENAI_API_KEY appears nowhere under src/', files.filter((f) => readFileSync(f, 'utf8').includes('OPENAI_API_KEY')).map(rel), [])
+
+/* --------------------------- F24: header and search ------------------------- */
+
+section('searchNeedle — trim then slice, and lowercasing left to SQL')
+
+check('trims', searchNeedle('  godot  '), 'godot')
+check('slices to the ceiling', searchNeedle('x'.repeat(200)).length, JOURNAL_SEARCH_MAX_CHARS)
+check('trims before slicing', searchNeedle(' ' + 'x'.repeat(JOURNAL_SEARCH_MAX_CHARS) + ' ').length, JOURNAL_SEARCH_MAX_CHARS)
+check('never returns undefined', searchNeedle('   '), '')
+
+/**
+ * The one behavioural difference from `lib/vocab/search.ts`, asserted rather
+ * than left in a comment: that module lowercases because it also filters in JS.
+ * This one hands its result to Postgres, and lowercasing first would disagree
+ * with `lower()` on the inputs nobody tests.
+ */
+check('does NOT lowercase — SQL does', searchNeedle('Godot'), 'Godot')
+
+section('journalListHref — an empty search is the bare path')
+
+check('no search', journalListHref(), '/journal')
+check('empty string', journalListHref({ q: '' }), '/journal')
+check('whitespace only', journalListHref({ q: '   ' }), '/journal')
+check('a search', journalListHref({ q: 'godot' }), '/journal?q=godot')
+check('encoded', journalListHref({ q: 'a b&c' }), '/journal?q=a%20b%26c')
+
+section('listJournalQuerySchema — q degrades, never 400s')
+
+check('q is sliced, not rejected', listJournalQuerySchema.parse({ q: 'x'.repeat(200) }).q?.length, JOURNAL_SEARCH_MAX_CHARS)
+check('a junk q is no search', listJournalQuerySchema.parse({ q: { nope: 1 } }).q, '')
+check('absent q parses', listJournalQuerySchema.parse({}).q, undefined)
+check('q survives beside a cursor', listJournalQuerySchema.parse({ q: 'godot', cursor: 'abc' }).q, 'godot')
+
+section('the two failures that produce a plausible-looking screen')
+
+const feedSrc = readFileSync(join(SRC, 'app', '(app)', 'journal', 'journal-feed.tsx'), 'utf8')
+const clientSrc = readFileSync(join(SRC, 'lib', 'journal', 'client.ts'), 'utf8')
+
+/**
+ * Trap 2 in `journal-feed.tsx`. `Load more` under a search must send the string
+ * the server filtered by, not the one in the box: the cursor is `(created_at,
+ * id)` and the filter is a separate WHERE, so an unfiltered page 2 arrives in
+ * the correct order and simply does not belong. Nothing fails; the list is just
+ * wrong from row 31 down.
+ */
+check('the client can send q with a cursor', /q\?: string/.test(clientSrc) && clientSrc.includes("params.set(\"q\""), true)
+check('loadMore sends sync.seen, not query', /listEntries\(cursor, sync\.seen/.test(feedSrc), true)
+
+/**
+ * Trap 1. `Composer` restores its `sessionStorage` draft on mount, and [R23]
+ * put it behind a pill — so a paste that survived an iOS tab discard is stranded
+ * unless the feed opens the composer for it. This is the assertion that the fix
+ * is present at all, because its absence has no symptom a running app would show
+ * to its author.
+ */
+check('the feed opens the composer for an existing draft', feedSrc.includes('hasDraft()'), true)
+
+/**
+ * And the key itself lives in exactly one module. Two files reading
+ * `sessionStorage` with the same key is how their try/catch disciplines drift.
+ */
+const namesDraftKey = files
+  .filter((f) => readFileSync(f, 'utf8').includes('JOURNAL_DRAFT_KEY'))
+  .map(rel)
+  .sort()
+check('only limits.ts declares the draft key and only draft.ts reads it', namesDraftKey, ['lib/journal/draft.ts', 'lib/journal/limits.ts'])
 
 /* ---------------------------------------------------------------------------- */
 
