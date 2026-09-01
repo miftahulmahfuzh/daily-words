@@ -98,6 +98,10 @@ export function JournalFeed({
   if (serverQ !== sync.seen) {
     const external = serverQ !== sync.requested;
     setSync({ requested: serverQ, seen: serverQ });
+    // This drops an in-flight optimistic row on the floor. `handleSave` puts the
+    // real one back when its POST resolves — see the note there; recovering in
+    // the arm that has the saved entry is cheaper and more certain than trying
+    // to carry a temporary row across a list it may not belong in.
     setEntries(initialEntries);
     setCursor(initialCursor);
     setProblem(null);
@@ -178,7 +182,20 @@ export function JournalFeed({
     }
 
     const saved = result.data.entry;
-    setEntries((prev) => prev.map((e) => (e.id === tempId ? saved : e)));
+    setEntries((prev) => {
+      if (prev.some((e) => e.id === tempId)) {
+        return prev.map((e) => (e.id === tempId ? saved : e));
+      }
+      /**
+       * The optimistic row is gone, which means a server answer landed while
+       * this save was in the air — opening the composer clears the search, and
+       * that clear is a navigation. A blind `map` would find nothing and the
+       * line would be saved, real, and invisible until the next navigation,
+       * which is the one failure this screen must not have. Put it back, unless
+       * the render that replaced the list already contains it.
+       */
+      return prev.some((e) => e.id === saved.id) ? prev : [saved, ...prev];
+    });
     return { status: "saved" };
   }
 

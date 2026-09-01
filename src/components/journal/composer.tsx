@@ -124,8 +124,16 @@ export function Composer({
   useEffect(() => {
     const draft = readDraft();
     if (!draft) return;
-    setText(draft.text);
-    setSourceNote(draft.sourceNote);
+    /**
+     * The same `current === ""` guard `restore` below uses, and [R23] is why it
+     * is needed here too. The composer used to be in the first render of
+     * `/journal`; now `JournalFeed` mounts it only after its own effect has
+     * asked `hasDraft()`, so this restore lands one commit later and the field
+     * is briefly on screen and empty. A user who starts typing into that frame
+     * must not have it overwritten by a draft they have already replaced.
+     */
+    setText((current) => (current === "" ? draft.text : current));
+    setSourceNote((current) => (current === "" ? draft.sourceNote : current));
   }, []);
 
   /** Debounced so a fast typist is not writing to storage on every keystroke. */

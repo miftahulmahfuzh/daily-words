@@ -162,7 +162,17 @@ test("the draft survives the tab being discarded, before and after a warning", a
   // tab", and iOS Safari discarding a backgrounded tab is a reload.
   expect(await page.evaluate(() => localStorage.getItem("journal:draft"))).toBeNull();
   await page.reload();
-  expect((await composer(page).inputValue()).trim()).toBe(REPASTE.trim());
+  /**
+   * Polled rather than read once, and [R23] is why. The restore now takes two
+   * commits: `JournalFeed` asks `hasDraft()` in an effect and only then mounts
+   * the composer, whose own effect reads the draft. A single `inputValue()`
+   * resolves as soon as the field exists, which is after the first of those and
+   * before the second — the field is genuinely on screen and genuinely empty for
+   * one frame. What is being asserted is unchanged: the draft comes back.
+   */
+  await expect
+    .poll(async () => (await composer(page).inputValue()).trim())
+    .toBe(REPASTE.trim());
   expect(await sourceNote(page).inputValue()).toBe("Chinese proverb");
 
   await saveAndSettle(page);
@@ -173,7 +183,9 @@ test("the draft survives the tab being discarded, before and after a warning", a
   // The restore must also re-arm the draft, or the *next* discard loses it
   // silently — the failure that leaves no trace at all.
   await page.reload();
-  expect((await composer(page).inputValue()).trim()).toBe(REPASTE.trim());
+  await expect
+    .poll(async () => (await composer(page).inputValue()).trim())
+    .toBe(REPASTE.trim());
 });
 
 test("Keep it anyway saves the line that collided, not what is on screen", async ({ page }) => {
