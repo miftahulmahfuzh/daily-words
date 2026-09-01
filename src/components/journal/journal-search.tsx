@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef } from "react";
+import { ClearButton } from "@/components/ui/clear-button";
 import { TextInput } from "@/components/ui/text-input";
 import { JOURNAL_SEARCH_MAX_CHARS } from "@/lib/journal/search";
 
@@ -9,7 +11,8 @@ import { JOURNAL_SEARCH_MAX_CHARS } from "@/lib/journal/search";
  * `VocabSearch` is the model, down to holding no state, reading no router and
  * writing no URL — F19's bug was one component owning both "what we asked the
  * URL to become" and "what the server says it is", and the fix was to move all
- * three out. `JournalFeed` owns them here for the same reason.
+ * three out. `JournalFeed` owns them here for the same reason. The ref below is
+ * none of those three: a handle on the element, not a fact about the query.
  *
  * Two differences from the vocab twin, both deliberate:
  *
@@ -25,6 +28,12 @@ import { JOURNAL_SEARCH_MAX_CHARS } from "@/lib/journal/search";
  *
  * No clear button of its own: `type="search"` gives iOS Safari a native one, and
  * the no-matches empty state carries a "Clear search" action for everyone else.
+ *
+ * **Amended by F26**, in step with the vocab twin and for the reasons written
+ * out there: the argument above holds for the *empty* field and the mark is only
+ * drawn when there is a value, so nothing about the empty state changed. The
+ * clause it does not cover is a query that matches, where — outside iOS and
+ * desktop Safari — no clear affordance was on screen at all.
  */
 export function JournalSearch({
   value,
@@ -34,8 +43,11 @@ export function JournalSearch({
   /** Called with the raw field value. Normalisation is the parent's business. */
   onChange: (next: string) => void;
 }) {
+  const input = useRef<HTMLInputElement>(null);
+
   return (
     <TextInput
+      ref={input}
       type="search"
       name="q"
       value={value}
@@ -48,6 +60,17 @@ export function JournalSearch({
       className="h-10"
       inputClassName="h-10 text-body"
       leading={<span className="font-mono text-mono-md text-ink-3">/</span>}
+      trailing={
+        value ? (
+          <ClearButton
+            label="Clear search"
+            onClick={() => {
+              onChange("");
+              input.current?.focus();
+            }}
+          />
+        ) : null
+      }
     />
   );
 }

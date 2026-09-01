@@ -526,6 +526,54 @@ test("the journal header keeps its title and pill on one row", async ({ page }) 
 });
 
 /**
+ * F26's clear mark, measured for the reason the card said it had not been.
+ *
+ * The card that asked for it flagged the field's slack at 375px as unverified —
+ * the leading `/` glyph plus a trailing control inside a 40px field. Two claims,
+ * and only the second needed a new fixture state:
+ *
+ * - **The row does not grow.** The mark is a child of a row that is already 40px
+ *   tall, so it costs no height and [R19]'s budget is untouched. Asserted here
+ *   rather than argued, because "it costs no height" is exactly the kind of claim
+ *   F18 D3 made on a calculation and lost in a browser.
+ * - **The row does not wrap.** The mark takes 50px (40px square, 10px gap) out of
+ *   the input's width, and the default fixture draws the field *empty*, where
+ *   there is nothing to measure. `?q=` is that state.
+ *
+ * The Collection's field has no kitchen-sink route, but it is the same component
+ * at the same height inside the same 22px gutter, so this is the shared geometry.
+ */
+test("the journal search field keeps its clear mark on one 40px row", async ({ page }) => {
+  await page.goto("/kitchen-sink/journal?q=" + encodeURIComponent("gutter and the stars"));
+
+  const field = page.locator("[data-dw-search-field]");
+  const mark = page.locator("[data-dw-search-clear]");
+  await expect(field).toBeVisible();
+  await expect(mark).toBeVisible();
+
+  const fieldBox = await field.boundingBox();
+  const markBox = await mark.boundingBox();
+  expect(fieldBox, "the search field has no box").not.toBeNull();
+  expect(markBox, "the clear mark has no box").not.toBeNull();
+
+  // The field is `h-10`. A wrapped row is the failure; the border adds 2px.
+  expect(
+    fieldBox!.height,
+    `the search field grew to ${fieldBox!.height}px — it is h-10 plus a 1px border`,
+  ).toBeLessThanOrEqual(42.5);
+
+  // The mark sits on that row rather than under it, and inside it rather than
+  // spilling past the field's right edge — `-mr-3.5` cancels the padding exactly.
+  expect(markBox!.y + markBox!.height).toBeLessThanOrEqual(fieldBox!.y + fieldBox!.height + 0.5);
+  expect(markBox!.x + markBox!.width).toBeLessThanOrEqual(fieldBox!.x + fieldBox!.width + 0.5);
+
+  // 40x40: the largest square an h-10 field admits, and the kit's one documented
+  // exception to the 44px touch floor. A change here is a decision, not a nudge.
+  expect(markBox!.width).toBeCloseTo(40, 0);
+  expect(markBox!.height).toBeCloseTo(40, 0);
+});
+
+/**
  * F18's two additions.
  *
  * The eighteen assertions above now measure a `/kitchen-sink/today` fixture that

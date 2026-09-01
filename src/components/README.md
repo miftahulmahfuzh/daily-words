@@ -54,6 +54,7 @@ is the only screen that passes it.
 | `ToggleRow` | `@/components/ui/toggle-row` | `{ label, hint?, armedLabel?, checked, onChange, confirmOn? }` |
 | `Spinner` | `@/components/ui/spinner` | `{ size?: 16\|20\|24 }` |
 | `Skeleton` | `@/components/ui/skeleton` | `{ width?, height? }` |
+| `ClearButton` | `@/components/ui/clear-button` | `{ onClick, label, className? }` — for `TextInput`'s `trailing` slot |
 | `DailyCard` | `@/components/daily/daily-card` | `{ items: DailyCardItemView[], hrefFor?, shortCardAction? }` |
 | `NoCardYet` | `@/components/daily/no-card-yet` | `{ action }` |
 | `DayStrip` | `@/components/daily/day-strip` | `{ days: DayStripItem[], label? }` |
@@ -173,6 +174,18 @@ Obligations F2 placed on the other features still stand:
   Reviewable without a session or a database at
   `/kitchen-sink/share?state=short|long|noexamples`; the frame is asserted in
   `tests/e2e/share-frame.spec.ts`.
+- **F26** — `ClearButton` is the kit's first user of `TextInput`'s `trailing`
+  slot, which was specified for exactly this (`leading` says "A mark, not a
+  control"; `trailing` says "May be a control"). Two things about it are worth
+  finding here rather than by measuring. **Its hit area is 40×40, under the 44px
+  touch floor**, and that is the floor's one exception in the kit: both search
+  fields are `h-10`, so a 44px child overflows the field's border box by 2px top
+  and bottom. 40 is the largest square the field admits, and larger than the 36px
+  `+ Line` pill on the header above it. And **`globals.css` suppresses
+  `::-webkit-search-cancel-button`** — Chrome and Safari draw their own clear
+  control for `type="search"`, so without that rule these fields show two X marks
+  side by side. Neither `TextInput` nor `VocabSearch`/`JournalSearch` changed
+  shape: the mark is a `trailing` node, drawn only when the field has a value.
 - **F17** — that action is `<PractiseThisWord />`, a client component for one
   reason: it appends the browser's `detectTimeZone()` to the href on mount,
   because the claim completes onboarding and **writes may not fall back to a
