@@ -13,7 +13,7 @@ is genuinely needed, add it to `src/styles/tokens.css` or the `@theme` block in
 | Export | Path | Props |
 |---|---|---|
 | `Screen` | `@/components/layout/screen` | `{ tabs?, keyboardAware?, className, children }` |
-| `ScreenBody` | `@/components/layout/screen` | `{ top?, scroll?, padded?, className, children }` |
+| `ScreenBody` | `@/components/layout/screen` | `{ top?, scroll?, padded?, restoreScroll?, className, children }` |
 | `ScreenHeader` | `@/components/layout/screen` | `{ eyebrow?, title?, trailing?, className }` |
 | `BackLink` | `@/components/layout/back-link` | `{ href, label }` |
 | `TabBar` | `@/components/nav/tab-bar` | `{}` — rendered by `Screen`, never by a route |
@@ -22,6 +22,15 @@ is genuinely needed, add it to `src/styles/tokens.css` or the `@theme` block in
 Every page is one `Screen` as its outermost element. `Screen` is never nested.
 Nothing else may set `height: 100vh`, `position: fixed`, or `overflow` on `<body>` —
 those belong to `Screen`, and duplicating them is how the height budget breaks.
+
+`ScreenBody restoreScroll="<key>"` (F24) remembers that pane's offset for the tab
+session and puts it back when the screen mounts again, which is what makes back
+from a detail route land where the user was reading. Nothing here scrolls
+`window`, so neither the browser's scroll restoration nor Next's has anything to
+restore — see `layout/pane-scroll-memory.tsx`. **Opt in per screen**, never by
+default: a restored offset is right for a list being read down and wrong for a
+pane anchored somewhere, and the chat transcript sits at its bottom. `/journal`
+is the only screen that passes it.
 
 ## Components
 

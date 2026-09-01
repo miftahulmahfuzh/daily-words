@@ -9,6 +9,7 @@ import { Composer, type SaveResult } from "@/components/journal/composer";
 import { EntryRow } from "@/components/journal/entry-row";
 import { listEntries, saveEntry } from "@/lib/journal/client";
 import { groupByDate } from "@/lib/journal/format";
+import { JOURNAL_SCROLL_KEY } from "@/lib/journal/limits";
 import { journalEntryHref } from "@/lib/journal/links";
 import type { JournalEntryDto } from "@/lib/journal/schemas";
 import type { LocalDate } from "@/lib/time/local-date";
@@ -112,6 +113,11 @@ export function JournalFeed({
   return (
     <ScreenBody
       scroll
+      // Back from an entry lands where the user was reading. Restored within
+      // the server-rendered first page only: `loadMore` appends into state that
+      // a re-mount does not have, so a deeper offset clamps to the bottom of
+      // page one rather than replaying the fetches. F24 §4.
+      restoreScroll={JOURNAL_SCROLL_KEY}
       className="pb-3"
       top={
         <div className="pt-4.5 pb-3.5">

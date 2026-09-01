@@ -627,3 +627,123 @@ for (const scheme of SCHEMES) {
     await expect(page.locator("nav[aria-label='Primary']")).toHaveCount(0);
   });
 }
+
+/* --------------------------- F24: pane scroll memory ---------------------- */
+
+/**
+ * The journal list must come back where it was left.
+ *
+ * Nothing the platform offers can do this here: `Screen` scrolls an inner
+ * `.dw-pane-scroll` pane, so `window.scrollY` is permanently 0 and that is
+ * exactly what the browser's scroll restoration and Next's both restore. The
+ * whole feature is `PaneScrollMemory` writing the pane's offset into
+ * `sessionStorage`, and these two tests come at it from opposite ends.
+ *
+ * `?fill=24` is the fixture knob that makes the pane overflow; four entries do
+ * not fill 667px, and a scroll assertion on a pane that cannot scroll asserts
+ * nothing.
+ */
+const JOURNAL_SCROLL_STORAGE_KEY = "dw:scroll:journal:list";
+const JOURNAL_PANE = '[data-dw-scroll-key="journal:list"]';
+
+/** Polled, because the restore is a layout effect and runs at hydration. */
+const paneOffset = (page: Page, selector = JOURNAL_PANE) =>
+  expect
+    .poll(
+      () => page.locator(selector).first().evaluate((el) => Math.round(el.scrollTop)),
+      { timeout: 5_000 },
+    );
+
+/**
+ * End to end, as the bug was reported: scroll, open an entry, come back.
+ *
+ * Both navigations are **client-side**, and that is the point. A `goto` out and
+ * a `goBack` across two documents can be served from the back/forward cache,
+ * which restores the whole page — offset included — and the test would pass with
+ * none of this code present. A soft navigation tears the pane down and builds a
+ * new one, which is what the user actually hit.
+ *
+ * The click is dispatched in the page rather than through Playwright's, for a
+ * reason that would otherwise be a maddening flake: Playwright scrolls an
+ * element into view before clicking it, and scrolling the pane is the one thing
+ * this test must not do between setting the offset and leaving.
+ */
+test("the journal list comes back to where it was left", async ({ page }) => {
+  await page.goto("/kitchen-sink/journal?fill=24");
+
+  const pane = page.locator(JOURNAL_PANE);
+  await expect(pane).toHaveCount(1);
+
+  const scrollable = await pane.evaluate((el) => el.scrollHeight - el.clientHeight);
+  expect(
+    scrollable,
+    "the fixture's pane does not overflow, so there is no offset to lose",
+  ).toBeGreaterThan(200);
+
+  await pane.evaluate((el) => {
+    el.scrollTop = 180;
+  });
+  // The write is throttled to one animation frame; give it two to land.
+  await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
+  expect(
+    await page.evaluate((k) => sessionStorage.getItem(k), JOURNAL_SCROLL_STORAGE_KEY),
+    "scrolling the pane recorded nothing",
+  ).toBe("180");
+
+  // A row that is already on screen at this offset, followed the way the app
+  // follows it — a real click event, so Next intercepts the <Link>.
+  const followed = await pane.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const link = Array.from(el.querySelectorAll("a")).find((a) => {
+      const r = a.getBoundingClientRect();
+      return r.top >= box.top && r.bottom <= box.bottom;
+    });
+    if (!link) return false;
+    link.click();
+    return true;
+  });
+  expect(followed, "no row was fully visible at the scrolled offset").toBe(true);
+
+  // On the URL, not on the entry's text: that same line is in the list behind
+  // it, so a text assertion here passes before the navigation has happened and
+  // `goBack` then leaves from the wrong page. Measured, not guessed.
+  await page.waitForURL(/state=entry/);
+
+  await page.goBack();
+  await page.waitForURL(/fill=24/);
+  await expect(page.locator(JOURNAL_PANE)).toHaveCount(1);
+  await paneOffset(page).toBe(180);
+});
+
+/**
+ * And where that offset came from, which the test above cannot isolate.
+ *
+ * A seeded `sessionStorage` on a first visit: no history entry, no prior scroll,
+ * nothing any browser mechanism could restore from. If the pane lands at 240 it
+ * landed there because this feature put it there.
+ *
+ * The second half is the opt-in. `/kitchen-sink/profile` is a `ScreenBody scroll`
+ * that passes no `restoreScroll`, and it must sit at the top with that same key
+ * in storage. That is what keeps the prop a property rather than a convention —
+ * a default-on version of this would quietly move every pane in the app,
+ * including the chat transcript, which is anchored to its bottom.
+ */
+test("the offset is read from session storage, and only where it was asked for", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (seed: { key: string; value: string }) =>
+      sessionStorage.setItem(seed.key, seed.value),
+    { key: JOURNAL_SCROLL_STORAGE_KEY, value: "240" },
+  );
+
+  await page.goto("/kitchen-sink/journal?fill=24");
+  await paneOffset(page).toBe(240);
+
+  await page.goto("/kitchen-sink/profile");
+  await expect(page.locator(".dw-pane-scroll").first()).toBeVisible();
+  await expect(page.locator("[data-dw-scroll-key]")).toHaveCount(0);
+  await paneOffset(page, ".dw-pane-scroll").toBe(0);
+});
