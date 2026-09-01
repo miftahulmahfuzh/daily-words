@@ -140,6 +140,17 @@ async function main() {
     check('the claimed text does', completed?.insightStatus, 'ready')
     check('and the insight is stored as jsonb, not a string', completed?.insight, INSIGHT)
 
+    /* F27. The completion must not touch `updated_at`. That column answers "when
+       did the *user* last change this" and is what `edited` is derived from —
+       stamped here, every explained entry reported itself as edited on a line
+       nobody had touched. This is the assertion that keeps it true: it is a
+       property of the statement, and no offline check can see it. */
+    check(
+      'a completion leaves updated_at alone',
+      completed?.updatedAt.getTime(),
+      entry.updatedAt.getTime(),
+    )
+
     check('a ready row cannot be re-claimed', await claimInsight(userId, entry.id), null)
     check(
       'and a second completion cannot overwrite it',
@@ -158,6 +169,12 @@ async function main() {
     check('the status did not', noteEdited?.insightStatus, 'ready')
     check('nor the insight', noteEdited?.insight, INSIGHT)
     check('and updated_at moved', (noteEdited?.updatedAt.getTime() ?? 0) > entry.createdAt.getTime(), true)
+    // The other half of F27's rule: an edit is the one thing that still moves it.
+    check(
+      'because an edit is what moves it',
+      (noteEdited?.updatedAt.getTime() ?? 0) > (completed?.updatedAt.getTime() ?? 0),
+      true,
+    )
 
     section('an edit to the text clears it')
 
@@ -193,6 +210,14 @@ async function main() {
     check('the text is byte-identical', failed?.text, 'Nothing to be done.')
     check('the source note too', failed?.sourceNote, null)
     check('and nothing was written to insight', failed?.insight, null)
+    /* F27, and the half a gate on `insightStatus` alone cannot cover: `failed` is
+       not `ready`, so a bumped clock here would report a never-edited entry as
+       edited with nothing left to clear it. */
+    check(
+      'nor to updated_at',
+      failed?.updatedAt.getTime(),
+      stuck.updatedAt.getTime(),
+    )
     // 'failed' is claimable — that is what the Try again button relies on.
     check('a failed row can be retried', (await claimInsight(userId, stuck.id))?.text, 'Nothing to be done.')
 

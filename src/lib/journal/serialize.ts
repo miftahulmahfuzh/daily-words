@@ -48,6 +48,40 @@ export function parseStoredInsight(raw: unknown, id?: string): Insight | null {
 const EDITED_SLACK_MS = 1000;
 
 /**
+ * "The user changed this line and it has not been explained since" — F27.
+ *
+ * Two conditions, and neither is enough alone.
+ *
+ * The clock says a human wrote to the row: `updated_at` is now moved by
+ * `updateEntry` and by nothing else, because `completeInsight` and
+ * `failInsight` deliberately leave it (their comments carry the argument). While
+ * they did stamp it, every entry the user asked to explain came back marked
+ * "edited" — the flag meant "something happened here" rather than "a human
+ * changed this", which is exactly the complaint this replaces.
+ *
+ * The status says the change is still unexplained. Editing the text resets
+ * `insight_status` to `'none'` inside `updateEntry`'s single statement, so this
+ * needs no new column and no second timestamp: it reads state the edit already
+ * wrote. An insight generated afterwards clears the marker, which is what the
+ * card asked for — "edited" is a thing to be resolved, not a permanent scar.
+ *
+ * The known edge, decided narrowly (F27): editing **only** the source note of an
+ * entry that has no insight yet also says "edited", because nothing in the row
+ * distinguishes a note edit from a text edit after the fact. Separating them
+ * needs a `text_updated_at` column whose backfill would be a guess for every
+ * existing row. With an insight present the gate suppresses it either way, so
+ * the case is bounded by the entry's first insight.
+ *
+ * Consequence worth knowing rather than rediscovering: `edited` implies the
+ * list's dot, since the dot is drawn for everything that is not `ready`. The dot
+ * says *this one needs an insight*; "edited" says *because you changed it*.
+ */
+function isEdited(row: JournalEntry, status: JournalEntryDto["insightStatus"]): boolean {
+  if (status === "ready") return false;
+  return row.updatedAt.getTime() - row.createdAt.getTime() > EDITED_SLACK_MS;
+}
+
+/**
  * What the UI should draw, which is not always what the column says.
  *
  * Two readings, both deliberate, and neither writes to the database:
@@ -87,17 +121,21 @@ export function toJournalEntryDto(
   now: number = Date.now(),
 ): JournalEntryDto {
   const insight = row.insightStatus === "ready" ? parseStoredInsight(row.insight, row.id) : null;
+  // The *wire* status, not the column: a stalled `pending` reads `failed` here
+  // and an unreadable `ready` reads `none`, and `edited` must agree with what
+  // the screen is about to draw rather than with what the row happens to say.
+  const insightStatus = wireStatus(row, insight, now);
 
   return {
     id: row.id,
     text: row.text,
     sourceNote: row.sourceNote,
-    insightStatus: wireStatus(row, insight, now),
+    insightStatus,
     insight,
     localDate: toLocalDate(row.createdAt, timezone),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    edited: row.updatedAt.getTime() - row.createdAt.getTime() > EDITED_SLACK_MS,
+    edited: isEdited(row, insightStatus),
   };
 }
 

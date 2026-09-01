@@ -75,7 +75,14 @@ export function counterFor(text: string): { label: string; over: boolean } | nul
   };
 }
 
-/** The meta line under an entry: source note, date, and whether it was edited. */
+/**
+ * The meta line under an entry: source note, date, and whether it was edited.
+ *
+ * "edited" here is F27's meaning — changed and not yet re-explained — so it
+ * disappears once an insight covers the new text rather than staying for ever.
+ * The word is not repeated by the row's dot: the dot marks the *absence* of an
+ * insight, and this says the reason for it.
+ */
 export function entryMeta(entry: JournalEntryDto): string {
   const parts = [formatLocalDateShort(entry.localDate)];
   if (entry.sourceNote) parts.unshift(entry.sourceNote);

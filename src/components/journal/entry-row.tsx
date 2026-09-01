@@ -12,10 +12,21 @@ import type { JournalEntryDto } from "@/lib/journal/schemas";
  * There is no inline "read more" — the whole row is the tap target and the
  * entry page holds the full text.
  *
- * The trailing dot means "this one has been explained", and it is drawn for
- * `ready` only. `pending` and `failed` are states with an action attached, and
- * the action lives on the entry page; marking them in the list would be a
- * notification the user cannot act on from where they are standing.
+ * The trailing dot means "this one has **not** been explained yet", and it is
+ * drawn for everything that is not `ready` — F27 inverted it. Drawn for `ready`
+ * it marked the user's own diligence: someone who explains every line saw a dot
+ * on every line, and a mark that is always on carries nothing. Inverted it
+ * answers the only question the list can usefully answer about an insight, which
+ * is where to go next.
+ *
+ * `pending` and `failed` are dotted too, and the argument that used to exempt
+ * them does not survive the inversion. It was that they are states with an
+ * action attached, the action lives on the entry page, and marking them here
+ * would be a notification the user cannot act on from where they are standing.
+ * Under the new polarity the dot *is* the pointer to that page — tapping the row
+ * is the action, and Retry is waiting there. `pending` is momentary and correct
+ * while it lasts; `wireStatus` has already turned a stalled one into `failed`
+ * before this component sees it.
  */
 export function EntryRow({
   entry,
@@ -32,12 +43,12 @@ export function EntryRow({
       title={entry.text}
       subtitle={entryMeta(entry)}
       trailing={
-        entry.insightStatus === "ready" ? (
+        entry.insightStatus === "ready" ? undefined : (
           <>
             <span className="mt-1.5 size-[5px] shrink-0 self-start rounded-full bg-accent" />
-            <span className="sr-only">Has an insight</span>
+            <span className="sr-only">No insight yet</span>
           </>
-        ) : undefined
+        )
       }
     />
   );

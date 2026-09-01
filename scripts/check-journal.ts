@@ -248,6 +248,100 @@ const goodInsight = {
   ],
 }
 
+/* F27. `edited` means "the user changed this and it has not been explained
+   since", which is two conditions. The clock alone was the bug: `completeInsight`
+   used to stamp `updated_at`, so every entry the user asked to explain came back
+   marked "edited" on a line nobody had touched. */
+
+const edited = { updatedAt: new Date('2026-08-08T20:31:00.000Z') }
+const readyRow = { ...edited, insightStatus: 'ready', insight: goodInsight }
+
+// The gate. An explained line is not an edited one, however long ago it moved.
+check('an insight clears the marker', toJournalEntryDto(row(readyRow), 'UTC').edited, false)
+check('and the row still reads ready', toJournalEntryDto(row(readyRow), 'UTC').insightStatus, 'ready')
+
+// The half the gate cannot cover on its own, and the reason `failInsight` had to
+// stop writing the clock too: `failed` is not `ready`, so a bumped timestamp
+// there would report a never-edited entry as edited with nothing to clear it.
+check(
+  'a failure on an untouched row is not an edit',
+  toJournalEntryDto(row({ insightStatus: 'failed' }), 'UTC').edited,
+  false,
+)
+check(
+  'nor is a pending one',
+  toJournalEntryDto(row({ insightStatus: 'pending', insightRequestedAt: new Date('2026-08-08T20:30:05.000Z') }), 'UTC', Date.parse('2026-08-08T20:30:10.000Z')).edited,
+  false,
+)
+
+// An edit that has not been re-explained keeps saying so, whatever the status is,
+// as long as it is not `ready`.
+check(
+  'an edit awaiting an insight is edited',
+  toJournalEntryDto(row({ ...edited, insightStatus: 'none' }), 'UTC').edited,
+  true,
+)
+check(
+  'an edit whose insight failed is still edited',
+  toJournalEntryDto(row({ ...edited, insightStatus: 'failed' }), 'UTC').edited,
+  true,
+)
+
+// `wireStatus` runs first, so `edited` agrees with what the screen will draw
+// rather than with the column. A `ready` row whose stored insight will not parse
+// is drawn as `none` — and must therefore be allowed to say "edited" again.
+check(
+  'an unreadable insight reopens the marker',
+  toJournalEntryDto(row({ ...edited, insightStatus: 'ready', insight: { meaning: 42 } }), 'UTC').edited,
+  true,
+)
+// And a stalled `pending` reads `failed`, which is on the same side of the gate.
+check(
+  'a stalled pending edit is edited',
+  toJournalEntryDto(
+    row({ ...edited, insightStatus: 'pending', insightRequestedAt: new Date('2026-08-08T20:31:00.000Z') }),
+    'UTC',
+    Date.parse('2026-08-08T21:31:00.000Z'),
+  ).edited,
+  true,
+)
+
+/* F27's dot. `EntryRow` draws it for everything that is not `ready` — the mark
+   answers "which of these still needs an insight", so it is the negation of one
+   wire status and nothing more. Asserted here as the predicate rather than in a
+   layout test, because it is a rule about state, not about geometry. */
+
+section('the list dot')
+
+const dotted = (e: { insightStatus: string }) => e.insightStatus !== 'ready'
+
+check('a new line is dotted', dotted(toJournalEntryDto(row(), 'UTC')), true)
+check('an explained one is not', dotted(toJournalEntryDto(row(readyRow), 'UTC')), false)
+check('a failed one is dotted', dotted(toJournalEntryDto(row({ insightStatus: 'failed' }), 'UTC')), true)
+check(
+  'a pending one is dotted',
+  dotted(
+    toJournalEntryDto(
+      row({ insightStatus: 'pending', insightRequestedAt: new Date('2026-08-08T20:30:05.000Z') }),
+      'UTC',
+      Date.parse('2026-08-08T20:30:10.000Z'),
+    ),
+  ),
+  true,
+)
+// The consequence named in `isEdited`: every edited row is a dotted row. Stated
+// as a property over the statuses rather than as four more cases.
+for (const status of ['none', 'pending', 'ready', 'failed'] as const) {
+  const dto = toJournalEntryDto(
+    row({ ...edited, insightStatus: status, insight: status === 'ready' ? goodInsight : null, insightRequestedAt: new Date('2026-08-08T20:31:00.000Z') }),
+    'UTC',
+    Date.parse('2026-08-08T20:31:05.000Z'),
+  )
+  check(`edited implies dotted (${status})`, !dto.edited || dotted(dto), true)
+}
+
+section('toJournalEntryDto, continued')
+
 check(
   'a ready row carries its insight',
   toJournalEntryDto(row({ insight: goodInsight, insightStatus: 'ready' }), 'UTC').insight,
