@@ -1,7 +1,13 @@
-# F24 — The journal grows a header, an add button and a search
+# F25 — The journal grows a header, an add button and a search
 
 **Card:** [daily-words#3](https://github.com/miftahulmahfuzh/daily-words/issues/3)
 **Round 1**, 2026-09-01.
+
+Numbered **F25**, not F24: card #2 was in flight in a parallel session and took
+that number for `plans/F24-pane-scroll-memory.md`. The two met in a merge
+conflict on `journal-feed.tsx` and `kitchen-sink/journal/page.tsx`, and both
+sides are kept — its `restoreScroll` sits on the `ScreenBody` this plan
+rewrote.
 
 Two things the user asked for, in their words: *"user can search journal
 quickly, and if user wants to add a new journal, they can click a button on top

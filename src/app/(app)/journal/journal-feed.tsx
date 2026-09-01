@@ -13,6 +13,7 @@ import { JournalSearch } from "@/components/journal/journal-search";
 import { listEntries, saveEntry } from "@/lib/journal/client";
 import { hasDraft } from "@/lib/journal/draft";
 import { groupByDate } from "@/lib/journal/format";
+import { JOURNAL_SCROLL_KEY } from "@/lib/journal/limits";
 import { journalEntryHref, journalListHref } from "@/lib/journal/links";
 import { searchNeedle } from "@/lib/journal/search";
 import type { JournalEntryDto } from "@/lib/journal/schemas";
@@ -233,6 +234,17 @@ export function JournalFeed({
   return (
     <ScreenBody
       scroll
+      // Back from an entry lands where the user was reading. Restored within
+      // the server-rendered first page only: `loadMore` appends into state that
+      // a re-mount does not have, so a deeper offset clamps to the bottom of
+      // page one rather than replaying the fetches. F24 §4.
+      //
+      // F25's search does not disturb this. A `router.replace` keeps the tree
+      // mounted, and a re-mount under a different `?q=` restores an offset into
+      // a list that is genuinely a different list — but the pane is at the top
+      // whenever a search has just changed, because the field is in the
+      // non-scrolling `top` block and the rows below it are new.
+      restoreScroll={JOURNAL_SCROLL_KEY}
       className="pb-3"
       top={
         <div className="pt-4.5 pb-3.5">
