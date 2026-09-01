@@ -172,6 +172,19 @@ a:active {
   }
 }
 
+/* F26. Chrome and Safari draw their own clear control for `type="search"`; both
+   search fields now draw one of their own in `TextInput`'s trailing slot, and
+   without this the desktop browsers this app is reviewed in show two X marks
+   side by side. Total and narrow: `grep 'type="search"' src/` finds exactly the
+   two fields. In `@layer base` for consistency with the two rules above rather
+   than out of necessity — a pseudo-element has no utility class to lose to. */
+@layer base {
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 0;
   height: 0;

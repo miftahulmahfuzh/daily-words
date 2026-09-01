@@ -8,6 +8,7 @@ import { EntryRow } from "@/components/journal/entry-row";
 import { InsightPanel } from "@/components/journal/insight-panel";
 import { entryMeta, groupByDate } from "@/lib/journal/format";
 import { JOURNAL_SCROLL_KEY, JOURNAL_TEXT_MAX } from "@/lib/journal/limits";
+import { JOURNAL_SEARCH_MAX_CHARS } from "@/lib/journal/search";
 import type { JournalEntryDto } from "@/lib/journal/schemas";
 
 /**
@@ -31,6 +32,14 @@ import type { JournalEntryDto } from "@/lib/journal/schemas";
  * that actually scrolls, and four entries do not fill 667px. The default is 0,
  * so a reviewer opening this route still sees exactly the worst-case set and
  * nothing else.
+ *
+ * `?q=<text>` draws the search field **filled**, with F26's clear mark on it.
+ * That is the one state of this field with a width question in it — the mark
+ * costs the input 50px — and the empty field the default draws has none. The
+ * replica below is still a replica: the real `JournalSearch` needs an `onChange`
+ * and this page is a server component, so the mark here is a `<span>` shaped
+ * like `ClearButton` rather than the component. It is the geometry that is being
+ * measured, which is what this whole fixture is for.
  */
 
 const TODAY = "2026-09-18";
@@ -106,11 +115,13 @@ const filler = (count: number): JournalEntryDto[] =>
 export default async function KitchenSinkJournalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; fill?: string }>;
+  searchParams: Promise<{ state?: string; fill?: string; q?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
 
-  const { state, fill } = await searchParams;
+  const { state, fill, q } = await searchParams;
+  /** Clamped for the same reason `fill` is: a typo in the URL is not a fixture. */
+  const query = (q ?? "").slice(0, JOURNAL_SEARCH_MAX_CHARS);
   const fillCount = Math.min(Math.max(Number(fill) || 0, 0), FILL_MAX);
 
   if (state === "entry") {
@@ -155,9 +166,24 @@ export default async function KitchenSinkJournalPage({
                 </Pill>
               }
             />
-            <div className="flex h-10 items-center gap-2 rounded-[var(--r-field)] border border-rule bg-card px-3.5">
+            <div
+              data-dw-search-field
+              className="flex h-10 items-center gap-2.5 rounded-[var(--r-field)] border border-rule bg-card px-3.5"
+            >
               <span className="font-mono text-mono-md text-ink-3">/</span>
-              <span className="flex-1 text-base text-ink-3">Search your lines</span>
+              <span className={`min-w-0 flex-1 truncate text-base ${query ? "text-ink" : "text-ink-3"}`}>
+                {query || "Search your lines"}
+              </span>
+              {/* Shaped exactly like `ClearButton`: 40x40, -mr-3.5, mono glyph.
+                  Inert here — the real one is a <button> with an aria-label. */}
+              {query && (
+                <span
+                  data-dw-search-clear
+                  className="-mr-3.5 flex h-10 w-10 shrink-0 items-center justify-center font-mono text-mono-lg text-ink-3"
+                >
+                  ✕
+                </span>
+              )}
             </div>
             <Meta className="block pt-2">Header and search are inert here — see /journal.</Meta>
           </div>
