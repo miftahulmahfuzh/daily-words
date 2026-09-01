@@ -1,5 +1,6 @@
 import { cn } from "@/lib/ui/cn";
 import { TabBar } from "@/components/nav/tab-bar";
+import { PaneScrollMemory } from "@/components/layout/pane-scroll-memory";
 import { VisualViewportProbe } from "@/components/layout/visual-viewport";
 
 /**
@@ -62,6 +63,7 @@ export function ScreenBody({
   top,
   scroll = false,
   padded = true,
+  restoreScroll,
   className,
 }: {
   children: React.ReactNode;
@@ -71,10 +73,31 @@ export function ScreenBody({
   scroll?: boolean;
   /** Apply the design's horizontal gutter. Off for full-bleed panes. */
   padded?: boolean;
+  /**
+   * Remember this pane's offset for the tab session, under this key, and put it
+   * back when the screen mounts again. See `pane-scroll-memory.tsx` for why the
+   * platform cannot do this for us: nothing in the app scrolls `window`, and
+   * `window.scrollY` is all either restoration mechanism knows how to restore.
+   *
+   * **Opt-in, one screen at a time, and deliberately not the default.** A
+   * restored offset is right for a list the user was reading down and wrong for
+   * a pane that is anchored somewhere — the chat transcript sits at its
+   * bottom — so turning it on everywhere would change screens nobody asked
+   * about. Ignored unless `scroll` is set; a pane that cannot scroll has no
+   * offset to keep.
+   */
+  restoreScroll?: string;
   className?: string;
 }) {
   const gutter = padded && "px-[var(--gutter)]";
   const pane = scroll ? "dw-pane-scroll" : "dw-pane-fixed";
+  /**
+   * How `PaneScrollMemory` finds the pane. It renders `null` and reads this
+   * attribute rather than carrying a `ref`, because a ref needs an element and
+   * an extra element in a flex column is an extra `gap`.
+   */
+  const scrollKey = scroll ? restoreScroll : undefined;
+  const memory = scrollKey ? <PaneScrollMemory storageKey={scrollKey} /> : null;
 
   if (top) {
     return (
@@ -85,7 +108,11 @@ export function ScreenBody({
         >
           {top}
         </div>
-        <div className={cn("flex min-h-0 flex-1 flex-col", gutter, pane, className)}>
+        <div
+          className={cn("flex min-h-0 flex-1 flex-col", gutter, pane, className)}
+          data-dw-scroll-key={scrollKey}
+        >
+          {memory}
           {children}
         </div>
       </>
@@ -96,7 +123,9 @@ export function ScreenBody({
     <div
       className={cn("flex min-h-0 flex-1 flex-col", gutter, pane, className)}
       style={{ paddingTop: "var(--pad-top)" }}
+      data-dw-scroll-key={scrollKey}
     >
+      {memory}
       {children}
     </div>
   );

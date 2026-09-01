@@ -6,7 +6,7 @@ import { Eyebrow, Meta } from "@/components/ui/text";
 import { EntryRow } from "@/components/journal/entry-row";
 import { InsightPanel } from "@/components/journal/insight-panel";
 import { entryMeta, groupByDate } from "@/lib/journal/format";
-import { JOURNAL_TEXT_MAX } from "@/lib/journal/limits";
+import { JOURNAL_SCROLL_KEY, JOURNAL_TEXT_MAX } from "@/lib/journal/limits";
 import type { JournalEntryDto } from "@/lib/journal/schemas";
 
 /**
@@ -22,6 +22,12 @@ import type { JournalEntryDto } from "@/lib/journal/schemas";
  * the list. The composer is deliberately **not** here — it is a client component
  * with a live `POST` behind it, and a fixture that pretends to save is worse
  * than no fixture.
+ *
+ * `?fill=N` appends N unremarkable lines after the four that carry the layout
+ * questions. It exists for F24: scroll memory can only be asserted on a pane
+ * that actually scrolls, and four entries do not fill 667px. The default is 0,
+ * so a reviewer opening this route still sees exactly the worst-case set and
+ * nothing else.
  */
 
 const TODAY = "2026-09-18";
@@ -82,14 +88,27 @@ const ENTRIES: JournalEntryDto[] = [
   }),
 ];
 
+/** Enough to overflow the pane, capped so a typo in the URL cannot hang a render. */
+const FILL_MAX = 200;
+
+const filler = (count: number): JournalEntryDto[] =>
+  Array.from({ length: count }, (_, i) =>
+    entry({
+      id: `fill-${i}`,
+      text: `Filler line ${i + 1}. Nothing here is a layout question; the four above are.`,
+      localDate: "2026-08-20",
+    }),
+  );
+
 export default async function KitchenSinkJournalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string }>;
+  searchParams: Promise<{ state?: string; fill?: string }>;
 }) {
   if (process.env.NODE_ENV === "production") notFound();
 
-  const { state } = await searchParams;
+  const { state, fill } = await searchParams;
+  const fillCount = Math.min(Math.max(Number(fill) || 0, 0), FILL_MAX);
 
   if (state === "entry") {
     return (
@@ -117,6 +136,10 @@ export default async function KitchenSinkJournalPage({
     <Screen tabs>
       <ScreenBody
         scroll
+        // The real screen's own wiring, key and all, so the two cannot drift:
+        // this fixture is where `no-scroll.spec.ts` asserts F24's round trip,
+        // and asserting it against a different key would assert nothing.
+        restoreScroll={JOURNAL_SCROLL_KEY}
         className="pb-3"
         top={
           <div className="pt-4.5 pb-3.5">
@@ -128,13 +151,16 @@ export default async function KitchenSinkJournalPage({
           </div>
         }
       >
-        {groupByDate(ENTRIES, TODAY).map((group) => (
+        {groupByDate([...ENTRIES, ...filler(fillCount)], TODAY).map((group) => (
           <div key={group.date}>
             <div className="bg-paper pt-3 pb-1">
               <Eyebrow>{group.label}</Eyebrow>
             </div>
             {group.entries.map((e) => (
-              <EntryRow key={e.id} entry={e} />
+              // A real link, because that is what the row is on the real screen
+              // and because F24's round trip has to be a client-side navigation
+              // to be the navigation the bug was reported against.
+              <EntryRow key={e.id} entry={e} href="/kitchen-sink/journal?state=entry" />
             ))}
           </div>
         ))}

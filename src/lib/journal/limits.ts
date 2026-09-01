@@ -95,3 +95,14 @@ export const DUPLICATE_DISMISS_LABEL = "Never mind";
  * sitting there a week later.
  */
 export const JOURNAL_DRAFT_KEY = "journal:draft";
+
+/**
+ * Where the list's scroll offset lives between mounts.
+ *
+ * Same store and the same argument as the draft above, one screen along: coming
+ * back from an entry must land where the user was reading, and a week-old offset
+ * restored into a list that has grown twenty lines is not a kindness. The key is
+ * here rather than in the component so the screen and its kitchen-sink fixture
+ * cannot drift apart — see `components/layout/pane-scroll-memory.tsx`.
+ */
+export const JOURNAL_SCROLL_KEY = "journal:list";
