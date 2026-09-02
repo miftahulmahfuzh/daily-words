@@ -4,7 +4,11 @@ import { Pill } from "@/components/ui/pill";
 import DiscoverTab from "@/components/vocab/discover-tab";
 import { MineTab } from "@/components/vocab/mine-tab";
 import { requireUser } from "@/lib/auth/session";
-import { MAX_SEARCH_CHARS } from "@/lib/vocab/format";
+import {
+  MAX_SEARCH_CHARS,
+  VOCAB_DISCOVER_SCROLL_KEY,
+  VOCAB_MINE_SCROLL_KEY,
+} from "@/lib/vocab/format";
 import { vocabListHref } from "@/lib/vocab/links";
 
 /* Tabs are a `?tab=` query param, not a `/vocab/discover` segment — a static
@@ -27,6 +31,13 @@ export default async function VocabPage({
     <Screen tabs>
       <ScreenBody
         scroll
+        /* Back from a word lands where the reader was. One pane serves both
+           tabs, so the key follows the tab — otherwise Discover's offset is
+           restored into Mine's list. Not scoped to `q`: back-swipe restores the
+           whole URL, so the filtered list comes back with its own offset, and a
+           key computed here could only ever carry the *mount-time* query while
+           the pane follows the typed one. F29 §2b. */
+        restoreScroll={discover ? VOCAB_DISCOVER_SCROLL_KEY : VOCAB_MINE_SCROLL_KEY}
         className={discover ? "gap-5 pt-6 pb-4" : "pb-3"}
         top={
           <>

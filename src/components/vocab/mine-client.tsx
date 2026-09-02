@@ -1,11 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { VocabList } from "@/components/vocab/vocab-list";
 import { VocabSearch } from "@/components/vocab/vocab-search";
 import { listEntries } from "@/lib/vocab/client";
-import { MAX_SEARCH_CHARS, VOCAB_PAGE_SIZE } from "@/lib/vocab/format";
+import {
+  MAX_SEARCH_CHARS,
+  VOCAB_PAGE_SIZE,
+  VOCAB_SHOWN_KEY,
+} from "@/lib/vocab/format";
 import { vocabListHref } from "@/lib/vocab/links";
 import { filterBySearch, searchNeedle } from "@/lib/vocab/search";
 import type { VocabListItem } from "@/lib/vocab/schemas";
@@ -35,16 +46,27 @@ import type { VocabListItem } from "@/lib/vocab/schemas";
  * is a `router.replace`. It is the architecture that shipped before F19, with
  * one bug removed — see the `sync` state below.
  *
- * ## What back gives you, honestly
+ * ## What back gives you
  *
  * Search "gen", tap a word, press back: the field still reads "gen" and the list
  * is still filtered, because `?q=` is in the URL and the mount below reads it.
- * The **scroll offset is not restored**, before or after F19, and that is
- * structural rather than an oversight: `screen.tsx` scrolls an inner
+ *
+ * **The offset comes back too, since F29.** The paragraph that stood here said
+ * it did not, "before or after F19", and named where the fix belonged: "in
+ * `screen.tsx`, for every scrolling pane, not here". That is exactly where F24
+ * put it — `ScreenBody restoreScroll` and `components/layout/pane-scroll-memory.tsx`
+ * — and `/vocab` now passes a key per tab. The diagnosis is kept because it is
+ * still the reason the platform cannot help: `screen.tsx` scrolls an inner
  * `.dw-pane-scroll` pane, while browser and Next.js scroll restoration both
  * restore `window.scrollY`, which is permanently 0 in this app. F4 §7.1's
- * acceptance line promised the offset; it was never delivered. If it is ever
- * wanted it belongs in `screen.tsx`, for every scrolling pane, not here.
+ * acceptance line finally holds.
+ *
+ * One half of it *is* this component's, and it is the render window below. A
+ * restored offset past row 50 has nothing to land on while `shown` is back at
+ * its initial page, so the pane clamps and the feature quietly stops at the
+ * first fifty words. See `shown` for why the Collection restores its window
+ * where `/journal` does not, and `pane-scroll-memory.tsx` for the one frame of
+ * slack that lets the two effects compose.
  */
 export function MineClient({
   items,
@@ -86,6 +108,41 @@ export function MineClient({
 
   /** How many matching rows are drawn. A render window, never a fetch window. */
   const [shown, setShown] = useState(VOCAB_PAGE_SIZE);
+
+  /**
+   * Restore the window before the first paint — local mode only.
+   *
+   * **Not a `useState` initialiser**, which is the obvious shape and is wrong:
+   * this component is server-rendered, `sessionStorage` does not exist there,
+   * and a client that opened with 200 rows against an HTML document holding 50
+   * is a hydration mismatch. The first render therefore agrees with the server
+   * and the window is widened one commit later, which `PaneScrollMemory`'s
+   * single retry is built to wait for.
+   *
+   * `useLayoutEffect` rather than `useEffect` for the same reason it is one
+   * there: it must land before the browser paints, and before the frame on
+   * which that retry re-applies the offset.
+   */
+  useIsomorphicLayoutEffect(() => {
+    if (!local) return;
+    const saved = readShown();
+    if (saved !== null) setShown(saved);
+  }, [local]);
+
+  /**
+   * And record it. Local mode only, so the two modes cannot leave each other a
+   * window: above the ceiling `shown` is not the render window at all — the
+   * cursor is — and a value written there would be restored into a list that
+   * fetches its own pages.
+   *
+   * Passive, not layout: nothing paints differently for it, and passive effects
+   * run after the layout pair above, so the mount's write can never precede the
+   * read it would otherwise clobber.
+   */
+  useEffect(() => {
+    if (!local) return;
+    writeShown(shown);
+  }, [local, shown]);
 
   const onQueryChange = useCallback((next: string) => {
     setQuery(next);
@@ -223,4 +280,44 @@ export function MineClient({
       />
     </>
   );
+}
+
+/**
+ * The standard SSR guard, and the twin of the one in `pane-scroll-memory.tsx`.
+ * Three lines are duplicated rather than a hook exported from a component
+ * module; there is nothing here that can drift.
+ */
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/**
+ * Every failure is "start at the first page", which is the behaviour that
+ * shipped before F29. Safari in private mode throws on `sessionStorage` access,
+ * and a render window is never worth a blank list.
+ *
+ * A stored window below the initial page is discarded rather than honoured: it
+ * could only shrink the list, and `null` and "50" mean the same thing to the
+ * caller.
+ */
+function readShown(): number | null {
+  try {
+    const raw = sessionStorage.getItem(VOCAB_SHOWN_KEY);
+    if (raw === null) return null;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value <= VOCAB_PAGE_SIZE) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function writeShown(shown: number) {
+  try {
+    // Removed at the initial page, so a session that never tapped "More" — and
+    // a search that reset the window — leaves nothing behind.
+    if (shown <= VOCAB_PAGE_SIZE) sessionStorage.removeItem(VOCAB_SHOWN_KEY);
+    else sessionStorage.setItem(VOCAB_SHOWN_KEY, String(shown));
+  } catch {
+    /* Private mode, or a full quota. Losing the window is the correct cost. */
+  }
 }

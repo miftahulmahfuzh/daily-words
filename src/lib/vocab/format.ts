@@ -16,6 +16,57 @@ export const VOCAB_PAGE_SIZE = 50;
 export const MAX_SEARCH_CHARS = 64;
 
 /**
+ * Where each tab's scroll offset lives between mounts, and where the Mine tab's
+ * render window lives beside it.
+ *
+ * Same store and the same argument as `JOURNAL_SCROLL_KEY` in
+ * `lib/journal/limits.ts`, one screen along: coming back from a word must land
+ * where the reader was, and a week-old offset restored into a collection that
+ * has grown twenty words is not a kindness. The keys are here rather than in the
+ * component so the screen and its kitchen-sink fixture cannot drift apart — see
+ * `components/layout/pane-scroll-memory.tsx`.
+ *
+ * **Two keys, because one `ScreenBody` serves both tabs.** `/vocab` draws a
+ * single scrolling pane and swaps its child on `?tab=`, so a single key would
+ * restore Discover's offset into Mine's list and back. The page already knows
+ * which tab it is drawing; the split costs a ternary.
+ *
+ * **Not scoped to the query, deliberately.** Back-swipe restores the whole URL,
+ * `?q=` included, so the list under the restored offset is the list the offset
+ * was taken from and the flat key is exact. A key computed from `searchParams`
+ * *and* the query would be strictly worse: in local mode `history.replaceState`
+ * never re-renders this server component, so the key would freeze at the
+ * mount-time query while the pane's contents follow the typed one, and the save
+ * and the restore would land in different slots. See F29 §2b, which also records
+ * what this costs — the detail page's back arrow pushes a query-less `/vocab`,
+ * so a filtered offset is restored into the unfiltered list. Bounded rather than
+ * wrong: a filtered list is a subsequence of the unfiltered one and therefore
+ * never taller, so the worst case is a few rows down, never past the end.
+ */
+export const VOCAB_MINE_SCROLL_KEY = "vocab:mine";
+
+/** The Discover tab's own slot in the same pane. See above. */
+export const VOCAB_DISCOVER_SCROLL_KEY = "vocab:discover";
+
+/**
+ * How many rows `MineClient` was drawing, so a restored offset has floor to land
+ * on.
+ *
+ * The window starts at `VOCAB_PAGE_SIZE` and grows by tapping "More", so without
+ * this an offset past row 50 clamps to the bottom of row 50 — the scroll memory
+ * restores a number the list is too short to honour.
+ *
+ * F24 §4 accepted exactly that clamp for `/journal`, on the grounds that
+ * replaying its pages means one round trip each, an extend-and-jump while they
+ * land, and a race with the composer's optimistic rows. **None of that applies
+ * below `VOCAB_CLIENT_INDEX_MAX`**, where the whole collection is already in the
+ * browser and `shown` is a pure render window over an array that is already
+ * there. Above the ceiling it is the journal's situation again, and `MineClient`
+ * neither reads nor writes this key in that mode.
+ */
+export const VOCAB_SHOWN_KEY = "vocab:mine:shown";
+
+/**
  * The A–Z bucket a term sorts into. Anything not starting A–Z goes to `#`.
  *
  * Diacritics are deliberately **not** folded, even though `épée` reads as an E

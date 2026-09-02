@@ -832,3 +832,99 @@ test("the offset is read from session storage, and only where it was asked for",
   await expect(page.locator("[data-dw-scroll-key]")).toHaveCount(0);
   await paneOffset(page, ".dw-pane-scroll").toBe(0);
 });
+
+/* --------------------- F29: the Collection's scroll memory ----------------- */
+
+/**
+ * `/vocab` opts into the same primitive, and pays two costs `/journal` did not.
+ *
+ * **One pane, two tabs.** The Collection draws a single `ScreenBody scroll` and
+ * swaps its child on `?tab=`, so a single key would restore Discover's offset
+ * into Mine's list. The key follows the tab.
+ *
+ * **The render window resets on mount.** `MineClient` draws
+ * `VOCAB_PAGE_SIZE` (50) rows and grows by tapping "More", so an offset past row
+ * 50 has nothing to land on and the browser clamps it. Below
+ * `VOCAB_CLIENT_INDEX_MAX` every row is already in the browser, so the window is
+ * restored too — one commit *after* `PaneScrollMemory`'s effect, which is what
+ * that component's single retry frame exists for.
+ *
+ * These come at it the way F24's second test does — seed `sessionStorage`, load
+ * cold — rather than the way its first does. A round trip needs somewhere to
+ * navigate to and back, and `VocabList` builds every row's href through
+ * `vocabDetailHref`: they all leave the kitchen sink for an authenticated route.
+ * The primitive's round trip is already proven on `/journal`; what is new here
+ * is the key split and the window, and both are visible on a single load.
+ */
+const VOCAB_MINE_PANE = '[data-dw-scroll-key="vocab:mine"]';
+const VOCAB_MINE_STORAGE_KEY = "dw:scroll:vocab:mine";
+const VOCAB_SHOWN_STORAGE_KEY = "vocab:mine:shown";
+
+const seedStorage = (page: Page, entries: Record<string, string>) =>
+  page.addInitScript((seed: Record<string, string>) => {
+    for (const [k, v] of Object.entries(seed)) sessionStorage.setItem(k, v);
+  }, entries);
+
+test("the Collection comes back to where it was left", async ({ page }) => {
+  await seedStorage(page, { [VOCAB_MINE_STORAGE_KEY]: "300" });
+
+  await page.goto("/kitchen-sink/vocab?fill=120");
+
+  const pane = page.locator(VOCAB_MINE_PANE);
+  await expect(pane).toHaveCount(1);
+  expect(
+    await pane.evaluate((el) => el.scrollHeight - el.clientHeight),
+    "the fixture's pane does not overflow, so there is no offset to lose",
+  ).toBeGreaterThan(300);
+
+  await paneOffset(page, VOCAB_MINE_PANE).toBe(300);
+});
+
+/**
+ * The other tab is a different list, so it is a different slot.
+ *
+ * Seeded under Mine's key and loaded on Discover: the pane must sit at the top.
+ * Without the split this is the bug — one `ScreenBody`, one key, and Discover
+ * opens wherever the word list happened to be.
+ */
+test("the Collection's two tabs do not share one offset", async ({ page }) => {
+  await seedStorage(page, { [VOCAB_MINE_STORAGE_KEY]: "300" });
+
+  await page.goto("/kitchen-sink/vocab?tab=discover");
+
+  const pane = page.locator('[data-dw-scroll-key="vocab:discover"]');
+  await expect(pane).toHaveCount(1);
+  await expect(page.locator(VOCAB_MINE_PANE)).toHaveCount(0);
+  await paneOffset(page, '[data-dw-scroll-key="vocab:discover"]').toBe(0);
+});
+
+/**
+ * And the half that only the Collection needs: an offset past the first page.
+ *
+ * 50 rows do not reach 4000px, so without the render window this restore is
+ * clamped to the bottom of row 50 and the test reads a smaller number. The
+ * assertion is the offset rather than the row count on purpose — the row count
+ * is the mechanism, the offset is the promise.
+ */
+test("the Collection restores the render window an offset needs", async ({ page }) => {
+  await seedStorage(page, {
+    [VOCAB_MINE_STORAGE_KEY]: "4000",
+    [VOCAB_SHOWN_STORAGE_KEY]: "120",
+  });
+
+  await page.goto("/kitchen-sink/vocab?fill=120");
+  await expect(page.locator(VOCAB_MINE_PANE)).toHaveCount(1);
+  await paneOffset(page, VOCAB_MINE_PANE).toBe(4000);
+});
+
+/**
+ * The same load without the window, which is what proves the assertion above is
+ * measuring the window rather than the pane's natural height.
+ */
+test("without the render window the same offset is clamped", async ({ page }) => {
+  await seedStorage(page, { [VOCAB_MINE_STORAGE_KEY]: "4000" });
+
+  await page.goto("/kitchen-sink/vocab?fill=120");
+  await expect(page.locator(VOCAB_MINE_PANE)).toHaveCount(1);
+  await paneOffset(page, VOCAB_MINE_PANE).toBeLessThan(4000);
+});
