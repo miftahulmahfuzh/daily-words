@@ -44,6 +44,22 @@ import { useEffect, useLayoutEffect, useRef } from "react";
  * Bottom of page one rather than top of it: better than the status quo in every
  * case and wrong in none. Replaying the pages belongs to the screen that
  * paginates, not to a layout primitive.
+ *
+ * ## The one concession to a screen that restores its own content (F28)
+ *
+ * A pane can grow *one commit after* this effect, and only one screen does it:
+ * `MineClient` restores the Collection's render window in its own layout
+ * effect, which runs **after** this one. Effects fire in tree order and this
+ * component is `ScreenBody`'s first child, so the assignment below lands while
+ * the list is still 50 rows long and the browser silently clamps it — the
+ * feature would then work everywhere except the case it was extended for.
+ *
+ * So a restore that was clamped is retried **once**, on the next animation
+ * frame, by which time React has flushed any layout-effect `setState` below.
+ * It is not a `ResizeObserver` and not a loop: one frame, only when the first
+ * assignment did not take, and abandoned if anything moved the pane in the
+ * meantime, so a fling in the first frame still wins. A screen that grows no
+ * content never reaches it.
  */
 /**
  * The standard SSR guard. `useLayoutEffect` is what makes a client-side
@@ -56,6 +72,8 @@ const useIsomorphicLayoutEffect =
 export function PaneScrollMemory({ storageKey }: { storageKey: string }) {
   /** The pending rAF, so a fling writes once per frame rather than per event. */
   const frame = useRef(0);
+  /** The single re-try above, held so unmount can cancel it. */
+  const retry = useRef(0);
 
   useIsomorphicLayoutEffect(() => {
     const pane = document.querySelector<HTMLElement>(
@@ -70,7 +88,26 @@ export function PaneScrollMemory({ storageKey }: { storageKey: string }) {
     // mount is already at 0, so this costs nothing and keeps the one code path.
     // The browser clamps to `scrollHeight - clientHeight` for us, which is the
     // whole of the past-page-one story above.
-    if (saved !== null) pane.scrollTop = saved;
+    if (saved !== null) {
+      pane.scrollTop = saved;
+
+      /**
+       * Clamped, which means the pane is not tall enough *yet*. See the header:
+       * one retry on the next frame, and only if nothing else has moved it.
+       *
+       * `settled` rather than `saved` is what the guard compares against —
+       * `saved` is by definition not what the pane is showing, so comparing
+       * with it would retry unconditionally and could overrule a user who
+       * started scrolling in the first frame.
+       */
+      if (pane.scrollTop < saved) {
+        const settled = pane.scrollTop;
+        retry.current = requestAnimationFrame(() => {
+          retry.current = 0;
+          if (pane.scrollTop === settled) pane.scrollTop = saved;
+        });
+      }
+    }
 
     const onScroll = () => {
       if (frame.current) return;
@@ -84,7 +121,9 @@ export function PaneScrollMemory({ storageKey }: { storageKey: string }) {
     return () => {
       pane.removeEventListener("scroll", onScroll);
       if (frame.current) cancelAnimationFrame(frame.current);
+      if (retry.current) cancelAnimationFrame(retry.current);
       frame.current = 0;
+      retry.current = 0;
     };
   }, [storageKey]);
 
