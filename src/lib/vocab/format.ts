@@ -37,7 +37,7 @@ export const MAX_SEARCH_CHARS = 64;
  * *and* the query would be strictly worse: in local mode `history.replaceState`
  * never re-renders this server component, so the key would freeze at the
  * mount-time query while the pane's contents follow the typed one, and the save
- * and the restore would land in different slots. See F28 §2b, which also records
+ * and the restore would land in different slots. See F29 §2b, which also records
  * what this costs — the detail page's back arrow pushes a query-less `/vocab`,
  * so a filtered offset is restored into the unfiltered list. Bounded rather than
  * wrong: a filtered list is a subsequence of the unfiltered one and therefore

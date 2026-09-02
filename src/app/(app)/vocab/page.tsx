@@ -36,7 +36,7 @@ export default async function VocabPage({
            restored into Mine's list. Not scoped to `q`: back-swipe restores the
            whole URL, so the filtered list comes back with its own offset, and a
            key computed here could only ever carry the *mount-time* query while
-           the pane follows the typed one. F28 §2b. */
+           the pane follows the typed one. F29 §2b. */
         restoreScroll={discover ? VOCAB_DISCOVER_SCROLL_KEY : VOCAB_MINE_SCROLL_KEY}
         className={discover ? "gap-5 pt-6 pb-4" : "pb-3"}
         top={

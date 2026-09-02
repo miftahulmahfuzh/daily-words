@@ -45,7 +45,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
  * case and wrong in none. Replaying the pages belongs to the screen that
  * paginates, not to a layout primitive.
  *
- * ## The one concession to a screen that restores its own content (F28)
+ * ## The one concession to a screen that restores its own content (F29)
  *
  * A pane can grow *one commit after* this effect, and only one screen does it:
  * `MineClient` restores the Collection's render window in its own layout
@@ -58,8 +58,16 @@ import { useEffect, useLayoutEffect, useRef } from "react";
  * frame, by which time React has flushed any layout-effect `setState` below.
  * It is not a `ResizeObserver` and not a loop: one frame, only when the first
  * assignment did not take, and abandoned if anything moved the pane in the
- * meantime, so a fling in the first frame still wins. A screen that grows no
- * content never reaches it.
+ * meantime, so a fling in the first frame still wins.
+ *
+ * **It does not disturb `/journal`, which grows too — but over the network.**
+ * F28 gave that feed a sentinel that fetches the next page when the pane
+ * reaches its end, and its plan rests on the paragraph above: the remount
+ * clamps to the bottom of page one, exactly one page. A fetch resolves
+ * hundreds of milliseconds away and this retry is gone in one frame, so it
+ * finds the same short pane and re-clamps to the same offset. One frame is the
+ * bound that keeps this a fix for content restored *synchronously* by the
+ * screen below, and not a second, racing pagination trigger.
  */
 /**
  * The standard SSR guard. `useLayoutEffect` is what makes a client-side

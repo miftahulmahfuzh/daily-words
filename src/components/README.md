@@ -32,7 +32,7 @@ default: a restored offset is right for a list being read down and wrong for a
 pane anchored somewhere, and the chat transcript sits at its bottom. `/journal`
 and `/vocab` are the screens that pass it.
 
-`/vocab` (F28) is the case that shows what the key is for. One `ScreenBody`
+`/vocab` (F29) is the case that shows what the key is for. One `ScreenBody`
 serves both tabs, so the key follows `?tab=` — a single one would restore
 Discover's offset into the word list. It is deliberately **not** scoped to the
 search query: back-swipe restores the whole URL, so the filtered list comes back

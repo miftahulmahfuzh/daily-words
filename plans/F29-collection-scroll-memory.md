@@ -1,4 +1,4 @@
-# F28 — The Collection comes back to where you were reading
+# F29 — The Collection comes back to where you were reading
 
 **Card:** [daily-words#10](https://github.com/miftahulmahfuzh/daily-words/issues/10)
 — *Back from a word must land the Collection where the reader left it.*

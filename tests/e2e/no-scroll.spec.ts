@@ -833,7 +833,7 @@ test("the offset is read from session storage, and only where it was asked for",
   await paneOffset(page, ".dw-pane-scroll").toBe(0);
 });
 
-/* --------------------- F28: the Collection's scroll memory ----------------- */
+/* --------------------- F29: the Collection's scroll memory ----------------- */
 
 /**
  * `/vocab` opts into the same primitive, and pays two costs `/journal` did not.

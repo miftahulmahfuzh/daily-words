@@ -10,7 +10,7 @@ import {
 import type { VocabListItem } from "@/lib/vocab/schemas";
 
 /**
- * The Collection's Mine tab against a fixture collection, for F28.
+ * The Collection's Mine tab against a fixture collection, for F29.
  *
  * Not the real screen: that needs a session and a database. What is reviewable
  * without either is the pane — and the pane is exactly where this feature can go
@@ -23,7 +23,7 @@ import type { VocabListItem } from "@/lib/vocab/schemas";
  * play rather than being a case only the tests see.
  *
  * `?tab=discover` draws the Discover tab's **key on the same pane**, which is
- * the one thing about F28 that a single-tab fixture could not show. It is the
+ * the one thing about F29 that a single-tab fixture could not show. It is the
  * pane that is being fixtured, not `DiscoverPanel` — that component is a client
  * island with live `POST`s behind it, and a fixture that pretends to suggest
  * words is worse than no fixture. What sits under the key here is a column of
@@ -32,7 +32,7 @@ import type { VocabListItem } from "@/lib/vocab/schemas";
  * The rows link to `/vocab/<uuid>` like the real list, because they *are* the
  * real list — `VocabList` builds its hrefs through `vocabDetailHref`. Those
  * routes are authenticated, so the round-trip test that `/kitchen-sink/journal`
- * supports is not available here; F28 §6 says what is asserted instead.
+ * supports is not available here; F29 §6 says what is asserted instead.
  */
 
 const TERMS = [

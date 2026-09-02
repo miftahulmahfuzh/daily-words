@@ -51,7 +51,7 @@ import type { VocabListItem } from "@/lib/vocab/schemas";
  * Search "gen", tap a word, press back: the field still reads "gen" and the list
  * is still filtered, because `?q=` is in the URL and the mount below reads it.
  *
- * **The offset comes back too, since F28.** The paragraph that stood here said
+ * **The offset comes back too, since F29.** The paragraph that stood here said
  * it did not, "before or after F19", and named where the fix belonged: "in
  * `screen.tsx`, for every scrolling pane, not here". That is exactly where F24
  * put it — `ScreenBody restoreScroll` and `components/layout/pane-scroll-memory.tsx`
@@ -292,7 +292,7 @@ const useIsomorphicLayoutEffect =
 
 /**
  * Every failure is "start at the first page", which is the behaviour that
- * shipped before F28. Safari in private mode throws on `sessionStorage` access,
+ * shipped before F29. Safari in private mode throws on `sessionStorage` access,
  * and a render window is never worth a blank list.
  *
  * A stored window below the initial page is discarded rather than honoured: it
