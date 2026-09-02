@@ -90,6 +90,10 @@ export function JournalFeed({
   const [sync, setSync] = useState({ requested: serverQ, seen: serverQ });
   /** Only ever used to key optimistic rows; never sent anywhere. */
   const optimisticId = useRef(0);
+  /** `loadMore`'s real guard. See the comment on it for why `loading` is not. */
+  const busy = useRef(false);
+  /** The `Load more` block. Watched, so reaching it fetches the next page. */
+  const sentinel = useRef<HTMLDivElement>(null);
 
   /**
    * A new server answer arrived. React's documented "adjust state when a prop
@@ -200,16 +204,32 @@ export function JournalFeed({
     return { status: "saved" };
   }
 
-  async function loadMore() {
-    if (loading || !cursor) return;
+  /**
+   * Guarded by a **ref**, not by `loading`, and that is F28's one subtlety.
+   *
+   * `loading` still exists — it draws the button's spinner — but it cannot be
+   * the guard now that an observer also calls this. The effect below is torn
+   * down and rebuilt whenever its dependencies change, and a rebuild landing
+   * between this call and React committing `setLoading(true)` would re-observe
+   * a sentinel that is still on screen and fire a second fetch through a
+   * closure in which `loading` is still false. `busy.current` is set
+   * synchronously and has no such window. `mine-client.tsx` guards the
+   * Collection's fetch loop the same way, for the same reason.
+   */
+  const loadMore = useCallback(async () => {
+    if (busy.current || !cursor) return;
+    busy.current = true;
     setLoading(true);
     setProblem(null);
 
     // `sync.seen`, never `query`. See "Trap 2" above.
     const result = await listEntries(cursor, sync.seen || undefined);
+    busy.current = false;
     setLoading(false);
 
     if (!result.ok) {
+      // Stop auto-loading and leave the button. Retrying a failing fetch every
+      // time the sentinel re-enters the viewport is a scroll-driven spin.
       setProblem(result.message);
       return;
     }
@@ -222,7 +242,42 @@ export function JournalFeed({
       return [...prev, ...result.data.entries.filter((e) => !seen.has(e.id))];
     });
     setCursor(result.data.nextCursor);
-  }
+  }, [cursor, sync.seen]);
+
+  /**
+   * [F28] Reaching the end of the list fetches the next page.
+   *
+   * `/vocab` has done this since F19 and this is the same eight lines
+   * (`vocab-list.tsx`), which is the whole design: two screens that paginate
+   * differently is a difference nobody chose.
+   *
+   * **No `root`, deliberately.** The obvious worry is that nothing here scrolls
+   * `window` — `Screen` is a fixed-height flex column and the offset belongs to
+   * an inner `.dw-pane-scroll` pane — so the observer must surely be pointed at
+   * that pane. It must not, and the reasoning conflates scrolling with
+   * intersection: with `root: null` the sentinel is measured by its *current*
+   * viewport rect, which the pane's scrolling moves, and clipped on the way up
+   * by every ancestor's overflow — so the pane's own `overflow-y: auto` is
+   * exactly what takes the sentinel out of the intersection rect once it is
+   * scrolled past. Naming the pane would additionally mean finding it by
+   * `data-dw-scroll-key`, which buys nothing.
+   *
+   * **It fires once on a restored mount, and that is wanted.** F24 clamps a
+   * returning reader to the bottom of page one, so the sentinel is on screen
+   * before a finger touches anything and one page is fetched immediately. There
+   * is no cascade behind it: a page is `JOURNAL_PAGE_SIZE` entries, several
+   * viewports, so the append pushes the sentinel below the fold and this goes
+   * quiet again. One request, for somebody demonstrably at the end of the list.
+   */
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || !cursor || problem) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) void loadMore();
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [cursor, problem, loadMore]);
 
   const groups = groupByDate(entries, today);
   /**
@@ -309,11 +364,26 @@ export function JournalFeed({
         ))
       )}
 
-      {/* A button, not infinite scroll: the list is under a fixed top block and
-          above a fixed tab bar, and a scroll that keeps loading makes both
-          harder to reach. */}
+      {/* [F28] Scrolling here fetches the next page; the button stays.
+
+          This block used to say "a button, not infinite scroll: the list is
+          under a fixed top block and above a fixed tab bar, and a scroll that
+          keeps loading makes both harder to reach". Both halves were wrong.
+          `screen.tsx` makes the tab bar a **sibling** of the scrolling pane
+          inside `.dw-screen`, and `ScreenBody`'s `top` block is the other
+          sibling — neither is in this list, so appending rows cannot move
+          either one. What an endless list really buries is whatever sits below
+          it *inside the pane*, and nothing does.
+
+          The button is not a fallback for a slow network. It is the whole
+          affordance where `IntersectionObserver` never fires — reduced
+          capability, and a screen reader's virtual cursor, which does not
+          scroll anything — and the only one left after a failed fetch, where
+          the effect above stops watching on purpose. The ref rides the
+          container that was already here, so this feature adds no DOM node to
+          a pane whose height is under eighteen assertions. */}
       {cursor && (
-        <div className="flex flex-col items-center gap-2 py-4">
+        <div ref={sentinel} className="flex flex-col items-center gap-2 py-4">
           <Button size="sm" fullWidth={false} loading={loading} onClick={() => void loadMore()}>
             Load more
           </Button>
