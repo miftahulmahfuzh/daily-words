@@ -3,6 +3,12 @@
   "coordinator": "orch-push-card-reminders",
   "coordinator_session_id": "ba4aa93e-dd4f-4c88-9e5a-c2d839056ae5",
   "created": "2026-09-14T04:32:47+00:00",
+  "landed": {
+    "at": "2026-09-14T05:34:47+00:00",
+    "base": "main",
+    "commit": "86d21c95f00b8e8d6a68573aa724211c862337f7",
+    "machine": "pc"
+  },
   "phases": [
     {
       "card": null,
@@ -107,7 +113,7 @@
   "plan": "/home/miftah/daily-words/.workflows/orchestration/push-card-reminders/PLAN.md",
   "repo": "/home/miftah/daily-words",
   "slug": "push-card-reminders",
-  "updated": "2026-09-14T05:32:26+00:00",
+  "updated": "2026-09-14T05:34:47+00:00",
   "verified_at": "2026-09-14T05:17:32+00:00",
   "worktree": "/home/miftah/.worktrees/daily-words/push-card-reminders"
 }
