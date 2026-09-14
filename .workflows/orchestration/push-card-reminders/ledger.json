@@ -1,0 +1,113 @@
+{
+  "branch": "feature/push-card-reminders",
+  "coordinator": "orch-push-card-reminders",
+  "coordinator_session_id": "ba4aa93e-dd4f-4c88-9e5a-c2d839056ae5",
+  "created": "2026-09-14T04:32:47+00:00",
+  "phases": [
+    {
+      "card": null,
+      "commit": "aaaf92d",
+      "depends_on": [],
+      "difficulty": "NORMAL",
+      "n": 1,
+      "note": null,
+      "package": "ROADMAP`, `lib/db`, `lib/push`, `scripts",
+      "plan": ".workflows/plan/push-card-reminders/phase-1.md",
+      "reported_at": "2026-09-14T04:47:40+00:00",
+      "satisfies": [
+        "R2",
+        "R3"
+      ],
+      "status": "done",
+      "task_id": null,
+      "title": "The ruling, the schema and the schedule"
+    },
+    {
+      "card": null,
+      "commit": null,
+      "depends_on": [
+        1
+      ],
+      "difficulty": "HARD",
+      "n": 2,
+      "note": null,
+      "package": "lib/env`, `lib/db/queries`, `lib/push`, `app/api/push",
+      "plan": ".workflows/plan/push-card-reminders/phase-2.md",
+      "reported_at": null,
+      "satisfies": [
+        "R1"
+      ],
+      "status": "pending",
+      "task_id": null,
+      "title": "Subscriptions, keys and the sender"
+    },
+    {
+      "card": null,
+      "commit": null,
+      "depends_on": [
+        1,
+        2
+      ],
+      "difficulty": "HARD",
+      "n": 3,
+      "note": null,
+      "package": "public`, `src/middleware`, `components/push`, `app/(app)",
+      "plan": ".workflows/plan/push-card-reminders/phase-3.md",
+      "reported_at": null,
+      "satisfies": [
+        "R1"
+      ],
+      "status": "pending",
+      "task_id": null,
+      "title": "The service worker and the switch"
+    },
+    {
+      "card": null,
+      "commit": null,
+      "depends_on": [
+        1,
+        2
+      ],
+      "difficulty": "HARD",
+      "n": 4,
+      "note": null,
+      "package": "lib/push`, `app/api/push/tick`, `.github`, `scripts",
+      "plan": ".workflows/plan/push-card-reminders/phase-4.md",
+      "reported_at": null,
+      "satisfies": [
+        "R1",
+        "R2",
+        "R3"
+      ],
+      "status": "pending",
+      "task_id": null,
+      "title": "The tick, the scheduler and the copy in flight"
+    },
+    {
+      "card": null,
+      "commit": null,
+      "depends_on": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "difficulty": "NORMAL",
+      "n": 5,
+      "note": null,
+      "package": "root docs, `plans`, `lib/db",
+      "plan": ".workflows/plan/push-card-reminders/phase-5.md",
+      "reported_at": null,
+      "satisfies": [],
+      "status": "pending",
+      "task_id": null,
+      "title": "The doc sweep"
+    }
+  ],
+  "plan": "/home/miftah/daily-words/.workflows/orchestration/push-card-reminders/PLAN.md",
+  "repo": "/home/miftah/daily-words",
+  "slug": "push-card-reminders",
+  "updated": "2026-09-14T04:47:40+00:00",
+  "verified_at": "2026-09-14T04:34:07+00:00",
+  "worktree": "/home/miftah/.worktrees/daily-words/push-card-reminders"
+}
