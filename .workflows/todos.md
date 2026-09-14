@@ -2,17 +2,17 @@
 
 **Package Path**: `.`
 **Package Code**: DW
-**Last Updated**: 2026-09-14 11:57
-**Total Active Tasks**: 3
+**Last Updated**: 2026-09-14 12:12
+**Total Active Tasks**: 1
 
 ## Quick Stats
 - P0 Critical: 0
-- P1 High: 3
+- P1 High: 1
 - P2 Medium: 0
 - P3 Low: 0
 - P4 Backlog: 0
 - Blocked: 0
-- Completed: 2
+- Completed: 4
 
 ---
 
@@ -20,40 +20,54 @@
 
 ### [P1] High
 
-- [ ] **P1-DW-A003** Phase 3: The service worker and the switch
-  - **Difficulty**: HARD
-  - **Type**: Feature
-  - **Context**: Owns `public`, `src/middleware`, `components/push`, `app/(app)` (8 files). Adds `public/sw.js` (shows a notification for every push including a malformed one, opens `/today` on tap), the render-nothing `PushSync` reconciler that re-registers a rotated iOS endpoint, and the `ReminderToggle` switch on `/profile/edit` that tells the truth in all four cases it can't subscribe (no support, not installed to Home Screen, no server key, permission denied) — built on Phase 2's `lib/push/client.ts`. Exit: `curl -I /sw.js` with no cookie jar answers 200, JS content-type, no `immutable`/non-zero `max-age`; `badges:check` passes with the widened `/^(badges|levels|sw)/`; `test:layout`, typecheck, lint, build all pass with the eighteen layout assertions unmodified; on an installed XS Max the switch turns on and a `push:send` lands and opens `/today`; in Safari-in-a-tab the same screen prompts to install rather than showing a dead switch.
-  - **Status**: open
-  - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 3 of 5)
-  - **Satisfies**: R1
-  - **Depends on**: P1-DW-A001, P1-DW-A002
-  - **Plan**: `.workflows/plan/P1-DW-A003.md`
-  - **Unblocked**: 2026-09-14 11:57 — P1-DW-A002 (phase 2) landed
-
-- [ ] **P1-DW-A004** Phase 4: The tick, the scheduler and the copy in flight
-  - **Difficulty**: HARD
-  - **Type**: Feature
-  - **Context**: Owns `src/lib/push`, `src/app/api/push/tick`, `.github`, `scripts` (6 files). Adds the hourly clock: a GitHub Actions job POSTs `/api/push/tick` with a shared secret; the tick resolves each subscribed user's own local date/hour, stays silent if today's card already exists, otherwise claims one slot in `push_deliveries` and sends that slot's line of copy to every registered device. Exit: the Actions run answers 200 and is green; `npm run push:db` passes and leaves no fixture rows; a missing/wrong secret answers 401 and writes nothing, no secret configured answers 503; two ticks in the same slot produce one notification and one `'sent'` row; a user with today's card already made gets nothing and no row of any kind; `npm run push:send` puts one real, readable notification on the iPhone XS Max; typecheck/lint/build and every pre-existing check pass.
-  - **Status**: blocked
-  - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 4 of 5)
-  - **Satisfies**: R1, R2, R3
-  - **Depends on**: P1-DW-A001, P1-DW-A002
-  - **Plan**: `.workflows/plan/P1-DW-A004.md`
-
 - [ ] **P1-DW-A005** Phase 5: The doc sweep
   - **Difficulty**: NORMAL
   - **Type**: Feature
   - **Context**: Owns root docs (`CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.env.example`), `plans/`, and one comment in `src/lib/db/schema.ts` (6 files). Implements no requirement itself — R1–R3 are served entirely by phases 1–4 — but serves invariant 12 (docs must not contradict the code): writes `plans/F30-push-reminders.md` in the house format naming `[R24]`, adds a `CLAUDE.md` section on the feature's seven silent-failure traps and three Commands-block lines, and updates `.env.example`'s VAPID/CRON_SECRET prose, amending every superseded "no cron"/"no push" sentence rather than deleting it. No behaviour changes; the one edit under `src/` is a comment. Exit: no surviving unexplained "no cron" hits in README/CLAUDE, every hit in CHANGELOG/src is either named history or an amended sentence; `plans/F30-push-reminders.md` exists, names `[R24]`, and its §8 table accounts for all thirteen prohibitions from the analysis's Reference List; `.env.example` explains the VAPID pair as a locally generated identity and `CRON_SECRET` as a two-place shared secret; `git diff --stat` names no file outside this phase's six; typecheck/lint and every check script pass unchanged.
-  - **Status**: blocked
+  - **Status**: open
   - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 5 of 5)
   - **Satisfies**: — (invariant 12)
   - **Depends on**: P1-DW-A001, P1-DW-A002, P1-DW-A003, P1-DW-A004
   - **Plan**: `.workflows/plan/P1-DW-A005.md`
+  - **Unblocked**: 2026-09-14 12:12 — all four declared dependencies have now landed. Phase 3 (P1-DW-A003) completed at 12:10 concurrently in this same worktree, and phase 4 (P1-DW-A004) completed at 12:12. Phase 5 touches only docs plus one comment in `src/lib/db/schema.ts`, so it can start as soon as phase 3's own commit has landed on the branch.
 
 ---
 
 ## Completed Tasks
+
+- [x] **P1-DW-A004** Phase 4: The tick, the scheduler and the copy in flight
+  - **Difficulty**: HARD
+  - **Type**: Feature
+  - **Context**: Owns `src/lib/push`, `src/app/api/push/tick`, `.github`, `scripts` (6 files). Adds the hourly clock: a GitHub Actions job POSTs `/api/push/tick` with a shared secret; the tick resolves each subscribed user's own local date/hour, stays silent if today's card already exists, otherwise claims one slot in `push_deliveries` and sends that slot's line of copy to every registered device. Exit: the Actions run answers 200 and is green; `npm run push:db` passes and leaves no fixture rows; a missing/wrong secret answers 401 and writes nothing, no secret configured answers 503; two ticks in the same slot produce one notification and one `'sent'` row; a user with today's card already made gets nothing and no row of any kind; `npm run push:send` puts one real, readable notification on the iPhone XS Max; typecheck/lint/build and every pre-existing check pass.
+  - **Status**: completed
+  - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 4 of 5)
+  - **Satisfies**: R1, R2, R3
+  - **Depends on**: P1-DW-A001, P1-DW-A002
+  - **Plan**: `.workflows/plan/P1-DW-A004.md`
+  - **Completed**: 2026-09-14 12:12
+  - **Method**: /do
+  - **Files**: src/lib/push/tick.ts, src/app/api/push/tick/route.ts, .github/workflows/push-reminders.yml, scripts/push-send.ts, scripts/check-push-db.ts, package.json
+  - **Drift**: None in the code. Every symbol this phase imports from phase 1 (`src/lib/push/schedule.ts`, `src/lib/push/reminders.ts`, `src/lib/db/schema.ts`) and phase 2 (`src/lib/db/queries/push.ts`, `src/lib/push/send.ts`, `src/lib/db/queries/cards.ts`, `src/lib/db/queries/profiles.ts`, `src/lib/time/local-date.ts`, `src/lib/api/respond.ts`, `src/lib/env.ts`) matched the plan's Requires table exactly — no code was adapted.
+  - **Drift**: Phase 3 (P1-DW-A003) was landing concurrently in this same worktree during this run. `public/sw.js`, `src/middleware.ts`, `src/components/push/`, `next.config.ts`, `scripts/check-badge-art.ts`, `src/app/(app)/layout.tsx` and `src/components/profile/profile-edit-form.tsx` all appeared or changed mid-session, and this file picked up an external edit marking P1-DW-A003 complete and correcting P1-DW-A004's stale `blocked` status to `open`. None of those files were touched by this phase; the commit stages exactly the six files above by explicit path so phase 3's work stays with phase 3's own commit.
+  - **Drift**: `npm run push:send` was exercised end-to-end against a real user (mahfuzh74@gmail.com) and printed a correct, non-repeating deck line, but exited 1 with "No subscriptions" because no device has subscribed yet — phase 3, which registers subscriptions, was still landing.
+  - **Verification**: typecheck, lint, build, `push:check`, `share:check`, `claim:check`, `nav:check`, `journal:check`, `stats:check`, `badges:check` all pass; `test:layout` 96 passed / 10 skipped (the skipped need `DW_TEST_SESSION`); `push:db` passes every section with fixture rows confirmed cleaned up via psql; `POST /api/push/tick`'s four states verified by curl against a temporary local dev server on 3200 (401 with a wrong or absent secret when configured, 503 with `CRON_SECRET` unset, 200 with the right secret, 405 on GET), server stopped afterwards.
+  - **Not verified**: the exit criterion "`npm run push:send` puts one real, readable notification on the iPhone XS Max" needs phase 3 live and a device subscribed via `/profile/edit` — a manual on-phone pass outside this session's reach, not a code defect. The GitHub Actions manual-run criteria likewise need the branch pushed and the `CRON_SECRET` repository secret configured, neither of which can be done from here.
+
+- [x] **P1-DW-A003** Phase 3: The service worker and the switch
+  - **Difficulty**: HARD
+  - **Type**: Feature
+  - **Context**: Owns `public`, `src/middleware`, `components/push`, `app/(app)` (8 files). Adds `public/sw.js` (shows a notification for every push including a malformed one, opens `/today` on tap), the render-nothing `PushSync` reconciler that re-registers a rotated iOS endpoint, and the `ReminderToggle` switch on `/profile/edit` that tells the truth in all four cases it can't subscribe (no support, not installed to Home Screen, no server key, permission denied) — built on Phase 2's `lib/push/client.ts`. Exit: `curl -I /sw.js` with no cookie jar answers 200, JS content-type, no `immutable`/non-zero `max-age`; `badges:check` passes with the widened `/^(badges|levels|sw)/`; `test:layout`, typecheck, lint, build all pass with the eighteen layout assertions unmodified; on an installed XS Max the switch turns on and a `push:send` lands and opens `/today`; in Safari-in-a-tab the same screen prompts to install rather than showing a dead switch.
+  - **Status**: completed
+  - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 3 of 5)
+  - **Satisfies**: R1
+  - **Depends on**: P1-DW-A001, P1-DW-A002
+  - **Plan**: `.workflows/plan/P1-DW-A003.md`
+  - **Completed**: 2026-09-14 12:10
+  - **Method**: /do
+  - **Files**: public/sw.js, src/middleware.ts, scripts/check-badge-art.ts, next.config.ts, src/components/push/push-sync.tsx, src/app/(app)/layout.tsx, src/components/push/reminder-toggle.tsx, src/components/profile/profile-edit-form.tsx
+  - **Drift**: `public/sw.js`'s doc comment as quoted in the phase plan contained the literal glob `**/*.js` inside a `/* */` block comment. That glob's `*/` prematurely closed the comment and broke `npm run lint` with a parse error. Fixed by rephrasing to "no glob for `.js` files" — no semantic change, same meaning preserved.
+  - **Verification**: typecheck, lint, build, `badges:check` (§12 now rejects any `src/app` directory starting with `sw`), `push:check`, `share:check`, `claim:check`, `nav:check` all pass; `test:layout` 96 passed / 10 skipped (the skipped need `DW_TEST_SESSION`), the eighteen no-scroll assertions green and unmodified; `curl -I /sw.js` with no cookie jar answers 200, `application/javascript`, `cache-control: no-cache`, and `/profile/edit` and `/today` still 307 to sign-in. Lint emits one warning (`SW_VERSION` unused in `public/sw.js`) — the constant is deliberately kept per the plan's own doc comment about on-device inspection, and eslint exits 0 on warnings.
+  - **Not verified**: the manual iOS device pass (steps 1–10 of the phase plan's Verification section) needs a physical iPhone XS Max, which this environment has none of. The phase plan names that pass as the only real proof beyond what a laptop or CI can check; it remains outstanding for a human on the device.
 
 - [x] **P1-DW-A002** Phase 2: Subscriptions, keys and the sender
   - **Difficulty**: HARD

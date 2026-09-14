@@ -13,7 +13,7 @@ whole app: `src/app` holds the routes, `src/lib/<domain>` holds the domain modul
 stand in for a unit-test suite.
 
 **Documentation Created: 2026-09-14**, during phase 1 of 5 of the push-card-reminders
-plan set (F30), and extended in place by each phase since — most recently phase 2. This
+plan set (F30), and extended in place by each phase since — most recently phase 4. This
 file therefore documents the F30 surface in detail and the rest of the app by pointer — `CLAUDE.md` and `ROADMAP_v0.1.0.md` remain the authority for
 everything else, in the order given under **Authority** below.
 
@@ -35,6 +35,261 @@ everything else, in the order given under **Authority** below.
 5. `plans/F*.md` — each plan's header lists which of its sections are superseded.
 
 A plan that contradicts the roadmap loses.
+
+---
+
+## Recent Changes — F30 phase 4 (2026-09-14)
+
+Task `P1-DW-A004`, "The tick, the scheduler and the copy in flight". After this phase
+the feature **runs**: an hourly clock exists, every module phases 1–3 built has a
+runtime caller, and a subscribed user with no card for today gets one notification per
+two-hour slot. `push_deliveries` is written for the first time.
+
+**This phase creates no `daily_cards` row by any path.** [R24] §3 is the condition the
+whole design is arranged around: `POST /api/cards` is still the only writer, the tick
+imports no card writer, no gamification hook and no transaction, and `npm run push:db`
+greps `src/lib/push/` and `src/app/api/push/` to keep it that way rather than trusting
+the reading.
+
+### `.github/workflows/push-reminders.yml` — the clock
+
+Hourly on the hour (UTC) plus `workflow_dispatch`; one `curl -X POST` at
+`vars.PUSH_TICK_URL || https://dword.site/api/push/tick`, carrying
+`authorization: Bearer ${{ secrets.CRON_SECRET }}`. `permissions: {}` — nothing here
+reads or writes the repository.
+
+**Not a `crons` entry in `vercel.json`.** Vercel refuses a cron more frequent than
+daily on the Hobby plan, and an hourly `"crons"` block makes the *deployment itself*
+fail — a change that breaks deploys is worse than a scheduler living one file away.
+`vercel.json` stays the two lines about `sin1`. Moving to Vercel Cron later is those
+two lines plus a `GET` shim beside the route's `POST`, and it is invisible to users
+because of `schedule.ts`'s catch-up rule.
+
+**The step checks the status code itself**, and that check is the whole point of the
+step: `curl` exits 0 on a 401, so without it an unset secret, an unconfigured deploy
+and a 500 are all a green tick in the Actions tab beside a feature that silently does
+nothing — the one failure mode this feature cannot have, because nobody notices a
+notification that never arrived. An empty `CRON_SECRET` fails the step before the
+request for the same reason.
+
+`concurrency: { group: push-reminders, cancel-in-progress: false }` — queue, never
+cancel. Cancelling mid-flight abandons a fan-out with some slots already claimed.
+
+Two ways reminders stop, one loud and one silent: disabling or deleting the workflow
+turns the feature off entirely (nothing else in the app has a clock), and **GitHub
+disables a scheduled workflow by itself after 60 days with no repository activity**.
+GitHub's scheduler is also best-effort and runs late or skips under load — acceptable
+only because a late tick delivers the *current* slot rather than a burst.
+
+### `POST /api/push/tick` — the only scheduled entry point
+
+`runtime = "nodejs"`, `dynamic = "force-dynamic"`, `maxDuration = 60`,
+`import "server-only"`, and every response through `noStore()`.
+
+| Condition | Answer |
+|---|---|
+| no `CRON_SECRET` configured | **503** `not_configured`, nothing read, nothing written |
+| absent or wrong bearer token | **401** `unauthenticated` |
+| `runTick()` threw | **500** `internal` |
+| otherwise | **200** `{ ok: true, ...TickSummary }` |
+| `GET` | **405**, by having no `GET` export |
+
+**`POST`, not `GET`**, though there is no session and no CSRF surface here: F17 D5
+already ruled that a mutating `GET` is prefetchable, replayable and invisible to Next's
+action CSRF machinery, and the rule is worth more than the exception. A future Vercel
+Cron `GET` shim delegates to this and says in a comment that it exists for a caller
+that cannot choose its verb.
+
+**An unconfigured deploy answers 503, never 200.** A tick that accepts anonymous
+callers because nobody set the variable is indistinguishable from working, right up
+until a stranger is spending the app's push quota. `secretMatches` compares in constant
+time and **checks length first**, because `timingSafeEqual` *throws* on a length
+mismatch — the same guard `lib/share/intent.ts` carries for the claim cookie.
+
+**No user ids in the response body.** It is printed verbatim into a GitHub Actions log,
+which is a more public place than it looks. Counts are what the scheduler needs in
+order to fail loudly; per-user detail goes to the server log.
+
+### `src/lib/push/tick.ts` — the decision and the fan-out
+
+Documented as an exported API under **`src/lib/push/`** below.
+
+---
+
+## Recent Changes — F30 phase 3 (2026-09-14)
+
+Task `P1-DW-A003`, "The service worker and the switch". After this phase a user can
+**turn reminders on**, a phone has somewhere for a push to land, and a rotated endpoint
+re-registers itself. Everything phase 2 built is now reachable from a browser.
+
+Still nothing decides **when**: there is no tick and no scheduler, so a subscription
+created here receives nothing until phase 4. `schedule.ts` gains its first runtime
+reader all the same — the switch's schedule hint — and `reminders.ts` still has none.
+
+### `public/sw.js` — the service worker
+
+Plain JavaScript, served from `public/` byte-for-byte. It is **not** compiled by `tsc`
+(tsconfig's `include` names no `.js` glob) and has no bundler entry, but it **is**
+linted: `npm run lint` is a bare `eslint` and nothing ignores `public/`.
+
+It caches nothing and intercepts nothing. **There is no `fetch` handler and there must
+not be one** — everything this app draws is a database read behind a session, so an
+offline shell would be a stranger's-eye view of a private screen. The worker exists so
+the push service has somewhere to deliver to, and for exactly two events.
+
+| Event | Behaviour |
+|---|---|
+| `install` | `skipWaiting()` |
+| `activate` | `clients.claim()` |
+| `push` | `showNotification`, **always** |
+| `notificationclick` | close, then focus-or-open `/today` |
+
+**Every push shows a notification, on every code path.** `userVisibleOnly: true` is a
+promise to the browser, and a browser that catches the app breaking it revokes the
+subscription — silently, permanently, and only on that user's phone. So a push with no
+data, a push whose body is not JSON, and a push whose JSON is an array all land on the
+same four `FALLBACK` strings. `readNotification` defaults **field by field** rather than
+all-or-nothing: a sender that gets `url` wrong should still deliver its own words.
+
+`url` is the one field with a rule beyond "non-empty string": it must start with `/`
+**and not with `//`**, because a protocol-relative `//evil.example/x` passes the first
+test and resolves off-origin. That is the only place in the worker where a value from
+the network reaches something navigable.
+
+`tag` + `renotify: true` are a pair and neither works alone. The stable tag makes 19:00
+replace 17:00, so a user who was out all day returns to one notification rather than
+seven; but a tagged replacement is **silent** by default, which would mean the phone
+buzzes at 07:00 and never again — inverting what was asked for.
+
+`skipWaiting` is normally dangerous, because a new worker starts serving a new manifest
+to a page built against the old one. This worker caches nothing, so there is no such
+pairing to break, and the alternative is a standalone PWA — essentially never closed —
+running last month's `push` handler.
+
+`notificationclick` closes first and unconditionally (iOS otherwise leaves a tapped
+notification on the lock screen), then **focuses rather than opens**: a standalone PWA
+is one long-lived window, and `clients.openWindow` against it is a second window on
+desktop and a no-op-shaped race on iOS. `WindowClient.navigate` shipped late in WebKit
+and rejects for a target outside scope, so it is both feature-detected and caught — a
+focused window on the wrong screen of the right app beats no window at all.
+
+`SW_VERSION` is read by no code. It is there so a phone can be asked which worker it is
+running, from Safari's Web Inspector or by fetching `/sw.js`: a worker is the one piece
+of this app that can be a month stale on a device while the server is current.
+
+### Serving `/sw.js` — two widenings, and both fail invisibly if missed
+
+- **`src/middleware.ts`** — `sw\.js` joins `badges`, `levels`, `icons`,
+  `manifest.webmanifest` and friends in the matcher's negative lookahead. A browser
+  fetches a worker with **no session**, so without this an update check on an expired
+  cookie answers `307` to an HTML sign-in page and the registration silently stops
+  updating — while the signed-in author sees everything work. `curl -I
+  http://localhost:3200/sw.js` with **no cookie jar** is the only proof.
+  The escaped dot is deliberate: `sw\.js` cannot exempt a future `/sweep`.
+- **`next.config.ts`** — a third headers block, `source: "/sw.js"`, value
+  **`cache-control: no-cache`**. This is the exact inverse of the `/badges/` and
+  `/levels/` blocks above it, and for a stated reason: those may say `immutable` for a
+  year only because their filenames carry a content hash. `/sw.js` carries none and
+  cannot — the path is what the browser *registers*, and a hashed worker filename would
+  mean a new registration on every deploy. A cached worker is a worker that has stopped
+  updating, with no symptom at all. `no-cache`, not `no-store`: the bytes may be kept,
+  they just may not be used without asking, which makes the update check a 304.
+  Its own block rather than a widened pattern, per F22 D6.
+- **`scripts/check-badge-art.ts` §12** — the app-directory scan widens from
+  `/^(badges|levels)/` to **`/^(badges|levels|sw)/`**, so no directory under `src/app`
+  may begin with `sw`. Note it lists `sw`, not `sw\.js`, which makes the assertion
+  **stricter than the matcher** — `/sweep` is not in fact exempt, but forbidding it is
+  what survives somebody "tidying" the escape out of the matcher later.
+
+### `<PushSync />` — `src/components/push/push-sync.tsx`
+
+Renders nothing; mounted in `src/app/(app)/layout.tsx` beside `<TimezoneSync />` and
+deliberately the same shape. **Zero network requests in the steady state**, which is
+what lets it sit in the authed shell for free.
+
+It exists because **iOS rotates push endpoints**. A subscription created in March
+answers with a different URL in May, the row the sender holds becomes a 410 nobody
+notices, and a notification that does not arrive looks exactly like a day with no
+reminder due. This is the only thing in the app that notices.
+
+Four gates, cheapest first: a `useRef` (StrictMode runs the effect twice on purpose, and
+the ref is what stops a development build double-posting) → `pushCapability()`, which is
+three synchronous property tests and **not** `pushSupport()`, whose authenticated GET is
+the request this component must never make → `notificationPermission() === 'granted'`,
+the only state with anything to reconcile → `registerServiceWorker()` →
+`syncSubscription()`, which compares the live endpoint against `lib/push/client.ts`'s
+`dw_push_endpoint` mirror and posts only on a disagreement.
+
+**It never asks for permission.** A sheet thrown up on page load is refused by iOS
+outside a gesture and is the interruption product principle 1 forbids. Until the
+`/profile/edit` tap has asked, this component registers no worker and touches nothing.
+
+`app/(app)/layout.tsx` gains the mount and **no branch, no query and no push read** — a
+`push_subscriptions` lookup there would be a query on every authed page for a component
+that usually does nothing.
+
+### `<ReminderToggle />` — `src/components/push/reminder-toggle.tsx`
+
+On **`/profile/edit`**, drawn last, beneath every field Save commits. Not on `/profile`,
+which is the pride screen and holds no settings, no countdown and no red states — a
+"reminders are off" row there would be the first of all three.
+
+**It writes on the tap and is not saved by the Save button below it**, which is the
+argument the timezone field in the same form already makes: a different resource with a
+different rule. Drawn last so nothing above it is left looking unsaved.
+
+Six states, and **five of them draw a sentence rather than a switch**:
+
+| `Status.kind` | Drawn |
+|---|---|
+| `loading` | "Checking…" |
+| `unsupported` | this browser cannot show notifications |
+| `needs_home_screen` | add to Home Screen and open it from there |
+| `unconfigured` | reminders are not set up on this server |
+| `denied` | turn them back on in iOS Settings, under Notifications |
+| `ready` | `ToggleRow`, `confirmOn={false}` |
+
+The four impossible-to-subscribe states are the point of the component, not a courtesy.
+`needs_home_screen` is the **first** state a user meets on the device this was built
+for: iOS grants Web Push to a Home Screen app and to nothing else, so Safari in a tab
+has the APIs and no permission to give, and a dead switch there looks broken while the
+fix is something no amount of tapping discovers. `denied` is the other one that may
+never be a silent no-op — once told no the browser will not ask again, so a switch that
+flips back with no explanation reads as a broken feature.
+
+The four non-`ready` kinds are spelled with phase 2's `PushSupport` tokens **exactly**,
+so `setStatus({ kind: support.kind })` assigns straight across with no mapping table to
+keep in step. `denied` is the component's own, because permission is not a capability.
+
+`SCHEDULE_HINT` is built from `REMINDER_FIRST_HOUR`, `REMINDER_UNTIL_HOUR` and
+`REMINDER_EVERY_HOURS` rather than typed out — a hint reading "7am" beside a first hour
+of 8 is exactly the drift this codebase keeps out of prose. That import is the
+component's only coupling to the schedule; `hourLabel` is integer-to-string formatting,
+not date arithmetic, so `lib/time/local-date.ts`'s monopoly is untouched.
+
+**`requestNotificationPermission()` is called with nothing awaited above it**, and the
+comment saying so is load-bearing. iOS refuses the request unless it is reached from a
+user gesture, and an `await` between the tap and the call loses the gesture on WebKit —
+with no throw, no dialog and no console line. `setBusy`/`setProblem` are synchronous and
+safe; a `registerServiceWorker()` there would be a permission sheet that never appears.
+`enablePush()` is then handed a permission that is already `granted`.
+
+A dismissed sheet (`default`) is **not** an error and draws no sentence: the user closed
+something they opened. `busy` guards a second tap during the round trip, because
+`ToggleRow` has no disabled state — the same place `MasteredToggle` puts it.
+`confirmOn={false}`: turning reminders on is undone by turning them off, so it is not
+destructive in either direction and gets no two-tap arm ([R22]'s neighbours, F13 D5).
+
+The non-`ready` branch redraws `ToggleRow`'s own frame — same rule, padding and two-line
+stack — so the page does not change shape depending on what the device can do.
+
+### A lint trap worth knowing
+
+The phase plan's quoted doc comment for `public/sw.js` contained the literal glob
+`**/*.js` inside a `/* */` block comment. The glob's `*/` **closes the comment early**,
+and `npm run lint` failed with a parse error pointing at the wrong line. It is now
+phrased as "no glob for `.js` files". Nothing about this is specific to a service
+worker — any prose in a block comment that quotes a glob ending in `*/` does it.
 
 ---
 
@@ -657,6 +912,20 @@ npm run typecheck
 npm run build            # with none of the four variables set — this is the CI case
 ```
 
+**Phase 3 changed no line of `scripts/check-push.ts` either.** Its surface is a service
+worker, two client components and three widened configuration lines, and it is checked by
+three other commands:
+
+```bash
+npm run lint             # a bare eslint; nothing ignores public/, so sw.js is linted
+npm run badges:check     # §12, now /^(badges|levels|sw)/ over src/app's directories
+curl -I http://localhost:3200/sw.js    # 200 with NO cookie jar, and cache-control: no-cache
+```
+
+That last one is the only proof of the middleware exemption, for the reason the share
+routes already document: the author testing it is signed in, and a broken matcher serves
+them a perfect worker.
+
 The full command list for the rest of the app is in `CLAUDE.md` § Commands.
 
 ---
@@ -698,30 +967,54 @@ The full command list for the rest of the app is in `CLAUDE.md` § Commands.
 - **Do not conflict `push_subscriptions` on `(user_id, endpoint)`.** The endpoint alone is
   the conflict target, and the update reassigns `user_id`, or a shared install delivers one
   user's reminders to another's phone.
+- **Do not add a `fetch` handler to `public/sw.js`.** Everything this app draws is a
+  database read behind a session; an offline shell would cache private screens.
+- **Do not add a code path through `push` that skips `showNotification`.** A browser that
+  catches a silent push revokes the subscription — permanently, and only on that phone.
+- **Do not give `/sw.js` a content hash or an `immutable` header.** The path is what the
+  browser registers; a cached worker stops updating with no symptom anywhere.
+- **Do not remove `sw\.js` from the middleware matcher**, and do not unescape the dot. A
+  worker is fetched with no session, and a 307 to `/signin` renders perfectly for the
+  signed-in author. `curl -I /sw.js` with no cookie jar is the only proof.
+- **Do not drop `renotify: true` while keeping the tag.** Tagged replacements are silent,
+  so the phone would buzz at 07:00 and never again.
+- **Do not accept a `url` that merely starts with `/`.** `//evil.example/x` passes that
+  test and resolves off-origin; both checks are needed.
+- **Do not `await` anything before `requestNotificationPermission()`** in the toggle's tap
+  handler. iOS loses the gesture with no throw, no dialog and no console line.
+- **Do not call `pushSupport()` from `<PushSync />`.** It is an authenticated GET, and the
+  component's whole value is costing nothing on a normal page load. `pushCapability()` is
+  the synchronous one.
+- **Do not add a `push_subscriptions` read to `app/(app)/layout.tsx`.** It is a query on
+  every authed page for a component that usually does nothing.
+- **Do not quote a glob ending in `*/` inside a block comment.** It closes the comment and
+  `eslint` fails at a line that looks unrelated.
 
 ## Notes
 
-**Phase 2 of 5.** The remaining phases of the `PUSH_CARD_REMINDERS_PLAN.md` set, none
-of which have landed here:
+**Phase 3 of 5.** The remaining phases of the `PUSH_CARD_REMINDERS_PLAN.md` set:
 
 | Phase | Task | Adds |
 |---|---|---|
 | ~~1~~ | ~~`P1-DW-A001`~~ | ~~[R24], the schema, the schedule and the deck~~ — landed |
 | ~~2~~ | ~~`P1-DW-A002`~~ | ~~Subscriptions, VAPID keys and the sender~~ — landed |
-| 3 | `P1-DW-A003` | The service worker, `<PushSync />` and the `/profile/edit` switch |
+| ~~3~~ | ~~`P1-DW-A003`~~ | ~~The service worker, `<PushSync />` and the switch~~ — landed |
 | 4 | `P1-DW-A004` | The tick, the scheduler and the copy in flight |
 | 5 | `P1-DW-A005` | The doc sweep |
 
-Phase 4 is what writes every value `push_deliveries.reason` ever holds. `schedule.ts` and
-`reminders.ts` still have no runtime caller — `npm run push:check` remains their only
-consumer — and `sendPush`, `claimDelivery`, `markDeliveryFailed`, `listDeliveredSlots`,
-`deleteDeadSubscription`, `listSubscriptions` and `listReminderCandidates` have none
-either. Of phase 2's surface only `upsertSubscription` and `deleteSubscription` are
-reachable, through the two routes. `push_deliveries` is still written by nothing.
+What is reachable after phase 3: a device can subscribe and unsubscribe from
+`/profile/edit`, a rotated endpoint re-registers itself, and a push that arrives is
+shown and opens `/today`. **Nothing sends one.** `reminders.ts` still has no runtime
+caller — `npm run push:check` remains its only consumer — and `sendPush`,
+`claimDelivery`, `markDeliveryFailed`, `listDeliveredSlots`, `deleteDeadSubscription`,
+`listSubscriptions` and `listReminderCandidates` have none either. `push_deliveries` is
+still written by nothing, and phase 4 is what writes every value its `reason` ever holds.
+Of `schedule.ts`, only the three constants have a runtime reader, in the switch's
+schedule hint; `dueSlot` and `isReminderSlot` do not.
 
-Phase 3 owns `public/sw.js`, whose `push` handler parses `PushPayload` — the seam is named
-in `lib/push/send.ts` and neither side may change it alone — and mounts `<PushSync />`,
-whose steady-state silence rests on the `dw_push_endpoint` mirror described above.
+The seam between the halves is `PushPayload` — `{ title, body, url, tag }`, named in
+`lib/push/send.ts` and parsed by `readNotification` in `public/sw.js`. **Neither side may
+change it alone**, and phase 4 is the first code that will actually put one on the wire.
 
 Every `plans/F*.md` line asserting that this app has no scheduler is now historical.
 Per [R24] those are corrected by `plans/F30-push-reminders.md` rather than by editing

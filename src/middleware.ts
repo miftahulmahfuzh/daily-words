@@ -128,7 +128,29 @@ export const config = {
      *    forbids moving the share exemption into this lookahead. It is not left
      *    to memory: `npm run badges:check` §12 fails if any directory under
      *    `src/app` starts with either word.
+     *
+     * `sw\.js` joined the list with F30's push reminders, and it is the first
+     * entry here that is a single file rather than a directory. It belongs in
+     * the matcher rather than in the body above for the reason the manifest
+     * does: it is a static asset the browser fetches with no session, not a
+     * page whose prefix collides with a route.
+     *
+     * The dot is **escaped**, unlike `favicon.ico`'s. That is deliberate and it
+     * narrows the prefix hazard almost to nothing — `sw\.js` cannot exempt a
+     * future `/sweep`, only a path literally beginning `sw.js`. §12 of
+     * `badges:check` still gains `sw` anyway, and is therefore stricter than
+     * this token strictly requires: the cost is one forbidden route name and
+     * the alternative is trusting an escape character to stay there.
+     *
+     * The failure this prevents is the invisible kind. A signed-out fetch for
+     * `/sw.js` — which is exactly what a worker update check is once the
+     * session cookie has expired — answered 307 to an HTML sign-in page, and a
+     * browser handed HTML for a worker script drops the registration. The
+     * author testing it is signed in and sees a worker that registers
+     * perfectly. `curl -I http://localhost:3200/sw.js` with **no cookie jar**
+     * is the only proof, and it is the same class of bug F18 found in
+     * `isPublicSharePath`.
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|badges|levels|icons|manifest.webmanifest|apple-icon|icon).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|badges|levels|icons|manifest.webmanifest|sw\\.js|apple-icon|icon).*)',
   ],
 }
