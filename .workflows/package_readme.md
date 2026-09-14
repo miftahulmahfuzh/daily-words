@@ -745,6 +745,96 @@ Ordering is the other half. `enablePush` **unsubscribes again** on any failure a
 disable can never be undone by the next sync re-registering the endpoint the user just
 rejected.
 
+### `tick.ts` — the decision and the fan-out (phase 4)
+
+`import 'server-only'`. It is the first and only runtime caller of `dueSlot`,
+`reminderFor` and `sendPush`, and it holds **no clock of its own** — `now` is an
+argument (defaulted, and injectable for `push:db` the way `encodeClaimIntent`'s
+`nowSeconds` is), and every "day" and "hour" goes through `lib/time/local-date.ts` in
+the *user's* zone. The server's clock decides nothing but when the tick ran.
+
+```ts
+export const REMINDER_URL = '/today'
+export const REMINDER_TAG = 'daily-card-reminder'
+
+type TickOutcome = 'no_timezone' | 'quiet' | 'no_slot' | 'no_active_words'
+                 | 'duplicate' | 'sent' | 'failed'
+type PushSender = (target: PushTarget, payload: PushPayload) => Promise<PushOutcome>
+type TickOptions = { now?: Date; send?: PushSender }
+
+export function pushPayloadFor(reminder: Reminder): PushPayload
+export async function tickUser(candidate, options?): Promise<TickUserResult>
+export async function runTick(options?): Promise<TickSummary>
+```
+
+#### `tickUser` — one user, one decision, in this order
+
+1. **`resolveTimezone` or nothing.** "Reads may fall back, writes may not" — and a
+   notification *is* a write in the only sense that matters: it lands on a lock screen
+   and cannot be recalled. An unusable zone sends nothing, **writes no row**, and logs.
+2. The user's local date and local hour.
+3. **Today's card exists → return immediately with no row of any kind.** Silence is the
+   feature; a day of `'skipped'` rows for a user who did the thing is noise in a table
+   whose only job is to answer "did we bother them?".
+4. `listDeliveredSlots` → `dueSlot` — resolved **before** the active-word check,
+   because a `'skipped'` row needs a slot to be recorded against. Every status counts as
+   delivered, which is what `markDeliveryFailed` downgrading rather than deleting buys.
+5. **No active words → `'skipped'`, reason `no_active_words`.** The card *cannot* be
+   made, so "make today's card" would be a lie; the slot is still spent so the user is
+   not asked again in two hours about something they still cannot do.
+6. **`reminderFor` before `claimDelivery`**, because `reminder.key` is part of the row
+   being claimed and `push_deliveries_reminder_key_check` refuses a `'sent'` row without
+   it — taking the slot here instead would be a runtime `23514` at 07:00 rather than a
+   type error at build time. `reminderFor` is total over `REMINDER_SLOTS` so the null arm
+   is unreachable; it is *narrowed* rather than asserted away, because a null here must
+   mean silence and never a throw on a path whose job is to be quiet.
+7. `claimDelivery` with `status: 'sent'` — **the write precedes the send**, and it is a
+   claim rather than a receipt. Same discipline as F6's `UPDATE … WHERE turn_count < 8`
+   before the model call: two overlapping ticks (a late scheduled run meeting a manual
+   `workflow_dispatch`) are safe by the unique index, never by a read-then-write. A lost
+   race answers `duplicate` and sends nothing.
+8. `recordSuperseded` writes a `'skipped'` row, reason `'superseded'`, for every slot
+   the catch-up passed over — so a run four hours late delivers the current line **once**
+   rather than a burst of four.
+9. **The fan-out**, sequentially over `candidate.targets`, which arrive *with* the
+   candidate: `listReminderCandidates()` returns the devices beside the timezone, so
+   there is no second query per user. A `gone` outcome deletes that row and carries on —
+   iOS rotation is the normal end of a subscription's life, and `<PushSync />`
+   re-subscribes the device on its next app open. Other failures are classified into a
+   string; **the endpoint never reaches a log line or a row**, because it is a bearer
+   capability.
+10. **Every send failed → `markDeliveryFailed`, never a release.** The row keeps the
+    slot, so the next hourly tick sees it as delivered. That is the cost taken
+    deliberately: a transient failure is one missed reminder out of seven, where a
+    released slot risks a duplicate buzz two hours later — the failure that teaches
+    somebody to turn reminders off.
+
+`REMINDER_TAG` is a **constant, not per-day**. A `dw-card-<localDate>` tag collapses
+within a day just as well, but it lets *yesterday's* undismissed reminder survive beside
+today's — and yesterday's card can no longer be made, so that is a notification asking
+for something impossible. `public/sw.js` holds the same string as its `FALLBACK.tag`.
+Not to be confused with `send.ts`'s `topic` (`'daily-card'`), which collapses messages
+still queued at the push service: different layer, deliberately different name.
+
+`REMINDER_URL` is a **bare path**. An absolute URL would be a second place for the app's
+origin to be wrong, and the failure would be a notification that opens somebody else's
+site.
+
+#### `runTick` — sequential, and it reports counts rather than identities
+
+Iterates `listReminderCandidates()` **sequentially** (Neon's free tier has a small
+connection ceiling and this is not a job worth racing) and wraps each user in a
+`try/catch`, because one user's bad row must never silence everybody else's reminders.
+`TickSummary` is `{ ranAtMs, durationMs, candidates, outcomes, notificationsSent,
+subscriptionsPruned }`.
+
+`ranAtMs` is **epoch milliseconds rather than a formatted string**, and that is not an
+oversight: this app reserves ISO instant serialisation to eight named files and
+`npm run share:check` asserts that list over the whole of `src/` reading raw text,
+comments included — a formatted timestamp here would turn that check red for a reason
+its message would not explain. The consumer is a GitHub Actions log, which timestamps
+every line of its own.
+
 ---
 
 ## Exported API — `src/lib/db/queries/push.ts` (phase 2)
@@ -824,10 +914,10 @@ ceiling is reached the fix is paging the query, not hiding it in Postgres.
 
 ---
 
-## Routes — `/api/push/*` (phase 2)
+## Routes — `/api/push/*`
 
-Both files are `runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, and every response goes
-through `noStore()`. All of `/api` is outside the middleware matcher, so a signed-out
+All three files are `runtime = 'nodejs'`, `dynamic = 'force-dynamic'`, and every response
+goes through `noStore()`. All of `/api` is outside the middleware matcher, so a signed-out
 request gets `requireApiUser()`'s **401 JSON envelope, never a 307** to an HTML page.
 
 | Route | Answers |
@@ -835,6 +925,12 @@ request gets `requireApiUser()`'s **401 JSON envelope, never a 307** to an HTML 
 | `GET /api/push/key` | `{ publicKey: string \| null }` — `null` when unconfigured |
 | `POST /api/push/subscription` | `{ subscribed: true }`; idempotent on `endpoint` |
 | `DELETE /api/push/subscription` | `{ subscribed: false }`, row or no row |
+| `POST /api/push/tick` (phase 4) | `{ ok: true, ...TickSummary }`; 401 / 503 / 500 as above |
+
+`/api/push/tick` is the one route in the app authenticated by a **bearer secret rather
+than a session** — the caller is a scheduler, not a person — and the one that takes
+`maxDuration = 60`, which is the Hobby-plan maximum and roughly a hundred and fifty push
+requests from `sin1`. Past that ceiling the answer is to batch, not to raise it.
 
 **Why `GET /api/push/key` is a route and not a `NEXT_PUBLIC_VAPID_PUBLIC_KEY`.** The key
 is public by definition — it is handed to Apple with every subscription — so the variable
@@ -926,6 +1022,40 @@ That last one is the only proof of the middleware exemption, for the reason the 
 routes already document: the author testing it is signed in, and a broken matcher serves
 them a perfect worker.
 
+**Phase 4 adds the first two commands in this feature that touch a database**, and
+`scripts/check-push.ts` is again unchanged:
+
+```bash
+npm run push:db                          # seeds and deletes its own fixtures
+npm run push:send -- --user=<uuid|email> # one real notification; --slot=, --date=
+```
+
+`scripts/check-push-db.ts` drives the tick against real rows, and the sections are the
+claims rather than the code paths: the unique index **is** the idempotence (a second
+insert for the same `(user, local_date, slot)` is refused, and all three CHECK
+constraints are driven to rejection), a tick run twice in the same slot sends once, a
+late tick delivers the current slot and records the rest `'superseded'`, **a user with
+today's card gets nothing and no row**, a user with no active words is skipped rather
+than lied to, a dead endpoint deletes its row rather than being retried, a slot whose
+sends all failed is recorded `'failed'` and never retried, `runTick` reports counts and
+not identities, an unusable timezone sends nothing and writes nothing, deleting a user
+cascades both new tables — and, last, **that nothing in this feature can create a card**,
+by grepping `src/lib/push/` and `src/app/api/push/` for a card writer. The sender is
+injected (`TickOptions.send`), so the fan-out is asserted without putting anything on
+Apple's wire.
+
+`npm run push:send` is the opposite kind of tool and the only way to check the copy by
+eye. It **writes nothing** — no claim, no `push_deliveries` row, no schedule — so
+running it does not spend a slot or stop the real 09:00 reminder, and it does not prune
+a dead endpoint either (a dry run must not mutate, so a 410 is reported and left for the
+tick to sweep). Its exit code reports transport and nothing else: a `0` means Apple
+accepted the request, never that the line was any good. Read the seven slots on an actual
+lock screen and fix `src/lib/push/reminders.ts` — not the script.
+
+Both scripts need `--conditions=react-server` (already in the npm scripts): everything
+under `lib/db/` and `lib/push/` imports `server-only`, whose default export throws
+outside a server bundle.
+
 The full command list for the rest of the app is in `CLAUDE.md` § Commands.
 
 ---
@@ -989,32 +1119,69 @@ The full command list for the rest of the app is in `CLAUDE.md` § Commands.
   every authed page for a component that usually does nothing.
 - **Do not quote a glob ending in `*/` inside a block comment.** It closes the comment and
   `eslint` fails at a line that looks unrelated.
+- **Do not let anything under `lib/push/` or `/api/push/` create a `daily_cards` row.**
+  [R24] §3: `POST /api/cards` is the only writer, the notification points at the button
+  rather than pressing it, and `push:db`'s last section greps for it.
+- **Do not release a claimed slot on a send failure.** `markDeliveryFailed` downgrades
+  the row and keeps the slot. One missed reminder out of seven is the cheap mistake; a
+  duplicate buzz two hours later is the one that gets reminders turned off.
+- **Do not claim the slot before resolving the `Reminder`.** `reminder_key` is part of
+  the claimed row, and the CHECK constraint turns the omission into a `23514` at 07:00
+  rather than a type error at build time.
+- **Do not write a row when the card already exists, or when the timezone is unusable.**
+  Silence is the feature in the first case and the "writes may not fall back" rule in the
+  second; a day of `'skipped'` rows for a user who made their card is noise in the one
+  table that answers "did we bother them?".
+- **Do not add a `GET` to `/api/push/tick`** unless a scheduler that cannot choose its
+  verb requires it — and then delegate to `POST` and say so in a comment (F17 D5).
+- **Do not let an unconfigured tick answer 200.** 503 on a missing `CRON_SECRET`; the
+  comparison is written to fail closed.
+- **Do not call `timingSafeEqual` without comparing lengths first.** It throws on a
+  length mismatch, which would turn a wrong secret into a 500.
+- **Do not put user ids in the tick's response body.** It is printed verbatim into a
+  GitHub Actions log.
+- **Do not format `ranAtMs` as an ISO string.** `share:check` pins ISO instant
+  serialisation to eight named files over the whole of `src/`, comments included.
+- **Do not make `REMINDER_TAG` per-day.** A dated tag lets yesterday's undismissed
+  reminder survive beside today's, asking for a card that can no longer be made.
+- **Do not add an hourly `"crons"` block to `vercel.json`.** The Hobby plan refuses a
+  sub-daily cron and the *deployment* fails; the schedule lives in the workflow.
+- **Do not drop the status-code check from the workflow step.** `curl` exits 0 on a 401,
+  so a broken tick would be a green tick beside a feature that sends nothing.
+- **Do not set `cancel-in-progress: true` on the workflow.** Cancelling mid-flight
+  abandons a fan-out with slots already claimed.
+- **Do not let `push:send` write a row or prune an endpoint.** It exists to be run
+  repeatedly while tuning copy, and a spent slot would suppress the real reminder.
 
 ## Notes
 
-**Phase 3 of 5.** The remaining phases of the `PUSH_CARD_REMINDERS_PLAN.md` set:
+**Phase 4 of 5.** The phases of the `PUSH_CARD_REMINDERS_PLAN.md` set:
 
 | Phase | Task | Adds |
 |---|---|---|
 | ~~1~~ | ~~`P1-DW-A001`~~ | ~~[R24], the schema, the schedule and the deck~~ — landed |
 | ~~2~~ | ~~`P1-DW-A002`~~ | ~~Subscriptions, VAPID keys and the sender~~ — landed |
 | ~~3~~ | ~~`P1-DW-A003`~~ | ~~The service worker, `<PushSync />` and the switch~~ — landed |
-| 4 | `P1-DW-A004` | The tick, the scheduler and the copy in flight |
+| ~~4~~ | ~~`P1-DW-A004`~~ | ~~The tick, the scheduler and the copy in flight~~ — landed |
 | 5 | `P1-DW-A005` | The doc sweep |
 
-What is reachable after phase 3: a device can subscribe and unsubscribe from
-`/profile/edit`, a rotated endpoint re-registers itself, and a push that arrives is
-shown and opens `/today`. **Nothing sends one.** `reminders.ts` still has no runtime
-caller — `npm run push:check` remains its only consumer — and `sendPush`,
-`claimDelivery`, `markDeliveryFailed`, `listDeliveredSlots`, `deleteDeadSubscription`,
-`listSubscriptions` and `listReminderCandidates` have none either. `push_deliveries` is
-still written by nothing, and phase 4 is what writes every value its `reason` ever holds.
-Of `schedule.ts`, only the three constants have a runtime reader, in the switch's
-schedule hint; `dueSlot` and `isReminderSlot` do not.
+**The feature is end-to-end after phase 4.** Every module phases 1–3 built now has a
+runtime caller: `dueSlot`, `isReminderSlot` via `dueSlot`, `reminderFor`, `sendPush`,
+`claimDelivery`, `markDeliveryFailed`, `listDeliveredSlots`, `deleteDeadSubscription`
+and `listReminderCandidates` are all on the tick's path, and `push_deliveries` is
+written for the first time — phase 4 is what writes every value its `reason` column ever
+holds (`'no_active_words'`, `'superseded'`, and the transport classifications). Only
+`listSubscriptions` is reached from elsewhere, by `npm run push:send`.
 
 The seam between the halves is `PushPayload` — `{ title, body, url, tag }`, named in
-`lib/push/send.ts` and parsed by `readNotification` in `public/sw.js`. **Neither side may
-change it alone**, and phase 4 is the first code that will actually put one on the wire.
+`lib/push/send.ts`, built by `pushPayloadFor` in `lib/push/tick.ts` and parsed by
+`readNotification` in `public/sw.js`. **Neither side may change it alone**, and it is now
+genuinely on the wire.
+
+What phase 5 has left is the doc sweep: `CLAUDE.md` § Commands does not yet list
+`push:check`, `push:db` or `push:send`, `.env.example`'s four variables want the
+`CRON_SECRET`/`VAPID_*` distinction spelled out beside the `EMBEDDING_API_KEY` one, and
+the roadmap's feature table has no F30 row.
 
 Every `plans/F*.md` line asserting that this app has no scheduler is now historical.
 Per [R24] those are corrected by `plans/F30-push-reminders.md` rather than by editing
