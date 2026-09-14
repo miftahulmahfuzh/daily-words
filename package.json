@@ -43,6 +43,8 @@
     "claim:check": "tsx --conditions=react-server scripts/check-claim.ts",
     "claim:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-claim-db.ts",
     "push:check": "tsx scripts/check-push.ts",
+    "push:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-push-db.ts",
+    "push:send": "tsx --conditions=react-server --env-file=.env.local scripts/push-send.ts",
     "badges:check": "tsx scripts/check-badge-art.ts",
     "stats:check": "tsx scripts/check-gamification.ts",
     "stats:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-gamification-db.ts",
