@@ -1,0 +1,1935 @@
+# Phase 4: The tick, the scheduler and the copy in flight
+
+**Plan set:** `PUSH_CARD_REMINDERS_PLAN.md`
+**Analysis:** `20260914-104032-K7P2_code_analyzer.md`
+**Satisfies:** R1 (the notification arrives), R2 (each one reads differently — this phase is what puts the deck *in flight*), R3 (07:00, every two hours, through 20:00 — this phase is what makes the clock real)
+**Depends on:** Phase 1, Phase 2
+**Difficulty:** HARD
+**Package:** `src/lib/push` + `src/app/api/push/tick` + `.github/workflows` + `scripts`
+
+---
+
+## Goal
+
+After this phase the app has a clock. An hourly GitHub Actions job POSTs
+`/api/push/tick` with a shared secret; the tick resolves each subscribed user's
+own local date and hour, stays silent if today's card already exists, and
+otherwise claims one slot in `push_deliveries` and sends that slot's line of
+copy to every device the user has registered. Nothing in this phase creates a
+card, and `npm run push:send` puts one real notification on the phone so the
+words can be read by eye.
+
+---
+
+## Interface Contract
+
+The reconciler reads this section to detect cross-phase conflicts. Be exact and exhaustive.
+
+**Deletes:** none.
+
+**Renames:** none.
+
+**Creates:**
+
+- `src/lib/push/tick.ts`
+  - `const REMINDER_URL = "/today"` — the bare path a tapped notification opens.
+  - `const REMINDER_TAG = "daily-card-reminder"` — the **constant** notification tag Phase 3's `public/sw.js` also holds as its `FALLBACK.tag`.
+  - `type TickOutcome = "no_timezone" | "quiet" | "no_slot" | "no_active_words" | "duplicate" | "sent" | "failed"`
+  - `type PushSender = (target: PushTarget, payload: PushPayload) => Promise<PushOutcome>`
+  - `type TickOptions = { now?: Date; send?: PushSender }`
+  - `type TickUserResult = { userId: string; outcome: TickOutcome; localDate: LocalDate | null; slot: number | null; supersededSlots: number[]; notificationsSent: number; subscriptionsPruned: number; reason: string | null }`
+  - `type TickSummary = { ranAtMs: number; durationMs: number; candidates: number; outcomes: Record<TickOutcome, number>; notificationsSent: number; subscriptionsPruned: number }`
+  - `function pushPayloadFor(reminder: Reminder): PushPayload`
+  - `async function tickUser(candidate: ReminderCandidate, options?: TickOptions): Promise<TickUserResult>`
+  - `async function runTick(options?: TickOptions): Promise<TickSummary>`
+- `src/app/api/push/tick/route.ts`
+  - `const runtime = "nodejs"`, `const dynamic = "force-dynamic"`, `const maxDuration = 60`
+  - `type TickResponse = { ok: true } & TickSummary`
+  - `async function POST(req: Request): Promise<Response>`
+- `.github/workflows/push-reminders.yml` — workflow name `push reminders`, schedule `0 * * * *`, plus `workflow_dispatch`.
+- `scripts/push-send.ts`
+- `scripts/check-push-db.ts`
+- `package.json` — two script entries, `push:db` and `push:send`.
+
+**Signature changes:** none to any existing symbol.
+
+**The push payload this phase emits (agreed with Phase 3's `public/sw.js`):**
+
+```json
+{ "title": "…", "body": "…", "url": "/today", "tag": "daily-card-reminder" }
+```
+
+`url` is a bare path, resolved by the worker against its own origin — never an
+absolute URL, because the worker is registered on exactly one origin and an
+absolute URL is a second place for `APP_URL` to be wrong.
+
+**`tag` is a constant, settled in reconciliation.** This phase originally emitted
+`dw-card-<localDate>`, which collapses a day's reminders so 11:00 replaces 09:00
+on the lock screen. A constant does that *and* collapses across days, which is
+the behaviour that wins: a per-day tag lets yesterday's undismissed reminder sit
+beside today's, and yesterday's card can no longer be made — a notification
+asking for something impossible. At most one Daily Words reminder is ever on the
+lock screen. Phase 3's `public/sw.js` owns the literal as its `FALLBACK.tag` and
+pairs it with `renotify: true`, without which a tagged replacement is silent.
+
+All four fields are sent on every reminder even though the worker defaults every
+one of them. That is not redundancy: the worker must be tolerant because
+`userVisibleOnly: true` makes showing *something* mandatory, and this sender can
+be complete because it always knows all four. Neither side may be trimmed to
+match the other.
+
+Not to be confused with `PushSendOptions.topic` (`'daily-card'`, defaulted inside
+`lib/push/send.ts`), which collapses messages still queued at the push service.
+
+**Requires (from earlier phases) — every symbol this phase imports:**
+
+From **Phase 1**:
+
+| Symbol | Module | Required shape |
+|---|---|---|
+| `REMINDER_SLOTS` | `@/lib/push/schedule` | `readonly number[]`, deriving to `[7, 9, 11, 13, 15, 17, 19]` |
+| `dueSlot` | `@/lib/push/schedule` | `(input: { localHour: number; delivered: Iterable<number> }) => { readonly slot: number; readonly superseded: readonly number[] } \| null` — `null` for "outside the window, or this slot is already recorded"; `superseded` lists the earlier in-window slots this tick is catching up past, and never contains `slot` itself. **`superseded` is `readonly`**, so `TickUserResult.supersededSlots` is filled with `[...superseded]` |
+| `Reminder`, `reminderFor` | `@/lib/push/reminders` | `type Reminder = { readonly key: string; readonly title: string; readonly body: string }`; `reminderFor(date: LocalDate, slot: number) => Reminder \| null`. **Three fields and a nullable return, both load-bearing** — see the note below the table |
+| `pushDeliveries` | `@/lib/db/schema` | columns `userId`, `localDate` (`date`), `slot` (`integer`), `status` (`text`, `$type<'sent' \| 'skipped' \| 'failed'>()`, **NOT NULL**), `reminderKey` (`text`, nullable), `sentAt` (`timestamptz`, default now), `reason` (`text`, nullable); unique index on `(user_id, local_date, slot)`; CHECKs on `status`, on `slot between 0 and 23`, and `push_deliveries_reminder_key_check` — `status <> 'sent' or reminder_key is not null`; `user_id` FK `ON DELETE CASCADE` |
+| `pushSubscriptions` | `@/lib/db/schema` | `user_id` FK `ON DELETE CASCADE`, `endpoint` unique |
+
+From **Phase 2**:
+
+| Symbol | Module | Required shape |
+|---|---|---|
+| `PushTarget` | `@/lib/db/queries/push` | `{ id: string; endpoint: string; p256dh: string; auth: string }` — four fields, no `userId`; the tick already holds the user id |
+| `ReminderCandidate` | `@/lib/db/queries/push` | `{ userId: string; timezone: string; targets: PushTarget[] }` — **the devices come with the candidate.** No second `listSubscriptions(userId)` call per user |
+| `listReminderCandidates` | `@/lib/db/queries/push` | `() => Promise<ReminderCandidate[]>` — one row per onboarded user with ≥1 subscription; `timezone` is the **raw** `profiles.timezone` |
+| `listSubscriptions` | `@/lib/db/queries/push` | `(userId: string) => Promise<PushTarget[]>` — used by `push:send` only |
+| `upsertSubscription` | `@/lib/db/queries/push` | `(userId: string, input: { endpoint: string; p256dh: string; auth: string; userAgent: string \| null }) => Promise<PushTarget>` — used by `push:db` only. **`userAgent` is required, pass `null`** |
+| `deleteDeadSubscription` | `@/lib/db/queries/push` | `(userId: string, endpoint: string) => Promise<boolean>` — the 410 sweep. **Two arguments**: `listReminderCandidates()` handed the user id over in the same object, and keeping it makes `listReminderCandidates` literally the file's only function without one |
+| `listDeliveredSlots` | `@/lib/db/queries/push` | `(userId: string, localDate: LocalDate) => Promise<number[]>` — every slot with a row, whatever its status; a `'skipped'` or `'failed'` row occupies the unique key exactly as a `'sent'` one does |
+| `claimDelivery` | `@/lib/db/queries/push` | `(input: { userId: string; localDate: LocalDate; slot: number; status: 'sent' \| 'skipped' \| 'failed'; reminderKey?: string \| null; reason?: string \| null }) => Promise<boolean>` — `onConflictDoNothing`, false when the row already existed |
+| `markDeliveryFailed` | `@/lib/db/queries/push` | `(userId: string, localDate: LocalDate, slot: number, reason: string) => Promise<void>` — downgrades a claimed row; **never deletes it** |
+| `PushPayload` | `@/lib/push/send` | `{ title: string; body: string; url: string; tag?: string }` — `tag` is optional in the type and this phase always sends it |
+| `PushOutcome` | `@/lib/push/send` | `{ ok: true } \| { ok: false; reason: 'gone' } \| { ok: false; reason: 'unconfigured' } \| { ok: false; reason: 'rejected'; status: number } \| { ok: false; reason: 'transport' }` — **discriminated on `reason`, and no arm carries a `message`** |
+| `sendPush` | `@/lib/push/send` | `(target: PushTarget, payload: PushPayload, options?) => Promise<PushOutcome>` — never throws; a 404/410 is `reason: 'gone'`; the service `topic` defaults to `'daily-card'` inside `send.ts`, so this phase passes no options |
+| `env.CRON_SECRET` | `@/lib/env` | `string \| undefined`, `blankIsAbsent`-wrapped |
+
+**`reminderFor` returns three fields and may return `null`, and both matter at
+runtime rather than at build time.** `push_deliveries_reminder_key_check` refuses
+any `status = 'sent'` row whose `reminder_key` is null, so the `key` must be
+threaded from `reminderFor` into `claimDelivery` — destructuring `{ title, body }`
+and discarding the key produces a `23514` on the insert at 07:00, on the one path
+nobody is watching. The `null` arm cannot fire for a slot that came out of
+`dueSlot` (Phase 1's `push:check` asserts totality over `REMINDER_SLOTS`), but it
+is a `null` rather than a throw and `tickUser` narrows it before use.
+
+**The delivery functions live in Phase 2's `src/lib/db/queries/push.ts` — settled,
+nothing outstanding.** This phase's draft named them a "hard ask"; reconciliation
+confirmed Phase 2 already planned `listDeliveredSlots` and `claimDelivery` into
+that file and made two corrections rather than one:
+
+- `claimDelivery` takes an **input object** carrying `status` and, for a `'sent'`
+  claim, `reminderKey`. Phase 2's draft inserted `{ userId, localDate, slot }`
+  only, which is a `23502` against Phase 1's NOT NULL `status` — a runtime
+  failure, not a naming difference.
+- Phase 2's `releaseDelivery` (which **deleted** the claimed row so the next tick
+  would retry through catch-up) is gone, replaced by this phase's
+  `markDeliveryFailed` (which **downgrades** it to `'failed'`, spending the slot).
+  The two were opposite behaviours. The downgrade wins on Phase 1's schema —
+  `'failed'` is a first-class status there with a CHECK constraint contemplating
+  it, and Phase 1's own handoff says the tick "insert[s] one `'sent'` or
+  `'failed'` row" — and on D5's stated cost: a transient failure is one missed
+  reminder, never a duplicate buzz two hours later.
+
+The exact signatures are in the Requires table above. **The fallback this phase's
+draft named — a sibling `src/lib/db/queries/push-deliveries.ts` owned by this
+phase — is withdrawn. Do not create that file.** There is one query module for
+this resource and it is Phase 2's.
+
+**`import "server-only"` on the tick route, and invariant 7.** Invariant 7 is now
+written as a property rather than as a one-file allowlist: *every file under
+`src/` that names `VAPID_PRIVATE_KEY` or `CRON_SECRET` begins with
+`import 'server-only'`*. The tick route is the only consumer of `CRON_SECRET` and
+reads it as `env.CRON_SECRET`, so the literal appears in
+`src/app/api/push/tick/route.ts` — and the file therefore carries
+`import "server-only";` as its first line even though no other route handler in
+the repo does.
+
+**Checked in reconciliation: that import is redundant and harmless, not wrong.** A
+route handler is already server-side, so nothing about the build changes; the
+`server-only` package resolves to its server entry point in this graph, and both
+`push:db` and `push:send` run under `--conditions=react-server` anyway. It is
+carried deliberately so the assertion can have zero exemptions, which is the
+difference between a property and a list somebody has to remember to edit. Phase
+1's `scripts/check-push.ts` asserts exactly that property.
+
+**Leaves alone (owned by others):**
+
+- `src/lib/db/schema.ts`, `src/lib/db/types.ts`, `drizzle/**` — Phase 1.
+- `src/lib/push/schedule.ts`, `src/lib/push/reminders.ts`, `scripts/check-push.ts` — Phase 1.
+- `src/lib/env.ts`, `src/lib/db/queries/push.ts`, `src/lib/push/send.ts`,
+  `src/lib/push/schemas.ts`, `src/lib/push/client.ts`,
+  `src/app/api/push/key/**`, `src/app/api/push/subscription/**` — Phase 2.
+- `public/sw.js`, `src/middleware.ts`, `next.config.ts`, every component,
+  `src/app/(app)/**` — Phase 3.
+- `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `ROADMAP_v0.1.0.md`, `plans/**`,
+  `.env.example` prose — Phase 5.
+- `vercel.json` — untouched by anybody. See D1.
+- `src/app/api/cards/route.ts` — untouched by anybody. See D7.
+
+---
+
+## Files
+
+| File | Action | What changes |
+|---|---|---|
+| `src/lib/push/tick.ts` | create | The per-user decision and the fan-out. New file, ~210 lines. |
+| `src/app/api/push/tick/route.ts` | create | `POST`, shared-secret auth, the JSON summary. New file, ~110 lines. |
+| `.github/workflows/push-reminders.yml` | create | The shipped scheduler. **The repo's first `.github/` file.** |
+| `scripts/push-send.ts` | create | `npm run push:send` — one real notification, no rows. |
+| `scripts/check-push-db.ts` | create | `npm run push:db` — nine database-shaped assertions and the no-card-creation grep. |
+| `package.json` | modify | two lines after Phase 1's `"push:check"` entry (`:38` in today's file, in the scripts block). |
+
+---
+
+## Decisions this phase is bound to
+
+Restated so an implementer does not have to hold the brief open.
+
+- **D1 — GitHub Actions, not `vercel.json`.** Vercel rejects a cron expression
+  more frequent than once per day on the Hobby plan, so an hourly `"crons"`
+  block can make the *deployment itself* fail. A change that breaks deploys is
+  worse than a scheduler living one file away. `vercel.json` stays two lines.
+- **D2 — hourly, `0 * * * *`.** Slots are two hours apart; hourly resolution is
+  ample. 24 runs/day stays inside the free Actions minutes on a private repo
+  where 48 would not. GitHub's scheduler is best-effort and runs late; that is
+  acceptable *because of* Phase 1's catch-up rule.
+- **D3 — `POST`, bearer `CRON_SECRET`, `timingSafeEqual`, lengths compared
+  first.** A missing or empty `CRON_SECRET` answers **503**, never 200.
+- **D4 — the per-user decision order**, with one documented swap (see Step 1).
+- **D5 — insert first, send second**, `onConflictDoNothing` as the guard, the
+  row downgraded to `'failed'` if the send then fails.
+- **D6 — payload `{ title, body, url, tag }`**, `url = "/today"`, and
+  `tag = "daily-card-reminder"` — a **constant**, settled in reconciliation
+  against this phase's original per-day tag. Phase 3's `public/sw.js` holds the
+  same literal as its fallback.
+- **D7 — nothing here creates a card**, asserted by grep in `push:db`.
+- **D8 — the scale ceiling is named, not built around.**
+- **D9 — `push:send` writes nothing.**
+- **D10 — `push:db` seeds `f30-push-%@example.invalid` and deletes it all.**
+
+### Two traps found while reading, both of which fail an existing check script
+
+**1. `toISOString` must not appear anywhere under `src/` in this phase — not
+even in a comment.** `scripts/check-share.ts` asserts that the literal
+`toISOString` appears in exactly eight named files, and it scans the *raw*
+text, not the comment-stripped text (verified: its `body` map is built with
+`readFileSync` and only the neighbouring assertions call `stripComments`). A
+`ranAt` field serialised the obvious way in `tick.ts` or in the route would turn
+`npm run share:check` red for a reason whose error message says nothing about
+push. `TickSummary` therefore reports `ranAtMs: number` (epoch milliseconds), and
+the prose in the file explains the constraint without spelling the identifier.
+
+Reconciliation swept the other four phases for the same hazard: the literal
+appears nowhere in any of them under `src/`. The one occurrence in the whole plan
+set is in `scripts/check-push.ts` — outside `src/`, and asserting the absence.
+The rule is now invariant 4 in the plan index.
+
+**2. `import "server-only"` on a route handler is deliberate here, and checked.**
+No other route handler in the repo carries it. This one does, because it is the
+only file outside `lib/env.ts` that names `CRON_SECRET`, and invariant 7's
+mechanism is "everything that reads them carries `import 'server-only'`". It is
+**redundant but harmless** rather than wrong: a route handler is already
+server-side, the package resolves to its server entry in this graph, and both
+`push:db` and `push:send` run under `--conditions=react-server`. Carrying it is
+what lets Phase 1's assertion be a property with zero exemptions. See the
+Requires table.
+
+---
+
+## Implementation Steps
+
+### Step 1: `src/lib/push/tick.ts` — the per-user decision and the fan-out
+
+**File:** `src/lib/push/tick.ts` (new)
+
+**Change:** the whole file. This is the only place in the feature that decides
+*whether* to bother somebody.
+
+**The one deviation from D4's stated order, and why.** D4 lists
+`countActiveWords` (step 4) before `dueSlot` (step 5), but step 4's outcome is
+"record a `'skipped'` row" — and a row cannot be recorded before the slot it
+belongs to is known. The implementation therefore resolves the slot first and
+then asks about active words. Every observable property of D4 survives: the
+same user gets the same silence, the same `'skipped'` row with the same reason,
+and the same nothing-sent. It is also strictly cheaper — `countActiveWords` is
+now skipped entirely for the seventeen hours a day no slot is due, and for
+every user already delivered this hour.
+
+**Code:**
+
+```ts
+import "server-only";
+import {
+  countActiveWords,
+  getCardForDate,
+  resolveTimezone,
+} from "@/lib/db/queries/cards";
+import {
+  claimDelivery,
+  deleteDeadSubscription,
+  listDeliveredSlots,
+  listReminderCandidates,
+  markDeliveryFailed,
+  type PushTarget,
+  type ReminderCandidate,
+} from "@/lib/db/queries/push";
+import { reminderFor, type Reminder } from "@/lib/push/reminders";
+import { dueSlot } from "@/lib/push/schedule";
+import { sendPush, type PushOutcome, type PushPayload } from "@/lib/push/send";
+import { localDateNow, localHour, type LocalDate } from "@/lib/time/local-date";
+
+/**
+ * The tick. **This is the scheduler `src/app/api/cards/route.ts` told you to
+ * stop before writing — and it stops exactly where that instruction aimed.**
+ *
+ * That file's rule is "no cron, no revalidate, no creation on page load, no
+ * 'make it for them if they haven't by 9pm'", because the deliberate press is
+ * the exercise. Nothing here presses it. This module reads three things about a
+ * user and, at most once per two-hour slot, puts a sentence on their lock screen
+ * pointing at the button. It imports no card writer, no gamification hook and no
+ * transaction; `npm run push:db` greps this directory to keep it that way.
+ *
+ * Everything about a "day" and an "hour" here goes through
+ * `lib/time/local-date.ts`, in the user's own zone, exactly as `/today` and
+ * `POST /api/cards` do. The server's clock decides nothing but *when the tick
+ * ran*.
+ *
+ * One reporting note, because it looks like an oversight and is not: the summary
+ * reports the run instant as epoch milliseconds rather than as a formatted
+ * string. This app reserves ISO instant serialisation to eight named files and
+ * `npm run share:check` asserts that list over the whole of `src/`; a formatted
+ * timestamp here would turn that check red for a reason its message would not
+ * explain. The consumer is a GitHub Actions log, which timestamps every line of
+ * its own.
+ */
+
+/**
+ * Where a tapped notification lands. A **bare path**: the service worker resolves
+ * it against its own origin, which is the only origin it can be registered on.
+ * An absolute URL here would be a second place for `APP_URL` to be wrong, and
+ * the failure would be a notification that opens somebody else's site.
+ */
+export const REMINDER_URL = "/today";
+
+/**
+ * One notification on the lock screen, ever — replaced rather than stacked.
+ *
+ * iOS coalesces notifications sharing a `tag`, so 11:00's line takes the place
+ * of 09:00's instead of building a pile the user swipes away in one gesture
+ * without reading.
+ *
+ * **Constant, not per-day.** A `dw-card-<localDate>` tag was the first draft and
+ * collapses within a day just as well; what it also does is let *yesterday's*
+ * undismissed reminder survive beside today's — and yesterday's card can no
+ * longer be made, so that is a notification asking for something impossible. A
+ * constant collapses across the midnight boundary too.
+ *
+ * `public/sw.js` holds this same string as its `FALLBACK.tag` and pairs it with
+ * `renotify: true`, without which a tagged replacement arrives silently and the
+ * phone would buzz at 07:00 and never again.
+ *
+ * Not to be confused with `lib/push/send.ts`'s `topic` (`'daily-card'`), which
+ * collapses messages still queued at the push service. Different layer.
+ */
+export const REMINDER_TAG = "daily-card-reminder";
+
+export type TickOutcome =
+  /** The profile's zone is unusable. Nothing sent, nothing written. */
+  | "no_timezone"
+  /** Today's card exists. The day is quiet, and no row records the silence. */
+  | "quiet"
+  /** Outside the window, or this slot is already recorded. */
+  | "no_slot"
+  /** A slot was due but no card can be made, so there is nothing honest to say. */
+  | "no_active_words"
+  /** Another tick claimed this slot first. */
+  | "duplicate"
+  | "sent"
+  /** A slot was claimed and every send failed. The row says so. */
+  | "failed";
+
+/** Injectable for `npm run push:db`, which must assert the fan-out offline. */
+export type PushSender = (
+  target: PushTarget,
+  payload: PushPayload,
+) => Promise<PushOutcome>;
+
+/**
+ * `now` is injectable for the same reason `encodeClaimIntent`'s `nowSeconds` is:
+ * there is no clock in this module's contract, and the catch-up assertions would
+ * otherwise have to wait two hours.
+ */
+export type TickOptions = { now?: Date; send?: PushSender };
+
+export type TickUserResult = {
+  userId: string;
+  outcome: TickOutcome;
+  localDate: LocalDate | null;
+  slot: number | null;
+  supersededSlots: number[];
+  notificationsSent: number;
+  subscriptionsPruned: number;
+  reason: string | null;
+};
+
+export type TickSummary = {
+  /** When the tick ran, as epoch milliseconds. See the note at the top. */
+  ranAtMs: number;
+  durationMs: number;
+  candidates: number;
+  outcomes: Record<TickOutcome, number>;
+  notificationsSent: number;
+  subscriptionsPruned: number;
+};
+
+/**
+ * The title and body come from Phase 1's deck; the url and tag are fixed.
+ *
+ * **It takes the `Reminder`, not `(localDate, slot)`.** The caller has to hold
+ * the reminder anyway — `reminder.key` is what goes into
+ * `push_deliveries.reminder_key`, and `push_deliveries_reminder_key_check`
+ * refuses a `'sent'` row without it. Taking the slot here instead would let a
+ * caller build a payload and forget the key, which is a runtime `23514` rather
+ * than a type error.
+ */
+export function pushPayloadFor(reminder: Reminder): PushPayload {
+  return {
+    title: reminder.title,
+    body: reminder.body,
+    url: REMINDER_URL,
+    tag: REMINDER_TAG,
+  };
+}
+
+/**
+ * One user, one decision. Never throws for a reason the caller can do anything
+ * about — `runTick` catches anyway, because one user's bad row must not silence
+ * everybody else's reminders.
+ */
+export async function tickUser(
+  candidate: ReminderCandidate,
+  options: TickOptions = {},
+): Promise<TickUserResult> {
+  const now = options.now ?? new Date();
+  const send = options.send ?? sendPush;
+  const userId = candidate.userId;
+
+  const blank = {
+    userId,
+    localDate: null as LocalDate | null,
+    slot: null as number | null,
+    supersededSlots: [] as number[],
+    notificationsSent: 0,
+    subscriptionsPruned: 0,
+    reason: null as string | null,
+  };
+
+  /**
+   * 1. **Reads may fall back to a default zone; writes may not** — and a
+   *    notification is a write, in the only sense that matters here. It lands
+   *    on a lock screen, it cannot be recalled, and one dated by a guessed zone
+   *    is the notification equivalent of the card `POST /api/cards` refuses to
+   *    make with a 409. So: send nothing, write nothing, log it.
+   */
+  const timezone = resolveTimezone({ timezone: candidate.timezone });
+  if (!timezone.ok) {
+    console.warn("[push/tick] unusable timezone — sending nothing", {
+      userId,
+      reason: timezone.reason,
+    });
+    return { ...blank, outcome: "no_timezone", reason: timezone.reason };
+  }
+  const tz = timezone.timezone;
+
+  /** 2. The user's day and the user's hour. Never the server's. */
+  const localDate = localDateNow(tz, now);
+  const hour = localHour(now, tz);
+
+  /**
+   * 3. **The card exists: return immediately, with no row of any kind.**
+   *    Silence is the whole feature. A day's worth of `'skipped'` rows for a
+   *    user who did the thing is noise in a table whose only job is to answer
+   *    "did we bother them?".
+   */
+  const card = await getCardForDate(userId, localDate);
+  if (card) return { ...blank, outcome: "quiet", localDate };
+
+  /**
+   * 5 (before 4 — see the plan's Step 1). A `'skipped'` row needs a slot to be
+   * recorded against, so the slot is resolved first. Every status counts as
+   * delivered: a `'failed'` row holds its slot rather than being retried into a
+   * duplicate an hour later, which is what `markDeliveryFailed` downgrading
+   * rather than deleting buys.
+   */
+  const delivered = await listDeliveredSlots(userId, localDate);
+  const due = dueSlot({ localHour: hour, delivered });
+  if (!due) return { ...blank, outcome: "no_slot", localDate };
+
+  const { slot, superseded } = due;
+
+  /**
+   * 4. No active words means the card *cannot* be made, so "make today's card"
+   *    would be a lie. Record the skip so the slot is spent and the user is not
+   *    asked again two hours later about a card they still cannot make.
+   */
+  const activeWords = await countActiveWords(userId);
+  if (activeWords === 0) {
+    await claimDelivery({
+      userId,
+      localDate,
+      slot,
+      status: "skipped",
+      reason: "no_active_words",
+    });
+    await recordSuperseded(userId, localDate, superseded);
+    return {
+      ...blank,
+      outcome: "no_active_words",
+      localDate,
+      slot,
+      supersededSlots: [...superseded],
+      reason: "no_active_words",
+    };
+  }
+
+  /**
+   * The line, resolved **before** the claim, because its `key` is part of the
+   * row being claimed. `push_deliveries_reminder_key_check` refuses a
+   * `status = 'sent'` row whose `reminder_key` is null, so a claim that does not
+   * carry it is a `23514` at 07:00 rather than a type error at build time.
+   *
+   * `reminderFor` is total over `REMINDER_SLOTS` and `slot` came out of
+   * `dueSlot`, so the null arm is unreachable — Phase 1's `push:check` asserts
+   * exactly that. It is narrowed rather than asserted away because a `null` here
+   * must mean silence, never a throw on a path whose job is to be quiet.
+   */
+  const reminder = reminderFor(localDate, slot);
+  if (!reminder) {
+    console.error("[push/tick] no deck line for slot — sending nothing", { userId, slot });
+    return { ...blank, outcome: "no_slot", localDate, slot };
+  }
+
+  /**
+   * **D5: the row is written before the send, and it is a claim rather than a
+   * receipt.** Same discipline as F6's `UPDATE … WHERE turn_count < 8` taken
+   * *before* the model call, and F9's `onConflictDoNothing` badge inserts: the
+   * unique index on `(user_id, local_date, slot)` is the guard, never a
+   * read-then-write. Two overlapping ticks — a late scheduled run meeting a
+   * manual `workflow_dispatch` — are then safe by arithmetic.
+   *
+   * Which way to fail is a real choice, and it is made here in favour of the
+   * missed notification: a duplicate lock-screen buzz for a word the user has
+   * already been asked about is the failure that teaches somebody to turn
+   * reminders off, and the next slot is two hours away.
+   */
+  const claimed = await claimDelivery({
+    userId,
+    localDate,
+    slot,
+    status: "sent",
+    reminderKey: reminder.key,
+  });
+  if (!claimed) return { ...blank, outcome: "duplicate", localDate, slot };
+
+  await recordSuperseded(userId, localDate, superseded);
+
+  const payload = pushPayloadFor(reminder);
+
+  /**
+   * The devices come **with** the candidate — `listReminderCandidates()` returns
+   * them in the same object as the timezone, so there is no second query per
+   * user here. That is one fewer Neon round trip per candidate in an hourly job,
+   * which is the axis CLAUDE.md's `sin1` section says to count.
+   */
+  const targets = candidate.targets;
+
+  let sent = 0;
+  let pruned = 0;
+  const errors: string[] = [];
+
+  for (const target of targets) {
+    const outcome = await send(target, payload);
+
+    if (outcome.ok) {
+      sent++;
+      continue;
+    }
+
+    /**
+     * iOS rotates and revokes endpoints, so a 404/410 is the normal end of a
+     * subscription's life rather than a fault of this tick. Delete the row and
+     * carry on — `<PushSync/>` re-subscribes the device on its next app open.
+     *
+     * `userId` first, like everything else in `queries/push.ts`: the caller is a
+     * machine but it is holding the id, so `listReminderCandidates()` stays that
+     * file's only function without one.
+     */
+    if (outcome.reason === "gone") {
+      await deleteDeadSubscription(userId, target.endpoint);
+      pruned++;
+      continue;
+    }
+
+    // `PushOutcome` carries no `message` on any arm — the detail is already in
+    // `send.ts`'s log line, and the endpoint is a bearer capability that must
+    // not be echoed. What goes in the row is the classification and, where there
+    // is one, the status.
+    errors.push(
+      outcome.reason === "unconfigured"
+        ? "push is not configured"
+        : outcome.reason === "rejected"
+          ? `rejected ${outcome.status}`
+          : "transport failure",
+    );
+  }
+
+  if (sent === 0) {
+    const reason = (
+      errors[0] ??
+      (pruned > 0 ? "every endpoint was gone" : "no subscriptions")
+    ).slice(0, 500);
+    /**
+     * **Downgrade, never delete.** The row keeps the slot, so the next hourly
+     * tick's `dueSlot` sees it as delivered and moves on. That is D5's stated
+     * cost taken deliberately: a transient failure is one missed reminder out of
+     * seven, where a released slot would retry and risk a duplicate buzz two
+     * hours later — the failure that teaches somebody to turn reminders off.
+     */
+    await markDeliveryFailed(userId, localDate, slot, reason);
+    console.error("[push/tick] nothing delivered", { userId, localDate, slot, pruned, reason });
+    return {
+      ...blank,
+      outcome: "failed",
+      localDate,
+      slot,
+      supersededSlots: [...superseded],
+      subscriptionsPruned: pruned,
+      reason,
+    };
+  }
+
+  return {
+    ...blank,
+    outcome: "sent",
+    localDate,
+    slot,
+    supersededSlots: [...superseded],
+    notificationsSent: sent,
+    subscriptionsPruned: pruned,
+  };
+}
+
+/**
+ * Spend the slots this tick caught up past, so a run that is four hours late
+ * delivers the *current* line once rather than a burst of four.
+ */
+async function recordSuperseded(
+  userId: string,
+  localDate: LocalDate,
+  slots: readonly number[],
+): Promise<void> {
+  for (const slot of slots) {
+    await claimDelivery({
+      userId,
+      localDate,
+      slot,
+      status: "skipped",
+      reason: "superseded",
+    });
+  }
+}
+
+/**
+ * The fan-out. Sequential on purpose — see the plan's D8 for the ceiling this
+ * has and what to do past it. Neon's free tier has a small connection ceiling
+ * and this is not a job worth racing.
+ *
+ * The run instant is reported as epoch milliseconds. See the note at the top of
+ * the file: this app reserves ISO instant serialisation to eight named files and
+ * `npm run share:check` asserts that list over the whole of `src/` reading raw
+ * text, comments included.
+ */
+export async function runTick(options: TickOptions = {}): Promise<TickSummary> {
+  const startedAt = Date.now();
+  const now = options.now ?? new Date();
+
+  const outcomes: Record<TickOutcome, number> = {
+    no_timezone: 0,
+    quiet: 0,
+    no_slot: 0,
+    no_active_words: 0,
+    duplicate: 0,
+    sent: 0,
+    failed: 0,
+  };
+  let notificationsSent = 0;
+  let subscriptionsPruned = 0;
+
+  const candidates = await listReminderCandidates();
+
+  for (const candidate of candidates) {
+    try {
+      const result = await tickUser(candidate, { now, send: options.send });
+      outcomes[result.outcome]++;
+      notificationsSent += result.notificationsSent;
+      subscriptionsPruned += result.subscriptionsPruned;
+    } catch (err) {
+      // One user's bad row must never silence everybody else's reminders.
+      console.error("[push/tick] user failed", { userId: candidate.userId, err });
+      outcomes.failed++;
+    }
+  }
+
+  return {
+    ranAtMs: now.getTime(),
+    durationMs: Date.now() - startedAt,
+    candidates: candidates.length,
+    outcomes,
+    notificationsSent,
+    subscriptionsPruned,
+  };
+}
+```
+
+**Impact:** nothing imports this yet. `npm run typecheck` is red until Phase 1
+and Phase 2 have landed their exports — that is the dependency, not a mistake.
+
+---
+
+### Step 2: `src/app/api/push/tick/route.ts` — the endpoint
+
+**File:** `src/app/api/push/tick/route.ts` (new)
+
+**Change:** the whole file. House shape: `runtime = "nodejs"`,
+`dynamic = "force-dynamic"`, `fail()` / `ok()` / `noStore()`, the
+`{ error: { code, message } }` envelope.
+
+**Code:**
+
+```ts
+import "server-only";
+import { timingSafeEqual } from "node:crypto";
+import { fail, noStore, ok } from "@/lib/api/respond";
+import { env } from "@/lib/env";
+import { runTick, type TickSummary } from "@/lib/push/tick";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/**
+ * The fan-out is sequential and the ceiling is named in the plan's D8. Sixty
+ * seconds is the Hobby-plan maximum and roughly a hundred and fifty push
+ * requests from `sin1`; past that the answer is to batch, not to raise this.
+ */
+export const maxDuration = 60;
+
+/**
+ * The reminder tick. **The only scheduled entry point in the application.**
+ *
+ * It creates nothing. `src/app/api/cards/route.ts` is still the only path that
+ * writes a `daily_cards` row, and this handler does not reach it, import it, or
+ * know how to. What it does is ask, per subscribed user and in that user's own
+ * timezone, whether a two-hourly slot is due on a day with no card — and put
+ * one sentence on their lock screen if so.
+ *
+ * **`POST`, not `GET`.** F17 D5 already ruled in this codebase that a `GET`
+ * which mutates is prefetchable, replayable and invisible to Next's action CSRF
+ * machinery. This route is under `/api` — outside the middleware matcher — and
+ * holds no session, so the ruling is about consistency rather than danger. That
+ * is the point: the rule is worth more than the exception. If Vercel Cron ever
+ * replaces the workflow, add a `GET` that delegates to `POST` and say in a
+ * comment that it exists for a caller that cannot choose its verb.
+ *
+ * **Auth is a bearer secret compared in constant time.** There is no session
+ * here and there cannot be: the caller is a scheduler, not a person.
+ *
+ * **An unconfigured deploy answers 503, never 200.** A tick endpoint that
+ * happily accepts anonymous callers because nobody set the variable is the worst
+ * available default — it is indistinguishable from working, right up until a
+ * stranger is spending the app's push quota.
+ */
+
+export type TickResponse = { ok: true } & TickSummary;
+
+/**
+ * Constant-time, and length-safe: `timingSafeEqual` **throws** on a length
+ * mismatch, so the lengths are compared first — the same guard
+ * `lib/share/intent.ts` carries for the claim cookie's signature.
+ */
+function secretMatches(header: string | null, secret: string): boolean {
+  if (!header) return false;
+  const prefix = "Bearer ";
+  if (!header.startsWith(prefix)) return false;
+
+  const given = Buffer.from(header.slice(prefix.length), "utf8");
+  const want = Buffer.from(secret, "utf8");
+  return given.length === want.length && timingSafeEqual(given, want);
+}
+
+export async function POST(req: Request): Promise<Response> {
+  const secret = env.CRON_SECRET;
+  if (!secret) {
+    console.error("[api/push/tick] no scheduler secret is configured — refusing");
+    return noStore(
+      fail(503, "Reminders are not configured.", "not_configured"),
+    );
+  }
+
+  if (!secretMatches(req.headers.get("authorization"), secret)) {
+    return noStore(fail(401, "Not authorised.", "unauthenticated"));
+  }
+
+  let summary: TickSummary;
+  try {
+    summary = await runTick();
+  } catch (err) {
+    console.error("[api/push/tick] tick failed", { err });
+    return noStore(fail(500, "The tick failed.", "internal"));
+  }
+
+  /**
+   * **No user ids in the body.** This response is printed verbatim into a
+   * GitHub Actions log, and a run log is a more public place than it looks.
+   * Counts are what the scheduler needs in order to fail loudly; the per-user
+   * detail is in the server logs, where it belongs.
+   */
+  return noStore(ok<TickResponse>({ ok: true, ...summary }));
+}
+```
+
+**Request JSON:** none required. The workflow sends `{}`; the body is never
+read, so `curl -X POST` with no body works too — the same curl-testability
+`POST /api/cards` keeps.
+
+**Response JSON (200):**
+
+```json
+{
+  "ok": true,
+  "ranAtMs": 1789099200000,
+  "durationMs": 812,
+  "candidates": 1,
+  "outcomes": {
+    "no_timezone": 0, "quiet": 0, "no_slot": 0, "no_active_words": 0,
+    "duplicate": 0, "sent": 1, "failed": 0
+  },
+  "notificationsSent": 2,
+  "subscriptionsPruned": 0
+}
+```
+
+**Failure envelopes:** `401 { "error": { "code": "unauthenticated", "message": "Not authorised." } }`,
+`503 { "error": { "code": "not_configured", … } }`,
+`500 { "error": { "code": "internal", … } }`. A `GET` gets Next's own 405.
+
+**Impact:** adds one route under `/api`, which is outside the middleware matcher
+and outside every layout. No existing route changes.
+
+---
+
+### Step 3: `.github/workflows/push-reminders.yml` — the scheduler
+
+**File:** `.github/workflows/push-reminders.yml` (new — **the repo's first
+`.github/` file**; the directory does not exist today)
+
+**Change:** the whole file.
+
+**Code:**
+
+```yaml
+# Daily Words — the reminder tick.
+#
+# Every hour, POST `/api/push/tick`. That endpoint decides, per subscribed user
+# and in that user's own timezone, whether a two-hourly reminder slot is due on
+# a day with no card, and sends one notification if so.
+#
+# It creates no cards. `POST /api/cards` is still the only path that makes one,
+# and the notification points at the button rather than pressing it.
+#
+# ── Why this is not a `crons` entry in `vercel.json` ─────────────────────────
+# Vercel rejects a cron expression more frequent than once per day on the Hobby
+# plan, so an hourly `"crons"` block can make the *deployment itself* fail. A
+# change that breaks deploys is a worse failure than a scheduler living one file
+# away, so the schedule lives here and `vercel.json` stays two lines about
+# `sin1`.
+#
+# Moving to Vercel Cron later is two lines in `vercel.json` plus a `GET` shim
+# beside the route's `POST` (Vercel Cron issues a GET). The swap is invisible to
+# users because of the catch-up rule in `src/lib/push/schedule.ts`: a slot that
+# was missed while the schedulers changed hands is superseded by the next tick
+# rather than replayed as a burst of backdated reminders.
+#
+# ── Why hourly and not every 30 minutes ─────────────────────────────────────
+# The slots are two hours apart, so hourly resolution is ample. 24 runs a day
+# stays well inside the free Actions minutes even on a private repo, where 48
+# would not.
+#
+# GitHub's scheduler is **best-effort** and can run tens of minutes late, or skip
+# a run entirely under load. That is acceptable precisely because of the catch-up
+# rule: a late tick delivers the *current* slot rather than a burst, and a slot
+# that was missed is recorded `'skipped'` rather than replayed. A reminder
+# arriving at 09:24 instead of 09:00 is the feature working.
+#
+# ── Configuration ───────────────────────────────────────────────────────────
+#   secrets.CRON_SECRET  (required) — must equal `CRON_SECRET` in the Vercel
+#                                     project's environment variables.
+#   vars.PUSH_TICK_URL   (optional) — override the endpoint, e.g. to aim a
+#                                     manual run at a preview deployment.
+#
+# ── How to turn reminders off ───────────────────────────────────────────────
+# Actions → "push reminders" → ⋯ → Disable workflow. Or delete this file. Either
+# one stops every reminder in the app: nothing else here has a clock.
+#
+# GitHub also disables scheduled workflows by itself after 60 days with no
+# repository activity. That is the one way reminders can stop silently, and it
+# is the reason this paragraph exists.
+
+name: push reminders
+
+on:
+  schedule:
+    # Hourly, on the hour, UTC. The user's local slot is resolved server-side.
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+# Nothing here reads or writes the repository.
+permissions: {}
+
+# A late scheduled run must not overlap a manual one. Queue, never cancel:
+# cancelling mid-flight would abandon a fan-out with some rows claimed.
+concurrency:
+  group: push-reminders
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST the tick
+        env:
+          TICK_URL: ${{ vars.PUSH_TICK_URL || 'https://dword.site/api/push/tick' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          # An unset secret makes every tick a 401, which looks exactly like
+          # "there was nothing to send". Fail here instead, where it is legible.
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::secrets.CRON_SECRET is not set. Every tick would answer 401 and no reminder would ever be sent."
+            exit 1
+          fi
+
+          code="$(curl -sS -X POST "${TICK_URL}" \
+            -H "authorization: Bearer ${CRON_SECRET}" \
+            -H "content-type: application/json" \
+            --data '{}' \
+            --max-time 120 \
+            -o response.json \
+            -w '%{http_code}')"
+
+          echo "HTTP ${code}"
+          cat response.json || true
+          echo
+
+          # The whole point of this step. Without it a 401, a 503 or a 500 is a
+          # green tick in the Actions tab and a feature that silently does
+          # nothing — which is the one failure mode this feature cannot have,
+          # because nobody notices a notification that never arrives.
+          if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+            echo "::error::the tick answered ${code}"
+            exit 1
+          fi
+```
+
+**Impact:** the repo gains CI-shaped machinery for the first time. It runs on
+`main` only (scheduled workflows always run on the default branch), reads
+nothing from the repository, and needs no checkout.
+
+---
+
+### Step 4: `scripts/push-send.ts` — `npm run push:send`
+
+**File:** `scripts/push-send.ts` (new)
+
+**Change:** the whole file. The `chat:dry-run` of this feature: **the words are
+the feature, and the exit code only reports transport.**
+
+**Code:**
+
+```ts
+/**
+ * Put one real reminder on the phone, and print the copy that went with it.
+ *
+ *   npm run push:send -- --user=me@example.com
+ *   npm run push:send -- --user=<uuid> --slot=13
+ *   npm run push:send -- --user=<uuid> --slot=19 --date=2026-12-25
+ *
+ * **Writes nothing.** No `push_deliveries` row, no claim, no schedule — so
+ * running it does not spend a slot and does not stop the real 09:00 reminder
+ * arriving. It does not prune a dead endpoint either: a dry run must not mutate,
+ * so a 410 here is reported and left alone for the tick to sweep.
+ *
+ * This is the only way to check R2 by eye. Every one of the seven slots has its
+ * own line, and the thing that matters is whether they read like seven different
+ * sentences from one voice rather than one sentence seven times. Run it for each
+ * slot, read them on the lock screen, and fix `src/lib/push/reminders.ts` — not
+ * this script — until they do.
+ *
+ * The exit code reports transport and nothing else. A `0` means Apple accepted
+ * the request; it does not mean the notification was any good.
+ *
+ * `--conditions=react-server` in the npm script is required: everything under
+ * `lib/db/` and `lib/push/` imports `server-only`, whose default export throws
+ * outside a server bundle.
+ */
+import 'dotenv/config'
+import { eq } from 'drizzle-orm'
+import { db } from '../src/lib/db'
+import { users } from '../src/lib/db/schema'
+import { resolveTimezone } from '../src/lib/db/queries/cards'
+import { getProfile } from '../src/lib/db/queries/profiles'
+import { listSubscriptions } from '../src/lib/db/queries/push'
+import { reminderFor } from '../src/lib/push/reminders'
+import { REMINDER_SLOTS } from '../src/lib/push/schedule'
+import { pushPayloadFor } from '../src/lib/push/tick'
+import { sendPush } from '../src/lib/push/send'
+import { isLocalDate, localDateNow } from '../src/lib/time/local-date'
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const USAGE = `usage: npm run push:send -- --user=<uuid|email> [--slot=${REMINDER_SLOTS.join('|')}] [--date=YYYY-MM-DD]`
+
+type Options = { user: string | null; slot: number | null; date: string | null }
+
+function parseArgs(argv: string[]): Options {
+  const opts: Options = { user: null, slot: null, date: null }
+  for (const arg of argv) {
+    if (arg.startsWith('--user=')) opts.user = arg.slice('--user='.length)
+    else if (arg.startsWith('--slot=')) opts.slot = Number(arg.slice('--slot='.length))
+    else if (arg.startsWith('--date=')) opts.date = arg.slice('--date='.length)
+    else {
+      console.error(`Unknown argument: ${arg}`)
+      console.error(USAGE)
+      process.exit(2)
+    }
+  }
+  return opts
+}
+
+async function main() {
+  const opts = parseArgs(process.argv.slice(2))
+
+  if (!opts.user) {
+    console.error(USAGE)
+    process.exit(2)
+  }
+
+  const slot = opts.slot ?? REMINDER_SLOTS[0]
+  if (!REMINDER_SLOTS.includes(slot)) {
+    console.error(`--slot must be one of: ${REMINDER_SLOTS.join(', ')}`)
+    process.exit(2)
+  }
+  if (opts.date !== null && !isLocalDate(opts.date)) {
+    console.error(`--date must be a real calendar date as YYYY-MM-DD, not merely shaped like one`)
+    process.exit(2)
+  }
+
+  const [user] = await db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(UUID.test(opts.user) ? eq(users.id, opts.user) : eq(users.email, opts.user))
+    .limit(1)
+
+  if (!user) {
+    console.error(`No such user: ${opts.user}`)
+    process.exit(1)
+  }
+
+  const timezone = resolveTimezone(await getProfile(user.id))
+  if (!timezone.ok && opts.date === null) {
+    console.error(
+      `${user.email} has no usable timezone (${timezone.reason}). ` +
+        `The tick would send nothing; pass --date=YYYY-MM-DD to force a line out of it anyway.`,
+    )
+    process.exit(1)
+  }
+
+  const date = opts.date ?? localDateNow(timezone.timezone)
+  const reminder = reminderFor(date, slot)
+  if (!reminder) {
+    console.error(`No deck line for slot ${slot}. That should be impossible; check REMINDER_BANDS.`)
+    process.exit(1)
+  }
+  const payload = pushPayloadFor(reminder)
+
+  console.log(`\n${user.email}  ·  ${timezone.timezone}  ·  ${date}  ·  slot ${slot}:00\n`)
+  console.log(`  title  ${payload.title}`)
+  console.log(`  body   ${payload.body}`)
+  console.log(`  url    ${payload.url}`)
+  console.log(`  tag    ${payload.tag}`)
+  console.log(`  key    ${reminder.key}\n`)
+
+  const subs = await listSubscriptions(user.id)
+  if (subs.length === 0) {
+    console.error(
+      'No subscriptions. Turn reminders on in /profile/edit, from the Home Screen app — ' +
+        'iOS grants Web Push nowhere else.',
+    )
+    process.exit(1)
+  }
+
+  let delivered = 0
+  for (const sub of subs) {
+    const short = `${sub.endpoint.slice(0, 48)}…`
+    const outcome = await sendPush(sub, payload)
+    if (outcome.ok) {
+      delivered++
+      console.log(`  sent   ${short}`)
+    } else if (outcome.reason === 'gone') {
+      console.log(`  gone   ${short}   (404/410 — the tick will sweep it; this run does not)`)
+    } else if (outcome.reason === 'unconfigured') {
+      console.log(`  config ${short}   (no VAPID keys in .env.local)`)
+    } else if (outcome.reason === 'rejected') {
+      console.log(`  error  ${short}   (refused, status ${outcome.status})`)
+    } else {
+      console.log(`  error  ${short}   (transport — no answer from the push service)`)
+    }
+  }
+
+  console.log(`\n${delivered}/${subs.length} accepted. Now read it on the phone.\n`)
+  process.exit(delivered > 0 ? 0 : 1)
+}
+
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
+```
+
+**Impact:** none on the app. One new script file.
+
+---
+
+### Step 5: `scripts/check-push-db.ts` — `npm run push:db`
+
+**File:** `scripts/check-push-db.ts` (new)
+
+**Change:** the whole file. Shaped after `scripts/check-share-db.ts`: a `check()`
+helper, a `section()` heading, fixture users at `@example.invalid` deleted in a
+`finally`.
+
+**Code:**
+
+```ts
+/**
+ * The push feature's database-shaped guarantees, against a real Postgres.
+ *
+ * Run with:  npm run push:db
+ *
+ * Seven things here can only be wrong in the database or in the composition, and
+ * every one of them is silent when it is:
+ *
+ *   1. **The unique index.** `(user_id, local_date, slot)` refusing a second row
+ *      is what makes delivery idempotent. Written as a read-then-write it passes
+ *      every offline check and buzzes the phone twice from two overlapping ticks.
+ *   2. **The claim before the send.** Two ticks in the same slot must produce one
+ *      notification. This is the assertion that catches an implementation which
+ *      records after sending.
+ *   3. **Silence costs nothing.** A user with today's card gets no notification
+ *      *and no row*. A `'skipped'` row here would be noise in the one table that
+ *      answers "did we bother them?".
+ *   4. **No words, no lie.** A user with zero active words cannot make a card, so
+ *      "make today's card" is a sentence the app must not send. One `'skipped'`
+ *      row, nothing delivered.
+ *   5. **The 410 sweep.** iOS rotates endpoints; a dead one must delete its row
+ *      rather than be retried forever.
+ *   6. **The cascade.** Deleting a user takes both new tables with them, or the
+ *      app grows an orphaned lock-screen.
+ *   7. **Nothing here creates a card.** Invariant 2, asserted as a grep over the
+ *      whole of `src/lib/push/` and `src/app/api/push/` rather than trusted.
+ *
+ * **No network and no push provider.** The sender is injected: `tickUser` takes a
+ * `send` for exactly this, the way `encodeClaimIntent` takes a `nowSeconds`. The
+ * clock is injected for the same reason — the catch-up assertions would otherwise
+ * have to wait two hours.
+ *
+ * A crashed run leaves at most three row sets behind, findable by the fixture
+ * domain. Clean up with:
+ *
+ *     delete from users where email like 'f30-push-%@example.invalid';
+ */
+import 'dotenv/config'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative, sep } from 'node:path'
+import { and, asc, count, eq } from 'drizzle-orm'
+import { db } from '../src/lib/db'
+import {
+  profiles,
+  pushDeliveries,
+  pushSubscriptions,
+  users,
+  vocabEntries,
+} from '../src/lib/db/schema'
+import {
+  listReminderCandidates,
+  upsertSubscription,
+  type PushTarget,
+  type ReminderCandidate,
+} from '../src/lib/db/queries/push'
+import { reminderByKey } from '../src/lib/push/reminders'
+import { REMINDER_TAG, runTick, tickUser, type PushSender } from '../src/lib/push/tick'
+import type { PushOutcome, PushPayload } from '../src/lib/push/send'
+import { startOfLocalDayUtc } from '../src/lib/time/local-date'
+
+const TZ = 'Asia/Jakarta'
+const DAY = '2026-09-14'
+
+let failures = 0
+
+function check(label: string, actual: unknown, expected: unknown) {
+  const a = JSON.stringify(actual)
+  const e = JSON.stringify(expected)
+  if (a === e) {
+    console.log(`  ok   ${label}`)
+  } else {
+    failures++
+    console.error(`  FAIL ${label}\n         expected ${e}\n         actual   ${a}`)
+  }
+}
+
+function section(title: string) {
+  console.log(`\n${title}`)
+}
+
+/** A local wall-clock hour on `DAY`, as an absolute instant. Jakarta has no DST. */
+function at(hour: number, date = DAY): Date {
+  return new Date(startOfLocalDayUtc(date, TZ).getTime() + hour * 3_600_000)
+}
+
+type SendLog = { endpoint: string; payload: PushPayload }
+
+/** A sender that answers from a table and records everything it was asked to do. */
+function fakeSender(log: SendLog[], outcomes: Record<string, PushOutcome> = {}): PushSender {
+  return async (target, payload) => {
+    log.push({ endpoint: target.endpoint, payload })
+    return outcomes[target.endpoint] ?? { ok: true }
+  }
+}
+
+/**
+ * A `ReminderCandidate` for one seeded user, built the way the tick receives
+ * one: **the devices ride on the candidate**, so `tickUser` makes no second
+ * query for them. Read back through `listReminderCandidates()` rather than
+ * hand-assembled, so this check exercises the fold in `queries/push.ts` too.
+ */
+async function candidateFor(userId: string): Promise<ReminderCandidate> {
+  const found = (await listReminderCandidates()).find((c) => c.userId === userId)
+  if (!found) throw new Error(`no candidate for ${userId} — is the profile onboarded?`)
+  return found
+}
+
+async function seedUser(role: string): Promise<string> {
+  const email = `f30-push-${role}-${process.pid}@example.invalid`
+  const [user] = await db.insert(users).values({ email }).returning({ id: users.id })
+  await db.insert(profiles).values({ userId: user.id, timezone: TZ, onboardedAt: new Date() })
+  return user.id
+}
+
+async function seedWord(userId: string, term: string): Promise<void> {
+  await db.insert(vocabEntries).values({
+    userId,
+    term,
+    source: 'manual',
+    status: 'active',
+    enrichmentStatus: 'ready',
+    definition: 'a fixture',
+  })
+}
+
+async function seedDevice(userId: string, name: string): Promise<PushTarget> {
+  return upsertSubscription(userId, {
+    endpoint: `https://web.push.apple.invalid/${name}-${process.pid}`,
+    p256dh: 'BFixtureP256dhKeyThatIsNotUsedBecauseTheSenderIsInjected',
+    auth: 'fixtureAuthSecret',
+    // Required by `NewSubscriptionInput`, and null is what the route stores when
+    // the browser sends no user-agent header.
+    userAgent: null,
+  })
+}
+
+async function deliveryRows(userId: string) {
+  return db
+    .select({
+      localDate: pushDeliveries.localDate,
+      slot: pushDeliveries.slot,
+      status: pushDeliveries.status,
+      reason: pushDeliveries.reason,
+    })
+    .from(pushDeliveries)
+    .where(eq(pushDeliveries.userId, userId))
+    .orderBy(asc(pushDeliveries.slot))
+}
+
+async function subscriptionCount(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, userId))
+  return row?.n ?? 0
+}
+
+/** Did this statement raise? Constraints are asserted, never described. */
+async function rejected(run: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await run()
+    return false
+  } catch {
+    return true
+  }
+}
+
+async function main() {
+  const ids: string[] = []
+
+  try {
+    /* ------------------------------ 1. the index ---------------------------- */
+
+    section('the unique index is the idempotence guarantee')
+
+    const indexed = await seedUser('index')
+    ids.push(indexed)
+
+    await db.insert(pushDeliveries).values({
+      userId: indexed,
+      localDate: DAY,
+      slot: 7,
+      status: 'sent',
+      // `push_deliveries_reminder_key_check` refuses a 'sent' row without one.
+      reminderKey: 'morning_unmade',
+    })
+    check(
+      'a second row for the same (user, date, slot) is refused',
+      await rejected(() =>
+        db.insert(pushDeliveries).values({
+          userId: indexed,
+          localDate: DAY,
+          slot: 7,
+          status: 'skipped',
+        }),
+      ),
+      true,
+    )
+    check(
+      'a different slot on the same day is fine',
+      await rejected(() =>
+        db.insert(pushDeliveries).values({
+          userId: indexed,
+          localDate: DAY,
+          slot: 9,
+          status: 'sent',
+          reminderKey: 'morning_kettle',
+        }),
+      ),
+      false,
+    )
+
+    /**
+     * The CHECK that turns "the tick forgot to pass the deck line's key" from a
+     * silently wrong audit trail into a refused INSERT. This is the assertion
+     * that would have caught the shape reconciliation found: a `pushPayloadFor`
+     * destructuring only `{ title, body }` and a `claimDelivery` with no
+     * `reminderKey` typechecks perfectly and fails here, at 07:00, in production.
+     */
+    check(
+      "a 'sent' row with no reminder_key is refused",
+      await rejected(() =>
+        db.insert(pushDeliveries).values({
+          userId: indexed,
+          localDate: DAY,
+          slot: 11,
+          status: 'sent',
+        }),
+      ),
+      true,
+    )
+    check(
+      "but a 'skipped' row needs none",
+      await rejected(() =>
+        db.insert(pushDeliveries).values({
+          userId: indexed,
+          localDate: DAY,
+          slot: 13,
+          status: 'skipped',
+          reason: 'superseded',
+        }),
+      ),
+      false,
+    )
+
+    /* ---------------------------- 2. send-once ------------------------------ */
+
+    section('a tick run twice in the same slot sends once')
+
+    const twice = await seedUser('twice')
+    ids.push(twice)
+    await seedWord(twice, 'genteel')
+    const device = await seedDevice(twice, 'twice')
+
+    const log: SendLog[] = []
+    const twiceCandidate = await candidateFor(twice)
+    const first = await tickUser(twiceCandidate, { now: at(9), send: fakeSender(log) })
+    check('the first tick sends', first.outcome, 'sent')
+    check('at the 09:00 slot', first.slot, 9)
+    check('and supersedes the 07:00 one', first.supersededSlots, [7])
+    check('one notification went out', log.length, 1)
+    check('to the registered device', log[0]?.endpoint, device.endpoint)
+    check('the payload names /today', log[0]?.payload.url, '/today')
+    check('and collapses on one constant tag', log[0]?.payload.tag, REMINDER_TAG)
+    check('which is the literal public/sw.js also holds', REMINDER_TAG, 'daily-card-reminder')
+    check('the title is not empty', (log[0]?.payload.title ?? '').length > 0, true)
+    check('nor is the body', (log[0]?.payload.body ?? '').length > 0, true)
+
+    const second = await tickUser(twiceCandidate, { now: at(9), send: fakeSender(log) })
+    check('the second tick in the same slot is a no-op', second.outcome, 'no_slot')
+    check('and sent nothing more', log.length, 1)
+    check(
+      'two rows exist — the delivery and the slot it caught up past',
+      await deliveryRows(twice),
+      [
+        { localDate: DAY, slot: 7, status: 'skipped', reason: 'superseded' },
+        { localDate: DAY, slot: 9, status: 'sent', reason: null },
+      ],
+    )
+
+    section('a late tick delivers the current slot, never a burst')
+
+    const late = await tickUser(twiceCandidate, { now: at(19), send: fakeSender(log) })
+    check('one send, at the current slot', [late.outcome, late.slot], ['sent', 19])
+    check('exactly one more notification', log.length, 2)
+    check(
+      'and the four slots in between are spent, not replayed',
+      (await deliveryRows(twice)).map((r) => `${r.slot}:${r.status}`),
+      ['7:skipped', '9:sent', '11:skipped', '13:skipped', '15:skipped', '17:skipped', '19:sent'],
+    )
+    check('the deck gave the two slots different copy', log[0]?.payload.body !== log[1]?.payload.body, true)
+
+    /**
+     * **R2, end to end.** The offline check proves the deck's lines are
+     * pairwise distinct; this proves the line that was chosen is the line that
+     * went on the wire *and* the line recorded in the row. A `reminder_key` that
+     * disagrees with the body it was sent with is an audit trail that lies, and
+     * nothing else in the app would ever notice.
+     */
+    const sentKeys = await db
+      .select({ slot: pushDeliveries.slot, key: pushDeliveries.reminderKey })
+      .from(pushDeliveries)
+      .where(and(eq(pushDeliveries.userId, twice), eq(pushDeliveries.status, 'sent')))
+      .orderBy(asc(pushDeliveries.slot))
+    check(
+      "every 'sent' row carries the key of the line it sent",
+      sentKeys.map((r) => reminderByKey(r.key ?? '')?.body ?? null),
+      [log[0]?.payload.body ?? null, log[1]?.payload.body ?? null],
+    )
+    check('and the two keys differ', sentKeys[0]?.key !== sentKeys[1]?.key, true)
+
+    /* --------------------------- 3. the quiet day --------------------------- */
+
+    section('a user with today’s card gets nothing, and no row')
+
+    const carded = await seedUser('carded')
+    ids.push(carded)
+    await seedWord(carded, 'candid')
+    await seedDevice(carded, 'carded')
+    await db.insert(pushDeliveries).values({
+      userId: carded,
+      localDate: '2026-09-13',
+      slot: 7,
+      status: 'sent',
+      reminderKey: 'morning_unmade',
+    }) // yesterday's row must not confuse today
+    const { createCard } = await import('../src/lib/db/queries/cards')
+    await createCard(carded, DAY, TZ)
+
+    const quietLog: SendLog[] = []
+    const quiet = await tickUser(await candidateFor(carded), {
+      now: at(9),
+      send: fakeSender(quietLog),
+    })
+    check('the outcome is silence', quiet.outcome, 'quiet')
+    check('nothing was sent', quietLog.length, 0)
+    check(
+      'and today wrote no row at all',
+      (await deliveryRows(carded)).filter((r) => r.localDate === DAY),
+      [],
+    )
+
+    /* -------------------------- 4. nothing to say --------------------------- */
+
+    section('a user with no active words is skipped, not lied to')
+
+    const wordless = await seedUser('wordless')
+    ids.push(wordless)
+    await seedDevice(wordless, 'wordless')
+
+    const wordlessLog: SendLog[] = []
+    const nothing = await tickUser(await candidateFor(wordless), {
+      now: at(7),
+      send: fakeSender(wordlessLog),
+    })
+    check('the outcome names the reason', nothing.outcome, 'no_active_words')
+    check('nothing was sent', wordlessLog.length, 0)
+    check(
+      'one skipped row spends the slot',
+      await deliveryRows(wordless),
+      [{ localDate: DAY, slot: 7, status: 'skipped', reason: 'no_active_words' }],
+    )
+
+    /* ---------------------------- 5. the 410 sweep -------------------------- */
+
+    section('a dead endpoint deletes its row rather than being retried')
+
+    const rotated = await seedUser('rotated')
+    ids.push(rotated)
+    await seedWord(rotated, 'melumuri')
+    const deadDevice = await seedDevice(rotated, 'dead')
+    const liveDevice = await seedDevice(rotated, 'live')
+    check('two devices are registered', await subscriptionCount(rotated), 2)
+
+    const sweepLog: SendLog[] = []
+    const swept = await tickUser(await candidateFor(rotated), {
+      now: at(11),
+      send: fakeSender(sweepLog, {
+        [deadDevice.endpoint]: { ok: false, reason: 'gone' },
+      }),
+    })
+    check('the live device still got it', swept.outcome, 'sent')
+    check('one delivered, one pruned', [swept.notificationsSent, swept.subscriptionsPruned], [1, 1])
+    check('only the live row survives', await subscriptionCount(rotated), 1)
+    const [survivor] = await db
+      .select({ endpoint: pushSubscriptions.endpoint })
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.userId, rotated))
+    check('and it is the right one', survivor?.endpoint, liveDevice.endpoint)
+
+    section('a slot where every send fails is recorded failed, never retried')
+
+    const doomedLog: SendLog[] = []
+    // The dead row is gone from the database now, but the candidate this tick is
+    // handed still has to be re-read for the same reason the tick re-reads it:
+    // `targets` is a snapshot taken when the candidate was listed.
+    const doomed = await tickUser(await candidateFor(rotated), {
+      now: at(13),
+      send: fakeSender(doomedLog, {
+        [liveDevice.endpoint]: { ok: false, reason: 'rejected', status: 500 },
+      }),
+    })
+    check('the outcome is failure', doomed.outcome, 'failed')
+    check(
+      'and the row holds its slot',
+      (await deliveryRows(rotated)).find((r) => r.slot === 13)?.status,
+      'failed',
+    )
+
+    /* ---------------------- 6. the whole-fleet fan-out ---------------------- */
+
+    section('runTick walks every candidate and reports counts, not identities')
+
+    const summary = await runTick({ now: at(15), send: fakeSender([]) })
+    check('it found candidates', summary.candidates > 0, true)
+    check('the outcome tally has all seven keys', Object.keys(summary.outcomes).sort(), [
+      'duplicate',
+      'failed',
+      'no_active_words',
+      'no_slot',
+      'no_timezone',
+      'quiet',
+      'sent',
+    ])
+    check(
+      'and the summary carries no user id',
+      JSON.stringify(summary).includes(twice),
+      false,
+    )
+
+    section('an unusable timezone sends nothing and writes nothing')
+
+    const zoneless = await seedUser('zoneless')
+    ids.push(zoneless)
+    await seedWord(zoneless, 'gezellig')
+    await seedDevice(zoneless, 'zoneless')
+    await db
+      .update(profiles)
+      .set({ timezone: 'Not/AZone' })
+      .where(eq(profiles.userId, zoneless))
+
+    const zoneLog: SendLog[] = []
+    const zoneResult = await tickUser(
+      { userId: zoneless, timezone: 'Not/AZone', targets: [] },
+      { now: at(9), send: fakeSender(zoneLog) },
+    )
+    check('the outcome names the zone', zoneResult.outcome, 'no_timezone')
+    check('nothing was sent', zoneLog.length, 0)
+    check('and nothing was written', await deliveryRows(zoneless), [])
+
+    /* ------------------------------ 7. the cascade -------------------------- */
+
+    section('deleting a user takes both new tables with them')
+
+    const doomedUser = twice
+    await db.delete(users).where(eq(users.id, doomedUser))
+    ids.splice(ids.indexOf(doomedUser), 1)
+    check('no deliveries remain', (await deliveryRows(doomedUser)).length, 0)
+    check('no subscriptions remain', await subscriptionCount(doomedUser), 0)
+  } finally {
+    for (const id of ids) await db.delete(users).where(eq(users.id, id))
+  }
+
+  /* --------------- 8. invariant 2, as a grep rather than a habit ------------ */
+
+  section('nothing in this feature can create a card')
+
+  const ROOTS = ['src/lib/push', 'src/app/api/push']
+  const FORBIDDEN = ['createCard', 'onCardCreated', 'dailyCards', 'dailyCardItems', 'db.transaction']
+
+  const sourceFiles = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = join(dir, e.name)
+      if (e.isDirectory()) return sourceFiles(full)
+      return /\.tsx?$/.test(e.name) ? [full] : []
+    })
+
+  const stripComments = (text: string): string =>
+    text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+
+  for (const root of ROOTS) {
+    const files = sourceFiles(root)
+    check(`${root} has files to scan`, files.length > 0, true)
+    for (const symbol of FORBIDDEN) {
+      check(
+        `${root} never names ${symbol}`,
+        files
+          .filter((f) => new RegExp(`\\b${symbol.replace('.', '\\.')}\\b`).test(stripComments(readFileSync(f, 'utf8'))))
+          .map((f) => relative(process.cwd(), f).split(sep).join('/')),
+        [],
+      )
+    }
+  }
+
+  /**
+   * Comments **are** stripped, deliberately. The prose in `tick.ts` explaining
+   * why it must never create a card is the most valuable text in this feature,
+   * and a grep that forbade naming the thing being forbidden would delete it.
+   * This is the opposite call to `journal:check`'s key grep, which reads prose on
+   * purpose because there the literal string itself is the hazard.
+   */
+
+  console.log()
+  if (failures > 0) {
+    console.error(`${failures} check(s) failed`)
+    process.exit(1)
+  }
+  console.log('all push database checks passed')
+  process.exit(0)
+}
+
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
+```
+
+**Note for the implementer:** the `createCard` import inside the "quiet day"
+section is a **dynamic** `await import(...)` on purpose — a top-level
+`import { createCard }` in this file would be caught by the forbidden-symbol
+grep above it if the roots ever widened, and more importantly it keeps the
+static import list of a push check free of a card writer. If the reconciler
+prefers a static import here, the grep roots (`src/lib/push`, `src/app/api/push`)
+never cover `scripts/`, so either is safe; the dynamic form documents intent.
+
+**Impact:** one new script. No app code.
+
+---
+
+### Step 6: `package.json` — the two script entries
+
+**File:** `package.json:38` (inside `"scripts"`, immediately after Phase 1's
+`"push:check"` entry, keeping the feature's three scripts together the way
+`share:check` / `share:db` are)
+
+**Change:** add two lines.
+
+```diff
+     "claim:check": "tsx --conditions=react-server scripts/check-claim.ts",
+     "claim:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-claim-db.ts",
+     "push:check": "tsx scripts/check-push.ts",
++    "push:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-push-db.ts",
++    "push:send": "tsx --conditions=react-server --env-file=.env.local scripts/push-send.ts",
+     "badges:check": "tsx scripts/check-badge-art.ts",
+```
+
+`--conditions=react-server` is mandatory for both: `lib/db/`, `lib/push/send.ts`
+and `lib/push/tick.ts` all import `server-only`, whose default export throws
+outside a server bundle. `--env-file=.env.local` is mandatory for both too —
+`push:db` needs `DATABASE_URL`, `push:send` needs that plus the VAPID keys.
+
+**Merge warning for the reconciler:** three phases edit `package.json` —
+Phase 1 adds `"push:check"`, Phase 2 adds `web-push` and `@types/web-push` to
+`dependencies`/`devDependencies`, and this phase adds the two lines above. The
+edits are in different blocks (scripts vs dependencies) except for Phase 1's,
+which is the anchor line of this diff. If Phase 1's entry is spelled
+differently, land these two after whatever it is.
+
+---
+
+## D8 — the scale ceiling, named
+
+`runTick` iterates every candidate in one request, and within a candidate sends
+to each subscription in sequence. That is right for one user and a handful of
+devices, and it is what should ship.
+
+The arithmetic, so nobody has to re-derive it:
+
+- Per candidate, the tick issues at most **three** Neon round trips
+  (`getCardForDate`, `listDeliveredSlots`, `countActiveWords`) plus one per
+  claimed row. The devices are not a fourth: they ride on the candidate, which is
+  why reconciliation kept `ReminderCandidate.targets` over a per-user
+  `listSubscriptions`. From `sin1` beside the database that is ~5 ms each, so
+  ~20 ms of database time per candidate — negligible.
+- Per subscription, one HTTPS POST to `web.push.apple.com`, which from `sin1` is
+  **~200–400 ms**. That is the whole cost.
+- `maxDuration = 60` is the Hobby-plan ceiling. At 350 ms a send, **~150
+  subscriptions** is where a tick starts risking a timeout — and a timeout is
+  worse than it looks, because the rows are claimed before the sends, so the
+  users past the cut-off have a `'sent'` row and no notification.
+- The real bound is narrower and kinder: only users whose *local* hour is a slot
+  hour do any sending, so the ceiling is ~150 subscriptions **in any one
+  timezone-hour bucket**, not 150 in total.
+
+Past that, in order of how much they cost to build: send a user's subscriptions
+with `Promise.all` (they are independent and usually one or two); then process
+candidates in bounded concurrent batches grouped by the due local hour; then, if
+it is still tight, move the fan-out behind a queue and make the tick a producer.
+**Do not build any of it now.** The trigger to revisit is a `durationMs` in the
+Actions log above ~30 000.
+
+---
+
+## Verification
+
+**Build:**
+
+```bash
+npm run typecheck        # tsc --noEmit — clean
+npm run lint             # eslint — clean
+npm run build            # next build — clean
+```
+
+**Tests — every pre-existing check script must still pass, unchanged:**
+
+```bash
+npm run push:check       # Phase 1's, still green — this phase adds no offline rule
+npm run share:check      # the toISOString allowlist; MUST stay green (see the traps)
+npm run claim:check
+npm run nav:check
+npm run journal:check
+npm run badges:check
+npm run stats:check
+npm run test:layout      # /today gains no DOM, so this is untouched
+```
+
+**The new database check:**
+
+```bash
+npm run push:db
+```
+
+Expected: a run of `ok` lines under eight section headings, ending
+
+```
+all push database checks passed
+```
+
+and leaving nothing behind. Confirm with
+
+```sql
+select count(*) from users where email like 'f30-push-%@example.invalid';   -- 0
+```
+
+**The tick endpoint, by curl.** Start the dev server on **3200** (kill whatever
+is listening; never pick another port):
+
+```bash
+npm run dev
+```
+
+Then, with `CRON_SECRET` set in `.env.local`:
+
+```bash
+# 1. No secret at all → 401, and no rows written.
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3200/api/push/tick
+# 401
+
+# 2. The wrong secret → 401. Same answer, same body — a different one would be
+#    an oracle for guessing.
+curl -sS -X POST http://localhost:3200/api/push/tick \
+  -H 'authorization: Bearer definitely-not-the-secret'
+# {"error":{"code":"unauthenticated","message":"Not authorised."}}
+
+# 3. The right one → 200 and the summary.
+curl -sS -X POST http://localhost:3200/api/push/tick \
+  -H "authorization: Bearer $(grep '^CRON_SECRET=' .env.local | cut -d= -f2-)"
+# {"ok":true,"ranAtMs":…,"durationMs":…,"candidates":…,"outcomes":{…},"notificationsSent":…,"subscriptionsPruned":…}
+
+# 4. A GET → 405, from Next itself. There is no GET handler and there must not be.
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:3200/api/push/tick
+# 405
+```
+
+After (1) and (2), assert the obvious:
+
+```sql
+select count(*) from push_deliveries where sent_at > now() - interval '5 minutes';  -- unchanged
+```
+
+Then comment `CRON_SECRET` out of `.env.local`, restart, and repeat (3):
+
+```bash
+# 5. Unconfigured → 503, never 200.
+curl -sS -X POST http://localhost:3200/api/push/tick -H 'authorization: Bearer anything'
+# {"error":{"code":"not_configured","message":"Reminders are not configured."}}
+```
+
+**The copy, on the phone — this is the R2 check and no script can do it:**
+
+```bash
+npm run push:send -- --user=<your email> --slot=7
+npm run push:send -- --user=<your email> --slot=9
+npm run push:send -- --user=<your email> --slot=11
+npm run push:send -- --user=<your email> --slot=13
+npm run push:send -- --user=<your email> --slot=15
+npm run push:send -- --user=<your email> --slot=17
+npm run push:send -- --user=<your email> --slot=19
+```
+
+Each prints its title and body and then fires. Read all seven **on the lock
+screen**, not in the terminal. They must read as seven different sentences in
+one voice, each pointing at the same button, and each one must survive being the
+*only* sentence somebody sees that day. If any two feel like the same sentence,
+fix `src/lib/push/reminders.ts` (Phase 1's file) — not this phase's code. Confirm
+they collapse rather than stack: fire two in a row and the lock screen shows one.
+
+Verify the tick's own route is not gated, which is invisible to a signed-in
+author — though here the proof is the shape of the URL rather than a cookie,
+since all of `/api` sits outside the middleware matcher:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3200/api/push/tick
+# 401 from the handler, never a 307 to /signin
+```
+
+**Manual check — the workflow:**
+
+1. Set repository secret `CRON_SECRET` to the same value as the Vercel project's.
+2. Actions → "push reminders" → **Run workflow** (`workflow_dispatch`).
+3. The step must print `HTTP 200` and the summary JSON, and the job must be green.
+4. Change the secret to a wrong value and run it again: the job must go **red**
+   with `::error::the tick answered 401`. A green job on a 401 means the
+   non-2xx guard is wrong, and the whole feature would then fail silently.
+5. Unset the secret entirely and run it: red, with the `CRON_SECRET is not set`
+   message.
+
+**Exit criteria:**
+
+- A GitHub Actions run of "push reminders" answers 200 and the job is green.
+- `npm run push:db` passes and leaves no fixture rows.
+- A tick with no secret or a wrong one answers 401 and writes nothing; with no
+  secret configured at all it answers 503.
+- Two ticks in the same slot produce one notification and one `'sent'` row.
+- A user with today's card gets nothing and **no row of any kind**.
+- `npm run push:send` puts one real, readable notification on the iPhone XS Max.
+- `npm run typecheck`, `npm run lint`, `npm run build` and every pre-existing
+  check script pass.
+
+---
+
+## Handoffs
+
+- **The delivery functions in `src/lib/db/queries/push.ts` — Phase 2, settled.**
+  `listDeliveredSlots`, `claimDelivery` and `markDeliveryFailed` are in Phase 2's
+  plan with the exact signatures in the Requires table. This phase may not edit
+  that file and the house convention forbids inline Drizzle in `tick.ts`. **The
+  sibling-file fallback this phase's draft named is withdrawn — do not create
+  `src/lib/db/queries/push-deliveries.ts`.**
+- **The `CRON_SECRET` assertion in `scripts/check-push.ts` — Phase 1, settled.**
+  It asserts the property (every file under `src/` naming either secret begins
+  with `import 'server-only'`) rather than a one-file allowlist, and this phase's
+  route carries that import so the property has no exemptions.
+- **The payload contract — Phase 3, settled.** `public/sw.js` renders
+  `{ title, body, url, tag }`, treats `url` as a path relative to its own origin,
+  passes `tag` to `showNotification` **with `renotify: true`**, and always calls
+  `showNotification` (invariant 10 — `userVisibleOnly` is a promise to the
+  browser). The worker defaults every field individually and this phase sends all
+  four: both are correct and neither may be trimmed to match the other. The tag
+  is the constant `"daily-card-reminder"`; this phase's per-day tag was the
+  losing side.
+- **The `toISOString` ban — Phases 1, 2, 3 and 5, checked.** `share:check`
+  asserts the literal appears in exactly eight named files and scans **raw text
+  including comments** over the whole of `src/`. Reconciliation grepped all five
+  plans: the only occurrence anywhere in the set is inside
+  `scripts/check-push.ts`, which is outside `src/` and is itself asserting the
+  absence. Nothing to fix; the rule is now invariant 4 in the index so the next
+  phase does not have to rediscover it.
+- **Documenting the scheduler — Phase 5.** CLAUDE.md, README and CHANGELOG all
+  still say the app has no cron. The workflow file is where the scheduler lives;
+  the operating manual is where the reader finds out it exists, how to disable
+  it, and that GitHub silently disables scheduled workflows after 60 days of
+  repository inactivity. Phase 5 should also record the D1 reasoning next to
+  `vercel.json`'s paragraph, since that file's whole purpose is documented there
+  and "why there is no `crons` block in it" now belongs beside it.
+- **A `GET` shim on the tick route — nobody, deliberately.** If the project ever
+  moves to Vercel Cron (which issues a GET), add it then, with a comment saying
+  it exists for a caller that cannot choose its verb. Not before.
+- **Concurrency past ~150 subscriptions in one timezone-hour bucket — nobody,
+  deliberately.** See D8.
+- **A `push_deliveries` retention sweep — nobody.** Seven rows per user per day
+  is ~2,500 rows a year for one user. It does not need pruning in v0.1.0, and a
+  retention job would be a *second* scheduled thing, which is a decision rather
+  than a chore.
+
+---
+
+## Rollback
+
+This phase is five new files plus two lines of `package.json`. Nothing existing
+changes behaviour, so undoing it is subtraction:
+
+1. **Stop the clock first.** Actions → "push reminders" → ⋯ → **Disable
+   workflow**, or delete `.github/workflows/push-reminders.yml`. Do this before
+   anything else: with the route gone but the workflow live, every hour turns
+   the Actions tab red on a 404.
+2. `rm -r src/app/api/push/tick`
+3. `rm src/lib/push/tick.ts scripts/push-send.ts scripts/check-push-db.ts`
+4. Remove the `"push:db"` and `"push:send"` lines from `package.json`.
+5. Optionally delete the repository secret `CRON_SECRET` and the Vercel
+   environment variable of the same name. Leaving them is harmless — with no
+   route they are read by nothing.
+
+Phases 1–3 survive intact: subscriptions keep being registered and the schedule
+and deck keep being unit-tested; nothing sends. `push_deliveries` rows already
+written become inert, exactly like an award row under a dead badge key. **No
+migration is reverted** — the tables are Phase 1's, and rolling this phase back
+is not a reason to drop them.
+
+If only the *scheduler* is wrong (Actions minutes, a repo going private,
+reminders arriving too late), step 1 alone is the rollback, and the endpoint can
+then be driven by hand or by any other scheduler that can POST a bearer token.
+That separation is the point of D1.

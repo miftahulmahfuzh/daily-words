@@ -1,0 +1,1451 @@
+# Phase 3: The service worker and the switch
+
+**Plan set:** `PUSH_CARD_REMINDERS_PLAN.md`
+**Analysis:** `20260914-104032-K7P2_code_analyzer.md`
+**Satisfies:** R1 — the app sends a push notification to the user's iPhone XS Max telling them to generate today's card. This phase builds the half of R1 that lives on the phone: the worker that draws the notification, and the switch that creates the subscription phase 4 will send to.
+**Depends on:** Phase 1, Phase 2 — Phase 2 for `src/lib/push/client.ts`, `GET /api/push/key` and `POST`/`DELETE /api/push/subscription`; Phase 1 for the three schedule constants `reminder-toggle.tsx` reads to write one sentence of copy. Both edges are real.
+**Difficulty:** HARD
+**Package:** `src/components/push` (plus `public/`, `src/middleware.ts`, `next.config.ts`, `scripts/`)
+
+---
+
+## Goal
+
+After this phase the app has a service worker at `/sw.js` that a cookie-less
+browser can actually fetch, that shows a notification for every push it is given
+(including a malformed one), and that opens `/today` when the notification is
+tapped. `/profile/edit` grows one switch that subscribes the device and tells
+the truth in all four cases where it cannot — no support, not installed to the
+Home Screen, no server key, permission denied. The authed shell gains a second
+render-nothing reconciler that re-registers a rotated iOS endpoint at zero
+network cost in the steady state.
+
+Nothing sends a notification yet. Phase 4 does that, and `npm run push:send` is
+how this phase's work is finally proved on the phone.
+
+---
+
+## Interface Contract
+
+The reconciler reads this section to detect cross-phase conflicts. Be exact and exhaustive.
+
+**Deletes:** none.
+
+**Renames:** none.
+
+**Creates:**
+
+- `public/sw.js` — plain JS, no build step. Exposes nothing importable; its
+  contract is the push payload below.
+- `src/components/push/push-sync.tsx` — `export function PushSync(): null`, **no props.**
+- `src/components/push/reminder-toggle.tsx` — `export function ReminderToggle(): JSX.Element`, **no props.**
+
+**Signature changes:** none.
+
+**Requires (from earlier phases):**
+
+Phase 2's `src/lib/push/client.ts` exports exactly these — this is the
+reconciled surface, and this phase is its sole consumer:
+
+```ts
+/** Synchronous, safe in an effect, **never touches the network**. */
+export type PushCapability = "unsupported" | "needs_home_screen" | "ready";
+export function pushCapability(): PushCapability;
+
+/**
+ * `pushCapability()` plus `GET /api/push/key` — one authenticated request, so
+ * this is for a settings screen and NOT for a component mounted on every page.
+ * Four kinds, because the switch has four honest states to draw.
+ */
+export type PushSupport =
+  | { kind: "supported"; publicKey: string }
+  | { kind: "needs_home_screen" } // iOS Safari in a tab; PushManager is absent until installed
+  | { kind: "unsupported" }       // no serviceWorker, no PushManager on a standalone app, or no Notification
+  | { kind: "unconfigured" };     // the browser is fine; this deployment has no VAPID key
+export function pushSupport(): Promise<PushSupport>;
+
+/** `null` when `Notification` does not exist. Never throws. */
+export function notificationPermission(): NotificationPermission | null;
+
+/**
+ * MUST be called before its caller's first `await`. iOS refuses the prompt when
+ * the call is not reached from a user gesture, and an await between the tap and
+ * the call loses the gesture on WebKit. This is a hard requirement of this
+ * phase's tap handler, not a preference.
+ */
+export function requestNotificationPermission(): Promise<NotificationPermission>;
+
+/** `navigator.serviceWorker.register("/sw.js")` then `.ready`. `null` on any failure. */
+export function registerServiceWorker(): Promise<ServiceWorkerRegistration | null>;
+
+/** The live subscription for this device, or null. Zero network requests. */
+export function getSubscription(): Promise<PushSubscription | null>;
+export function isSubscribed(): Promise<boolean>;
+
+/** Register + subscribe + `POST /api/push/subscription`. Does NOT ask for permission. */
+export type PushEnableResult =
+  | { ok: true; endpoint: string }
+  | { ok: false; reason: "unsupported" | "needs_home_screen" | "unconfigured" | "failed"; message: string };
+export function enablePush(): Promise<PushEnableResult>;
+
+/** `PushSubscription.unsubscribe()` + `DELETE /api/push/subscription`. */
+export type PushDisableResult = { ok: true } | { ok: false; message: string };
+export function disablePush(): Promise<PushDisableResult>;
+
+/** Re-POST a rotated endpoint. `endpoint: null` means there was nothing to sync. */
+export type PushSyncResult =
+  | { ok: true; endpoint: string | null }
+  | { ok: false; message: string };
+export function syncSubscription(): Promise<PushSyncResult>;
+```
+
+Four properties of that module this phase depends on and cannot check itself:
+
+1. **`enablePush()` never calls `Notification.requestPermission()`.** This
+   phase's toggle asks, in the tap handler, before any await. If phase 2 asked as
+   well, the second call would be a no-op on a granted permission but the split
+   responsibility is the bug: the ask is in one place and it is this phase's.
+   Phase 2's module says so in its own header comment.
+2. **`PushSupport` has four kinds, not three.** `unconfigured` is one of the four
+   states the switch is required to draw, and collapsing it into `unsupported`
+   tells an iPhone user their phone is broken when the server is. The spellings
+   are phase 2's (`needs_home_screen`, underscored), and this phase's `Status`
+   union uses the same tokens so `support.kind` can be assigned straight across.
+3. **`pushCapability()` is the one `<PushSync />` may call.** `pushSupport()`
+   issues an authenticated GET; a reconciler mounted in the authed shell that
+   costs a request per navigation is not the `<TimezoneSync />` bargain.
+4. **`client.ts` carries no `import "server-only"` and imports no zod value** —
+   it ships to the phone through both new components (`lib/api/client.ts`'s
+   73 kB note). Phase 1's `push:check` asserts the first half.
+
+**The endpoint mirror lives in `lib/push/client.ts`, and this phase creates no
+second one.** A parallel draft of this phase added
+`src/components/push/endpoint-mirror.ts` holding the same `localStorage` fact
+under a different key (`"push:endpoint"` beside `client.ts`'s
+`"dw_push_endpoint"`). Reconciliation deleted it: two mirrors of one fact is two
+try/catch disciplines and one silent disagreement, and `lib/push/client.ts` owns
+device-subscription state. `enablePush()` / `disablePush()` write the mirror
+themselves, and `syncSubscription()` returns `{ endpoint }` so a component can
+see what it now says without reading the key.
+
+Phase 1's `src/lib/push/schedule.ts` must export `REMINDER_FIRST_HOUR`,
+`REMINDER_EVERY_HOURS` and `REMINDER_UNTIL_HOUR` as `number`s.
+`reminder-toggle.tsx` imports all three to build one sentence of copy, so the
+screen cannot drift from the schedule. If phase 1 spells them differently, the
+reconciler changes one import line here.
+
+**Produces (for phase 4) — the push payload:**
+
+`public/sw.js` calls `event.data.json()` and reads exactly four optional string
+fields:
+
+```jsonc
+{
+  "title": "Today's card is still blank",   // string, non-empty
+  "body":  "Six words are waiting.",        // string, non-empty
+  "url":   "/today",                        // string, must start with "/" and must NOT start with "//"
+  "tag":   "daily-card-reminder"            // string, non-empty
+}
+```
+
+**Every field is optional here, and Phase 4 sends all four anyway. Both are
+true and they are not a contradiction** — it is the reason the two halves were
+written differently. The worker must be tolerant because `userVisibleOnly: true`
+is a promise to the browser that *something* is shown for every push, and
+breaking it revokes the subscription (invariant 10); so an absent body, a
+non-JSON body, a JSON array and a `url` of `"https://evil.example"` each fall
+back to the constant beside it and a notification still appears. The sender is
+complete because it can be: it always knows the title, the body, the destination
+and the tag. Neither side may be "simplified" to match the other — a strict
+worker loses the subscription, and a sender that leaves fields out makes the
+fallbacks load-bearing copy nobody reviews.
+
+**The tag is the constant `"daily-card-reminder"`, and Phase 4 sends exactly
+that.** Settled in reconciliation against Phase 4's original per-day
+`dw-card-<localDate>`. Both collapse same-day reminders; the constant also
+collapses *across* days, which is what is wanted — a per-day tag lets yesterday's
+undismissed reminder sit on the lock screen beside today's, and yesterday's card
+can no longer be made, so it is a notification asking for something impossible.
+At most one Daily Words reminder is ever on the lock screen. This file owns the
+literal, as `FALLBACK.tag`.
+
+The worker pairs that tag with `renotify: true`, so a replacement still alerts;
+without `renotify` a tagged replacement is silent and the whole two-hourly
+cadence would land on a phone that never buzzes again after 07:00.
+
+Do not confuse the notification `tag` with Phase 2's `PushSendOptions.topic`
+(`'daily-card'`), which collapses messages still queued *at the push service*.
+Different layer, deliberately a different string.
+
+**Leaves alone (owned by others):**
+
+- `src/lib/push/**` — phases 1 and 2. Imported, never edited.
+- `src/lib/db/**`, `drizzle/**`, `src/lib/env.ts` — phases 1 and 2.
+- `src/app/api/**` — phases 2 and 4.
+- `src/app/(app)/today/**` and `src/app/(app)/profile/page.tsx` — nobody. D11.
+- `scripts/check-push.ts`, `scripts/push-send.ts`, `scripts/check-push-db.ts`,
+  `.github/*`, `vercel.json`, `package.json` — phases 1, 2 and 4.
+- `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `ROADMAP_v0.1.0.md`,
+  `.env.example` prose, `plans/F30-*.md` — phase 5.
+- `public/manifest.webmanifest` and `src/app/layout.tsx` — read, and unchanged.
+  `display: standalone`, `scope: "/"`, `start_url: "/today"` and
+  `appleWebApp.capable` are already exactly what an iOS Home Screen install
+  needs; there is nothing to add and adding anything would be scope creep.
+
+---
+
+## Files
+
+| File | Action | What changes |
+|---|---|---|
+| `public/sw.js` | create | The whole worker: `install`, `activate`, `push`, `notificationclick` |
+| `src/middleware.ts` | modify | `:132` — `sw\\.js` into the matcher's negative lookahead, beside `manifest.webmanifest`; the lookahead's doc comment gains a paragraph |
+| `scripts/check-badge-art.ts` | modify | `:456–:466` comment and `:476` regex — `/^(badges\|levels)/` becomes `/^(badges\|levels\|sw)/` |
+| `next.config.ts` | modify | `:62` — a third `headers()` source, `/sw.js` → `cache-control: no-cache` |
+| `src/components/push/push-sync.tsx` | create | `<PushSync/>` — `<TimezoneSync/>` for the push endpoint |
+| `src/app/(app)/layout.tsx` | modify | `:2` import, `:19–:22` doc paragraph, `:48` mount |
+| `src/components/push/reminder-toggle.tsx` | create | The switch and its five rendered states |
+| `src/components/profile/profile-edit-form.tsx` | modify | `:14` import, `:20` import, `:227` — one section after `<TimezoneField/>` |
+
+Eight files, matching the index. A parallel draft had nine — it added
+`src/components/push/endpoint-mirror.ts`, which reconciliation removed in favour
+of the mirror phase 2 already keeps inside `lib/push/client.ts`.
+
+---
+
+## Implementation Steps
+
+Steps 1–4 make `/sw.js` reachable and honest. Steps 5–6 make the device
+reconcile itself. Steps 7–8 put the switch on the screen. The order is the order
+in which each step's verification becomes possible.
+
+---
+
+### Step 1: The service worker
+
+**File:** `public/sw.js` (new)
+
+**Change:** The whole worker. Plain JavaScript, no imports, no TypeScript, no
+bundler — there is no build step for this file and none is being added (D10).
+
+Two facts about how the repo treats it:
+
+- **`npm run typecheck` does not see it.** `tsconfig.json`'s `include` is
+  `["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"]`; `allowJs`
+  is on but no `**/*.js` glob is listed, so this file is never compiled.
+- **`npm run lint` does see it.** The script is bare `eslint`, whose flat-config
+  default files are `**/*.js`, `**/*.mjs`, `**/*.cjs`, and `eslint.config.mjs`
+  ignores only `node_modules`, `.next`, `out`, `build`, `next-env.d.ts` and
+  `design/from-claude-design`. `eslint-config-next` does **not** extend
+  `eslint:recommended`, so `no-undef` is off and `self`/`clients` need no
+  `/* global */` pragma; `@typescript-eslint/no-unused-vars` is set to `1` (warn)
+  and `eslint` exits 0 on warnings. The file below has no unused bindings
+  anyway.
+
+**Code:**
+
+```js
+/**
+ * Daily Words' service worker. It caches nothing, intercepts nothing, and
+ * exists for exactly two events.
+ *
+ * There is no `fetch` handler and there must not be one. Everything this app
+ * draws is a database read behind a session; an offline shell would show a
+ * stranger's-eye view of a screen whose whole content is private, and the
+ * roadmap's no-cron/no-background-work line is the same argument one layer up.
+ * The worker is here so the push service has somewhere to deliver to.
+ *
+ * Plain JavaScript on purpose: it is served from `public/` byte-for-byte, it is
+ * not compiled by `tsc` (tsconfig's `include` lists no `**/*.js`), and there is
+ * no bundler entry for it. It IS linted — `npm run lint` is a bare `eslint` and
+ * nothing ignores `public/`.
+ *
+ * `SW_VERSION` is not read by any code. It is here so that a phone can be asked
+ * which worker it is running: in Safari's Web Inspector, or by reading the
+ * deployed `/sw.js` directly. A worker is the one piece of this app that can be
+ * a month stale on a device while the server is current, so the version has to
+ * be visible in the artefact rather than inferred from a deploy log.
+ */
+const SW_VERSION = "2026-09-14.1";
+
+/**
+ * What a notification says when the payload does not say it.
+ *
+ * `userVisibleOnly: true` is a promise to the browser that every push produces a
+ * notification, and a browser that catches the app breaking it revokes the
+ * subscription — silently, permanently, and only on the user's phone. So there
+ * is no code path below on which `showNotification` is skipped: a push with no
+ * data, a push whose body is not JSON, and a push whose JSON is an array all
+ * end at these four strings.
+ */
+const FALLBACK = {
+  title: "Daily Words",
+  body: "Today's card is still waiting to be made.",
+  url: "/today",
+  tag: "daily-card-reminder",
+};
+
+/**
+ * Read the four fields the sender may set, defaulting each one on its own.
+ *
+ * Field-by-field rather than all-or-nothing: a sender that gets `url` wrong
+ * should still deliver its own words, and a sender that gets `title` wrong
+ * should still land on the right screen.
+ *
+ * `url` is the one field with a rule beyond "is a non-empty string". It must be
+ * a same-origin path, and `startsWith("/")` alone does not say that —
+ * `//evil.example/x` is protocol-relative and resolves off-origin. Both checks
+ * are needed, and this is the only place in the worker where a value from the
+ * network reaches something navigable.
+ */
+function readNotification(event) {
+  if (!event.data) return FALLBACK;
+
+  let raw;
+  try {
+    raw = event.data.json();
+  } catch {
+    return FALLBACK;
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return FALLBACK;
+
+  const title = typeof raw.title === "string" && raw.title ? raw.title : FALLBACK.title;
+  const body = typeof raw.body === "string" && raw.body ? raw.body : FALLBACK.body;
+  const tag = typeof raw.tag === "string" && raw.tag ? raw.tag : FALLBACK.tag;
+
+  const url =
+    typeof raw.url === "string" && raw.url.startsWith("/") && !raw.url.startsWith("//")
+      ? raw.url
+      : FALLBACK.url;
+
+  return { title, body, url, tag };
+}
+
+/**
+ * Activate a new worker on the next page load rather than waiting for every
+ * client to close.
+ *
+ * `skipWaiting` is dangerous in a worker that caches assets — the new worker
+ * starts serving a new manifest to a page built against the old one. This one
+ * caches nothing and serves nothing, so there is no such pairing to break, and
+ * the alternative is a phone running last month's `push` handler because a
+ * standalone PWA is essentially never closed.
+ */
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+/**
+ * One reminder, replacing the last one rather than stacking beside it.
+ *
+ * The tag and `renotify` are a pair and neither works alone. A stable tag makes
+ * 19:00 replace 17:00, so a user who was out all day comes back to one card on
+ * the lock screen instead of seven. But a tagged replacement is silent by
+ * default — which would mean the phone buzzes at 07:00 and never again, exactly
+ * inverting what was asked for. `renotify: true` is what keeps each of the seven
+ * an actual interruption.
+ */
+self.addEventListener("push", (event) => {
+  const notification = readNotification(event);
+
+  event.waitUntil(
+    self.registration.showNotification(notification.title, {
+      body: notification.body,
+      tag: notification.tag,
+      renotify: true,
+      icon: "/icons/icon-192.png",
+      data: { url: notification.url },
+    }),
+  );
+});
+
+/**
+ * Tap the notification, land on the card that was not made.
+ *
+ * Close first, unconditionally: iOS leaves a tapped notification on the lock
+ * screen otherwise, and a reminder for a card the user is at that moment
+ * making is the worst notification the app could show.
+ *
+ * Then focus rather than open, when there is anything to focus. A standalone
+ * PWA is one long-lived window; `clients.openWindow` against it is a second
+ * window on desktop and a no-op-shaped race on iOS. `WindowClient.navigate`
+ * shipped late in WebKit and rejects for a target outside the worker's scope,
+ * so it is both feature-detected and caught — a focused window on the wrong
+ * screen of the right app beats a rejected promise and no window at all.
+ */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const data = event.notification.data;
+  const path = data && typeof data.url === "string" ? data.url : FALLBACK.url;
+  const href = new URL(path, self.location.origin).href;
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windows) => {
+        const mine = windows.find(
+          (client) => new URL(client.url).origin === self.location.origin,
+        );
+        if (!mine) return self.clients.openWindow(href);
+
+        return Promise.resolve(mine.focus())
+          .then((focused) => {
+            const client = focused || mine;
+            if (typeof client.navigate !== "function") return undefined;
+            if (client.url === href) return undefined;
+            return client.navigate(href);
+          })
+          .catch(() => undefined);
+      }),
+  );
+});
+```
+
+**Impact:** A file at `/sw.js` that, as of this step, **307s to `/signin` for a
+cookie-less request** — which is every service-worker update check after the
+session cookie expires, and a browser handed an HTML sign-in page for a worker
+script fails the update or discards the registration. Steps 2 and 3 are what
+make this file usable, and neither failure is visible to a signed-in author.
+Nothing registers it until step 5.
+
+---
+
+### Step 2: The middleware exemption
+
+**File:** `src/middleware.ts:132` (and the doc comment above it, `:100`–`:131`)
+
+**Change:** `sw\.js` joins the matcher's negative lookahead, beside
+`manifest.webmanifest`. **Not** the middleware body (D1): `isPublicSharePath`
+and `isClaimPath` live in the body because they are *page* paths whose prefixes
+collide with real routes (`/s`, `/signin`, `/settings`). A worker script is a
+static asset exactly like the manifest, and the matcher is where every static
+asset in this app already sits.
+
+Written as `'sw\\.js'` in the TypeScript source, which is the string `sw\.js`
+and the regex `sw\.js`. **The escape is the point.** An unescaped `.` matches
+any character, and the existing `favicon.ico` carries that latent looseness
+already; a new entry should not add a second one.
+
+**Before** (`:126`–`:133`):
+
+```ts
+     *  - **This alternation is PREFIX-matched.** `badges` and `levels` here also
+     *    exempt any future route whose path merely begins with those letters —
+     *    the same latent hazard `icons` already carries, and the reason CLAUDE.md
+     *    forbids moving the share exemption into this lookahead. It is not left
+     *    to memory: `npm run badges:check` §12 fails if any directory under
+     *    `src/app` starts with either word.
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|badges|levels|icons|manifest.webmanifest|apple-icon|icon).*)',
+```
+
+**After:**
+
+```ts
+     *  - **This alternation is PREFIX-matched.** `badges` and `levels` here also
+     *    exempt any future route whose path merely begins with those letters —
+     *    the same latent hazard `icons` already carries, and the reason CLAUDE.md
+     *    forbids moving the share exemption into this lookahead. It is not left
+     *    to memory: `npm run badges:check` §12 fails if any directory under
+     *    `src/app` starts with either word.
+     *
+     * `sw\.js` joined the list with F30's push reminders, and it is the first
+     * entry here that is a single file rather than a directory. It belongs in
+     * the matcher rather than in the body above for the reason the manifest
+     * does: it is a static asset the browser fetches with no session, not a
+     * page whose prefix collides with a route.
+     *
+     * The dot is **escaped**, unlike `favicon.ico`'s. That is deliberate and it
+     * narrows the prefix hazard almost to nothing — `sw\.js` cannot exempt a
+     * future `/sweep`, only a path literally beginning `sw.js`. §12 of
+     * `badges:check` still gains `sw` anyway, and is therefore stricter than
+     * this token strictly requires: the cost is one forbidden route name and
+     * the alternative is trusting an escape character to stay there.
+     *
+     * The failure this prevents is the invisible kind. A signed-out fetch for
+     * `/sw.js` — which is exactly what a worker update check is once the
+     * session cookie has expired — answered 307 to an HTML sign-in page, and a
+     * browser handed HTML for a worker script drops the registration. The
+     * author testing it is signed in and sees a worker that registers
+     * perfectly. `curl -I http://localhost:3200/sw.js` with **no cookie jar**
+     * is the only proof, and it is the same class of bug F18 found in
+     * `isPublicSharePath`.
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|badges|levels|icons|manifest.webmanifest|sw\\.js|apple-icon|icon).*)',
+```
+
+**Impact:** `/sw.js` stops being redirected. Nothing else in the matcher moves —
+`sw\.js` matches no existing route and no existing asset path.
+
+---
+
+### Step 3: `badges:check` §12 gains `sw`
+
+**File:** `scripts/check-badge-art.ts:456`–`:477`
+
+**Change:** The excluded-prefix regex gains `sw`, and the comment says why the
+list grew and why this assertion is deliberately stricter than the matcher (D2).
+
+**Before** (`:456`–`:477`):
+
+```ts
+/**
+ * `src/middleware.ts`'s matcher excludes `badges` and `levels` so that a
+ * signed-out request for committed art gets the picture rather than a 307 to
+ * /signin. That negative lookahead is **prefix-matched**: those two words also
+ * exempt any route whose path merely *starts* with them. The exemption is
+ * correct for two directories of committed art and wrong for a page — a
+ * `/levels-explained` route would silently lose its auth gate with nothing
+ * failing anywhere.
+ *
+ * This is the same hazard CLAUDE.md forbids creating for the *share* exemption,
+ * which is why `isPublicSharePath` lives in the middleware body instead. Here
+ * the matcher is the right place and the constraint is cheap to check, so it is
+ * checked rather than remembered (F22 D6).
+ */
+const appDirs = readdirSync(join(root, 'src', 'app'), { withFileTypes: true })
+  .filter((e) => e.isDirectory())
+  .map((e) => e.name)
+
+check(
+  'no src/app route starts with an excluded prefix',
+  appDirs.filter((d) => /^(badges|levels)/.test(d)),
+  [],
+)
+```
+
+**After:**
+
+```ts
+/**
+ * `src/middleware.ts`'s matcher excludes `badges` and `levels` so that a
+ * signed-out request for committed art gets the picture rather than a 307 to
+ * /signin. That negative lookahead is **prefix-matched**: those two words also
+ * exempt any route whose path merely *starts* with them. The exemption is
+ * correct for two directories of committed art and wrong for a page — a
+ * `/levels-explained` route would silently lose its auth gate with nothing
+ * failing anywhere.
+ *
+ * This is the same hazard CLAUDE.md forbids creating for the *share* exemption,
+ * which is why `isPublicSharePath` lives in the middleware body instead. Here
+ * the matcher is the right place and the constraint is cheap to check, so it is
+ * checked rather than remembered (F22 D6).
+ *
+ * F30 added `sw\.js` — the service worker, exempted for the same reason as the
+ * manifest beside it: a browser fetches it with no session. `sw` joins this
+ * list rather than `sw\.js`, and that makes the assertion **stricter than the
+ * matcher**: the escaped dot means `/sweep` is not in fact exempt, so forbidding
+ * a `src/app/sweep/` route forbids one more name than is strictly necessary.
+ * That is the trade taken on purpose. This check is the thing that survives
+ * somebody "tidying" the escape out of the matcher, and one lost route name is
+ * cheaper than an auth gate that disappears with nothing failing.
+ */
+const appDirs = readdirSync(join(root, 'src', 'app'), { withFileTypes: true })
+  .filter((e) => e.isDirectory())
+  .map((e) => e.name)
+
+check(
+  'no src/app route starts with an excluded prefix',
+  appDirs.filter((d) => /^(badges|levels|sw)/.test(d)),
+  [],
+)
+```
+
+**Impact:** `npm run badges:check` still passes — the directories under
+`src/app` today are `api`, `(app)`, `birthday`, `claim`, `kitchen-sink`,
+`onboarding`, `s`, `signin`, and none of them starts with `sw`. From here, one
+never can.
+
+---
+
+### Step 4: The cache header
+
+**File:** `next.config.ts:62` — a third entry in the array returned by `headers()`,
+after the `/levels/:path*` block and before the closing `];`
+
+**Change:** `/sw.js` gets `cache-control: no-cache` (D4). It is the inverse of
+the two blocks above it and the comment has to say so, because those two carry
+loud warnings that this one is the case they warn about.
+
+**Before** (`:55`–`:64`):
+
+```ts
+        source: "/levels/:path*",
+        headers: [
+          {
+            key: "cache-control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+    ];
+  },
+```
+
+**After:**
+
+```ts
+        source: "/levels/:path*",
+        headers: [
+          {
+            key: "cache-control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        /**
+         * F30's service worker, and the exact inverse of the two blocks above.
+         *
+         * Those two may say `immutable` for a year for one reason only: every
+         * filename under /badges/ and /levels/ carries the first 8 hex of its
+         * master's SHA-256, so new bytes mean a new name and every cache misses
+         * correctly. `/sw.js` carries no hash and cannot — the path is what the
+         * browser *registers*, and a registration is a standing promise to keep
+         * re-fetching that one URL. A content-hashed worker filename would mean
+         * a new registration on every deploy, which is the opposite of what a
+         * worker is for.
+         *
+         * So it gets the opposite rule. A cached worker is a worker that has
+         * stopped updating, and it fails with no symptom whatsoever: the phone
+         * keeps running last month's `push` handler, every deploy succeeds,
+         * every check passes, and the only evidence is a notification that
+         * still reads the way it used to.
+         *
+         * `no-cache`, not `no-store`: the browser may keep the bytes, it just
+         * may not use them without asking. That is what makes the update check
+         * a 304 rather than a download.
+         *
+         * This is the third source and it is deliberately its own block rather
+         * than a widened pattern, for the reason F22 gives above: a shared
+         * source makes a rule correct only against the union of what it covers.
+         */
+        source: "/sw.js",
+        headers: [
+          {
+            key: "cache-control",
+            value: "no-cache",
+          },
+        ],
+      },
+    ];
+  },
+```
+
+**Impact:** `curl -I /sw.js` now answers `cache-control: no-cache` instead of
+Next's default `public, max-age=0` for `public/` assets. Nothing else changes;
+`/sw.js` overlaps neither existing source.
+
+---
+
+### Step 5: `<PushSync />`
+
+**File:** `src/components/push/push-sync.tsx` (new)
+
+**Change:** `<TimezoneSync/>` for a different piece of device state (D5). Renders
+`null`, compares before it posts, guards against re-firing with a `useRef`, and
+in the steady state issues **zero network requests**.
+
+**Where the comparison value comes from, and why it is not a prop.**
+`<TimezoneSync/>` is handed its comparison value as a prop because
+`app/(app)/layout.tsx` has already read the profile row for its own guard — the
+prop is free. A stored *endpoint* is not free: it is a second table, so passing
+it as a prop means one extra query in the authed layout on **every navigation in
+the app**, to answer a question whose answer is "unchanged" essentially always.
+`TimezoneSync`'s whole virtue is that it costs nothing, and this would make its
+neighbour cost something forever.
+
+So the comparison value is a browser-local mirror of "what we last successfully
+told the server", and **that mirror lives inside `lib/push/client.ts`** rather
+than in a module of this phase's own. Phase 2 owns device-subscription state, its
+`syncSubscription()` reads and writes the key itself, and a second mirror under
+`src/components/push/` would be two try/catch disciplines over one fact. This
+component therefore never touches `localStorage`: it asks
+`syncSubscription()` and reads the `{ endpoint }` it answers with.
+
+Three properties worth stating before the code:
+
+- **It never prompts.** `Notification.requestPermission()` outside a user gesture
+  is refused by iOS anyway, and a permission sheet on page load is precisely the
+  interruption product principle 1 forbids. The only thing that can ask is the
+  tap on `/profile/edit`.
+- **It registers the worker only when permission is already granted.** A user
+  who has never turned reminders on never gets a service worker at all, which
+  keeps "does this app run a worker?" answerable by "did you turn reminders on?"
+  The toggle registers at the moment of enabling, so nothing is lost.
+- **It calls `pushCapability()`, never `pushSupport()`.** The second issues an
+  authenticated `GET /api/push/key`, and a request per navigation is exactly the
+  cost this component exists not to have. The public key is a question for the
+  settings screen.
+
+**Code:**
+
+```tsx
+"use client";
+
+import { useEffect, useRef } from "react";
+import {
+  notificationPermission,
+  pushCapability,
+  registerServiceWorker,
+  syncSubscription,
+} from "@/lib/push/client";
+
+/**
+ * Keeps the stored push endpoint honest on every authed page. Renders nothing.
+ *
+ * `<TimezoneSync />`'s sibling, and deliberately the same shape: mounted in the
+ * app shell, compares before it posts, and in the steady state costs **zero**
+ * network requests. The comparison happens inside `syncSubscription()`, against
+ * a `localStorage` mirror `lib/push/client.ts` owns — a wrong mirror costs one
+ * redundant POST and is then right; a missing one costs the same.
+ *
+ * What makes this worth having at all: **iOS rotates push endpoints.** A
+ * subscription created in March answers with a different URL in May, and the
+ * row the sender holds becomes a 410 that nobody notices, because a
+ * notification that does not arrive looks exactly like a day with no reminder
+ * due. This is the only thing in the app that notices.
+ *
+ * It never asks for permission. `Notification.requestPermission()` outside a
+ * user gesture is refused by iOS, and a permission sheet thrown up on page load
+ * is the interruption product principle 1 exists to forbid. The tap on
+ * /profile/edit is the only thing that may ask, and until it has, this
+ * component registers no worker and touches nothing.
+ */
+export function PushSync() {
+  const ran = useRef(false);
+
+  useEffect(() => {
+    // The effect has no dependencies, so React runs it once per mount — except
+    // in StrictMode, which runs it twice on purpose. The ref is what keeps the
+    // development build from double-posting a rotated endpoint.
+    if (ran.current) return;
+    ran.current = true;
+
+    void (async () => {
+      // Synchronous, three property tests, no network. `pushSupport()` would ask
+      // the server for the public key, which is a request this component must
+      // never make.
+      if (pushCapability() !== "ready") return;
+
+      // "granted" is the only state with anything to reconcile. "default" means
+      // the user has never been asked and there is no subscription to rotate;
+      // "denied" means there cannot be one.
+      if (notificationPermission() !== "granted") return;
+
+      const registration = await registerServiceWorker();
+      if (!registration) return;
+
+      // Everything network-shaped is inside here, and it only happens when the
+      // live endpoint disagrees with the mirror — which on the overwhelming
+      // majority of page loads it does not. A vanished subscription (revoked in
+      // iOS Settings) clears the mirror and posts nothing: the server's row is
+      // reaped by the sender's 410 sweep, and a DELETE from here would be a
+      // request made to tidy something that is going to be tidied anyway, on the
+      // one path in the app whose whole design goal is to be silent.
+      await syncSubscription();
+    })();
+  }, []);
+
+  return null;
+}
+```
+
+**Impact:** Every authed page mounts one more client component that, for a user
+who has not enabled reminders, does two synchronous feature checks and returns.
+No new request on any page. No DOM anywhere, so `npm run test:layout` cannot see
+it.
+
+---
+
+### Step 6: Mount it in the authed shell
+
+**File:** `src/app/(app)/layout.tsx` — `:2` (import), `:19`–`:21` (doc), `:48` (mount)
+
+**Change:** Beside `<TimezoneSync/>`. This file uses single quotes and no
+semicolons; match it.
+
+**Before** (`:1`–`:4`):
+
+```tsx
+import { redirect } from 'next/navigation'
+import { TimezoneSync } from '@/components/profile/timezone-sync'
+import { requireOnboardedUser } from '@/lib/auth/guards'
+import { BIRTHDAY_PROMPT_HREF, needsBirthdayPrompt } from '@/lib/profile/birthday'
+```
+
+**After:**
+
+```tsx
+import { redirect } from 'next/navigation'
+import { PushSync } from '@/components/push/push-sync'
+import { TimezoneSync } from '@/components/profile/timezone-sync'
+import { requireOnboardedUser } from '@/lib/auth/guards'
+import { BIRTHDAY_PROMPT_HREF, needsBirthdayPrompt } from '@/lib/profile/birthday'
+```
+
+**Before** (`:19`–`:22`):
+
+```tsx
+ * `<TimezoneSync />` renders nothing and, in the steady state, issues no
+ * requests — it compares the browser's zone against the one this render used and
+ * only posts on a mismatch.
+ *
+```
+
+**After:**
+
+```tsx
+ * `<TimezoneSync />` renders nothing and, in the steady state, issues no
+ * requests — it compares the browser's zone against the one this render used and
+ * only posts on a mismatch.
+ *
+ * `<PushSync />` is the second of those and holds to the same bargain for the
+ * same reason: it reconciles a push endpoint iOS may have rotated, it renders
+ * nothing, and it does two synchronous feature checks and stops unless the user
+ * has already granted notifications. It takes no props deliberately — its
+ * comparison value is a `localStorage` mirror rather than a server-rendered one,
+ * because reading a `push_subscriptions` row here would put a query on every
+ * navigation in the app to answer a question whose answer is "unchanged". It
+ * never prompts; only the switch on /profile/edit may ask.
+ *
+```
+
+**Before** (`:41`–`:50`):
+
+```tsx
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const { profile } = await requireOnboardedUser()
+  if (needsBirthdayPrompt(profile)) redirect(BIRTHDAY_PROMPT_HREF)
+  return (
+    <>
+      {children}
+      <TimezoneSync stored={profile.timezone} source={profile.timezoneSource} />
+    </>
+  )
+}
+```
+
+**After:**
+
+```tsx
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const { profile } = await requireOnboardedUser()
+  if (needsBirthdayPrompt(profile)) redirect(BIRTHDAY_PROMPT_HREF)
+  return (
+    <>
+      {children}
+      <TimezoneSync stored={profile.timezone} source={profile.timezoneSource} />
+      <PushSync />
+    </>
+  )
+}
+```
+
+**Impact:** The layout gains no branch, no await and no query — the restraint
+`claim:check` greps this file for is untouched. The two reconcilers sit side by
+side after `{children}`, which is where `Screen`'s flex column has already
+closed, so neither can affect the height budget.
+
+---
+
+### Step 7: The switch
+
+**File:** `src/components/push/reminder-toggle.tsx` (new)
+
+**Change:** The control, and the four honest states it has to be able to draw
+instead (D8). No new colour, no new type size, no new radius — every class here
+is one `ToggleRow` already uses.
+
+**The shape of the thing.** `ToggleRow` draws its own `border-t border-rule-2
+pt-4.5` and its own two-line label/hint stack. The non-switch states reproduce
+exactly that frame — same rule, same padding, same `text-base text-ink` first
+line, same mono second line — so the section occupies the same place on the page
+whichever of the five it is showing, and a phone that cannot do push does not
+get a differently-shaped hole where a control should be.
+
+**`confirmOn={false}` (D7).** The two-tap arm is for things that cannot be
+undone; turning on reminders is undone by turning them off. `[R22]`'s neighbours
+and F13 D5 draw that line and this is on the safe side of it.
+
+**Not optimistic, unlike `MasteredToggle`.** That control moves the switch before
+the request because a 300 ms wait reads as broken. This one must not: between the
+tap and the answer there is a *system permission sheet*, and a switch that has
+already moved to "on" behind it asserts something the user has not yet agreed to.
+The disable direction has no sheet and could be optimistic; it is written the
+same way as the enable direction because two rules in one control is how the next
+edit gets it wrong.
+
+**The gesture rule, which is the trap in this file.** iOS refuses
+`Notification.requestPermission()` unless it is reached from a user gesture, and
+an `await` between the tap and the call loses the gesture on WebKit. So
+`requestNotificationPermission()` is called with **nothing awaited above it** on
+the enable path. `setBusy` and `setProblem` are synchronous and safe; anything
+that returns a promise is not. This is also why the ask lives here rather than
+inside phase 2's `enablePush()` — `enablePush` has to register the worker before
+it can subscribe, and a register-then-ask ordering is a prompt that never
+appears, on the one platform this feature was asked for.
+
+**Code:**
+
+```tsx
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Meta } from "@/components/ui/text";
+import { ToggleRow } from "@/components/ui/toggle-row";
+import {
+  disablePush,
+  enablePush,
+  getSubscription,
+  notificationPermission,
+  pushSupport,
+  registerServiceWorker,
+  requestNotificationPermission,
+} from "@/lib/push/client";
+import {
+  REMINDER_EVERY_HOURS,
+  REMINDER_FIRST_HOUR,
+  REMINDER_UNTIL_HOUR,
+} from "@/lib/push/schedule";
+
+/**
+ * The one place a user turns card reminders on, and the four places the app has
+ * to admit it cannot.
+ *
+ * It is on /profile/edit and not on /profile, which is the pride screen and
+ * says in its own doc comment that it holds no settings, no countdown and no
+ * red states. A "reminders are off" row there would be the first of all three.
+ *
+ * **It writes on the tap and is not saved by the Save button below it.** Same
+ * argument the timezone in that form already makes: a different resource with a
+ * different rule. It is drawn last, beneath every field Save does commit, so
+ * nothing above it is left looking unsaved.
+ *
+ * The four honest states matter more than the switch does, because on the
+ * device this was built for the first one a user meets is **needs_home_screen**: iOS
+ * grants Web Push to a Home Screen app and to nothing else, so Safari in a
+ * normal tab has the APIs and no permission to give. A dead switch there is the
+ * worst possible answer — it looks broken, and the fix (add to Home Screen) is
+ * something no amount of tapping will discover.
+ *
+ * `denied` is the other one that must never be a silent no-op. Once the browser
+ * has been told no it will not ask again, so a switch that flips back with no
+ * explanation is a user concluding the feature is broken. The copy names the
+ * place the decision actually lives.
+ */
+
+/** 7 -> "7am", 12 -> "12pm", 20 -> "8pm". Presentation of an integer constant. */
+function hourLabel(hour: number): string {
+  if (hour === 0) return "12am";
+  if (hour === 12) return "12pm";
+  return hour < 12 ? `${hour}am` : `${hour - 12}pm`;
+}
+
+/**
+ * The schedule, read back from phase 1's constants rather than typed out.
+ *
+ * The sentence is copy, but the numbers in it are the feature, and a hint that
+ * says 7am beside a `REMINDER_FIRST_HOUR` of 8 is exactly the drift this
+ * codebase keeps out of prose. Importing them is also the only coupling this
+ * component has to the schedule: no clock is read here, no date is computed,
+ * and `hourLabel` does integer-to-string formatting rather than date
+ * arithmetic, so `lib/time/local-date.ts`'s monopoly is untouched.
+ */
+const SCHEDULE_HINT =
+  `From ${hourLabel(REMINDER_FIRST_HOUR)} to ${hourLabel(REMINDER_UNTIL_HOUR)}, ` +
+  `every ${REMINDER_EVERY_HOURS} hours, until the card exists.`;
+
+/**
+ * The six states this section can be in, and five of them draw a sentence rather
+ * than a switch.
+ *
+ * The four that are not `loading` or `ready` are spelled with phase 2's
+ * `PushSupport` tokens exactly, so `setStatus({ kind: support.kind })` assigns
+ * straight across with no mapping table to keep in step. `denied` is this
+ * component's own, because permission is not a capability.
+ */
+type Status =
+  | { kind: "loading" }
+  | { kind: "unsupported" }
+  | { kind: "needs_home_screen" }
+  | { kind: "unconfigured" }
+  | { kind: "denied" }
+  | { kind: "ready"; on: boolean };
+
+/** The first line of every state that is not the switch. */
+const SECTION_LABEL = "Card reminders";
+
+const SENTENCE: Record<
+  "loading" | "unsupported" | "needs_home_screen" | "unconfigured" | "denied",
+  string
+> = {
+  loading: "Checking…",
+  unsupported: "This browser cannot show notifications.",
+  needs_home_screen:
+    "Add Daily Words to your Home Screen and open it from there. iOS gives notifications to installed web apps and to nothing else.",
+  unconfigured: "Reminders are not set up on this server.",
+  denied:
+    "Notifications are turned off for Daily Words. Turn them back on in iOS Settings, under Notifications, then come back here.",
+};
+
+export function ReminderToggle() {
+  const [status, setStatus] = useState<Status>({ kind: "loading" });
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const probed = useRef(false);
+
+  useEffect(() => {
+    if (probed.current) return;
+    probed.current = true;
+
+    void (async () => {
+      // One authenticated GET, on a settings screen — which is the only place
+      // `pushSupport()` may be called. It is what tells "the server has no key"
+      // apart from "the switch is off", two states that draw the same picture
+      // and are opposite problems. `<PushSync/>` uses `pushCapability()`
+      // instead, precisely so this request does not happen on every page.
+      const support = await pushSupport();
+      if (support.kind !== "supported") {
+        setStatus({ kind: support.kind });
+        return;
+      }
+
+      const permission = notificationPermission();
+      if (permission === "denied") {
+        setStatus({ kind: "denied" });
+        return;
+      }
+
+      // Only a granted permission can have a subscription behind it, and only
+      // that case is worth registering a worker for. "default" is a user who
+      // has never been asked: there is nothing to read and nothing to install.
+      if (permission !== "granted") {
+        setStatus({ kind: "ready", on: false });
+        return;
+      }
+
+      const registration = await registerServiceWorker();
+      const subscription = registration ? await getSubscription() : null;
+      setStatus({ kind: "ready", on: subscription !== null });
+    })();
+  }, []);
+
+  async function change(next: boolean) {
+    // `ToggleRow` has no disabled state, so the guard lives here — the same
+    // place `MasteredToggle` puts it. A second tap during the round trip must
+    // not fire a second subscribe.
+    if (busy || status.kind !== "ready") return;
+
+    setBusy(true);
+    setProblem(null);
+
+    if (!next) {
+      // `disablePush()` clears `lib/push/client.ts`'s endpoint mirror itself,
+      // before anything can fail — this component holds no copy of it.
+      const result = await disablePush();
+      setBusy(false);
+      if (!result.ok) {
+        setProblem(result.message);
+        return;
+      }
+      setStatus({ kind: "ready", on: false });
+      return;
+    }
+
+    /**
+     * NOTHING MAY BE AWAITED ABOVE THIS LINE on the enable path.
+     *
+     * iOS refuses `Notification.requestPermission()` unless it is reached from
+     * a user gesture, and an await between the tap and the call loses the
+     * gesture on WebKit. `setBusy` and `setProblem` are synchronous and safe;
+     * a `registerServiceWorker()` here would be a permission sheet that never
+     * appears, on the one platform this feature exists for — which is also why
+     * the ask is here rather than inside `enablePush()`, whose first job is to
+     * register.
+     */
+    const permission = await requestNotificationPermission();
+
+    if (permission === "denied") {
+      setBusy(false);
+      setStatus({ kind: "denied" });
+      return;
+    }
+    if (permission !== "granted") {
+      // Dismissed. Not a failure and not worth a sentence: the user closed a
+      // sheet they opened, and the switch is still where they left it.
+      setBusy(false);
+      return;
+    }
+
+    // `enablePush()` registers the worker, subscribes, POSTs the subscription
+    // and remembers the endpoint. It does NOT ask for permission — that has
+    // already happened, above, in the gesture.
+    const result = await enablePush();
+    setBusy(false);
+    if (!result.ok) {
+      setProblem(result.message);
+      return;
+    }
+
+    setStatus({ kind: "ready", on: true });
+  }
+
+  if (status.kind === "ready") {
+    return (
+      <div>
+        <ToggleRow
+          label="Remind me to make today's card"
+          hint={SCHEDULE_HINT}
+          checked={status.on}
+          // Not destructive in either direction — turning reminders on is
+          // undone by turning them off — so no two-tap arm. [R22]'s
+          // neighbours, F13 D5.
+          confirmOn={false}
+          onChange={(next) => void change(next)}
+        />
+        {problem && <Meta className="pt-2 text-red">{problem}</Meta>}
+      </div>
+    );
+  }
+
+  // The same frame `ToggleRow` draws, minus the switch: the section keeps its
+  // rule, its padding and its two-line stack in every state, so the page does
+  // not change shape depending on what the device can do.
+  return (
+    <div className="flex min-h-[56px] flex-col gap-[3px] border-t border-rule-2 pt-4.5">
+      <span className="text-base text-ink">{SECTION_LABEL}</span>
+      <Meta>{SENTENCE[status.kind]}</Meta>
+    </div>
+  );
+}
+```
+
+**Impact:** One new client component, rendered only on `/profile/edit`. It
+issues one `GET /api/push/key` on mount of that screen and nothing else until
+tapped. It imports `lib/push/client.ts` and `lib/push/schedule.ts` — both
+browser-safe by their phases' contracts — and no zod value.
+
+---
+
+### Step 8: One section on `/profile/edit`
+
+**File:** `src/components/profile/profile-edit-form.tsx` — `:14` (import), `:20`
+(nothing), `:227` (the JSX)
+
+**Change:** `<ReminderToggle />` goes **after** `<TimezoneField/>`, as the last
+thing in the scrolling body. Placement is the argument: it is the only control on
+this screen the Save button does not commit, so it sits below every control Save
+does, and `ToggleRow`'s own top rule divides it from them.
+
+`/profile/edit` is a `ScreenBody scroll`, so nothing here is inside `[R19]`'s
+height budget, and no Playwright spec drives this route — `test:layout` is
+untouched by this step.
+
+**Before** (`:1`–`:14`, the import block's first lines):
+
+```tsx
+import { BackLink } from "@/components/layout/back-link";
+import { ScreenBody, ScreenHeader } from "@/components/layout/screen";
+import { ChipSelect } from "@/components/profile/chip-select";
+import { InterestsField } from "@/components/profile/interests-field";
+import { OptionRows } from "@/components/profile/option-rows";
+import { TimezoneField } from "@/components/profile/timezone-field";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { TextInput } from "@/components/ui/text-input";
+import { Eyebrow, Meta } from "@/components/ui/text";
+```
+
+**After:**
+
+```tsx
+import { BackLink } from "@/components/layout/back-link";
+import { ScreenBody, ScreenHeader } from "@/components/layout/screen";
+import { ChipSelect } from "@/components/profile/chip-select";
+import { InterestsField } from "@/components/profile/interests-field";
+import { OptionRows } from "@/components/profile/option-rows";
+import { TimezoneField } from "@/components/profile/timezone-field";
+import { ReminderToggle } from "@/components/push/reminder-toggle";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { TextInput } from "@/components/ui/text-input";
+import { Eyebrow, Meta } from "@/components/ui/text";
+```
+
+**Before** (`:44`–`:48`, the last paragraph of the file's doc comment):
+
+```tsx
+ * The timezone is a second request, because it is a different resource with a
+ * different rule — saving it by hand sets `timezone_source = 'manual'`, which
+ * permanently stops the automatic re-detection in `<TimezoneSync />`. It goes
+ * first, so a failure there does not leave the answers saved and the zone not.
+ */
+```
+
+**After:**
+
+```tsx
+ * The timezone is a second request, because it is a different resource with a
+ * different rule — saving it by hand sets `timezone_source = 'manual'`, which
+ * permanently stops the automatic re-detection in `<TimezoneSync />`. It goes
+ * first, so a failure there does not leave the answers saved and the zone not.
+ *
+ * `<ReminderToggle />` carries that argument one step further: it is a different
+ * resource with a different rule *and* it writes on the tap, so `save()` below
+ * knows nothing about it. That is why it is drawn last, under everything the
+ * button does commit — a control Save ignores, sitting between two controls Save
+ * honours, is a promise the button cannot keep.
+ */
+```
+
+**Before** (`:222`–`:228`, the end of the `ScreenBody`):
+
+```tsx
+        <TimezoneField
+          value={timezone}
+          storedSource={profile.timezoneSource}
+          changed={timezoneChanged}
+          onChange={setTimezone}
+        />
+      </ScreenBody>
+```
+
+**After:**
+
+```tsx
+        <TimezoneField
+          value={timezone}
+          storedSource={profile.timezoneSource}
+          changed={timezoneChanged}
+          onChange={setTimezone}
+        />
+
+        {/* Last, and outside `save()` entirely — it writes on the tap. It draws
+            its own top rule, which is the division: the timezone block above
+            deliberately has none, so this is the first hairline since the tone
+            list and reads as a section rather than as a rendering fault. On a
+            device that cannot do push it draws the same frame with a sentence
+            instead of a switch, so the page keeps its shape either way. */}
+        <ReminderToggle />
+      </ScreenBody>
+```
+
+**Impact:** One extra section at the bottom of a screen that already scrolls.
+`save()` is unchanged, `patchProfile` is unchanged, and the three-request
+sequence the form's doc comment describes is unchanged.
+
+---
+
+## Verification
+
+Run from the worktree root, with phases 1 and 2 landed.
+
+**Build:**
+
+```bash
+npm run typecheck    # tsc --noEmit — does not see public/sw.js; must be clean
+npm run lint         # bare eslint — DOES see public/sw.js; must be clean
+npm run build
+```
+
+**Tests:**
+
+```bash
+npm run badges:check     # §12 with the widened regex; must still pass
+npm run test:layout      # 18 no-scroll assertions, unchanged and green
+npm run push:check       # phase 1's; unaffected, must still pass
+npm run share:check && npm run claim:check && npm run nav:check   # unaffected
+```
+
+`badges:check` §12 passes because no directory under `src/app` starts with
+`sw` — today they are `api`, `(app)`, `birthday`, `claim`, `kitchen-sink`,
+`onboarding`, `s`, `signin`. `test:layout` passes unchanged because nothing was
+added to `/today`, nothing was added to `/kitchen-sink`, `<PushSync/>` renders
+`null`, and no spec drives `/profile/edit`.
+
+**The one manual check that matters on a laptop — the exemption:**
+
+```bash
+ss -ltnp | grep 3200     # kill by pid if something is already listening
+npm run dev
+```
+
+then, in another shell and **with no cookie jar**:
+
+```bash
+curl -I http://localhost:3200/sw.js
+```
+
+Expected:
+
+```
+HTTP/1.1 200 OK
+content-type: application/javascript; charset=UTF-8
+cache-control: no-cache
+```
+
+Three things must all be true and each fails differently:
+
+- **`200`, not `307`.** A `307` means step 2 did not land — `sw\.js` is missing
+  from the lookahead, or the backslash was dropped and the escape silently
+  changed what the token matches. The signed-in author sees a working worker
+  either way.
+- **a JavaScript content type**, spelled `application/javascript` or
+  `text/javascript` — either is correct. What must never appear is `text/html`,
+  which is the sign-in page wearing the worker's URL.
+- **no `immutable`.** If this reads `public, max-age=31536000, immutable`, step 4
+  went into the wrong block and the worker on every installed phone has just been
+  frozen for a year.
+
+Then confirm the negative case is still gated:
+
+```bash
+curl -sI http://localhost:3200/profile/edit | head -1    # HTTP/1.1 307 Temporary Redirect
+curl -sI http://localhost:3200/today | head -1           # HTTP/1.1 307 Temporary Redirect
+```
+
+If either answers `200` with no cookie, the lookahead edit widened something it
+should not have.
+
+**Manual check, the browser:** open `http://localhost:3200/profile/edit` signed
+in, in desktop Chrome. The section reads **Remind me to make today's card** with
+the schedule beneath it. Toggle it on; the browser's permission prompt appears,
+and after accepting, the switch stays on. `Application → Service Workers` in
+DevTools shows `/sw.js` as activated and running. Reload: `Network` shows **no**
+request to `/api/push/subscription` — that is `<PushSync/>` finding the mirror
+and the live endpoint in agreement, and it is the property the component exists
+for. Clear `localStorage` and reload: exactly one POST, then none again.
+
+In desktop Safari, the same screen should read **needs_home_screen** or show the
+switch, depending on version; either is honest.
+
+### The manual iOS pass — and it is the only real proof
+
+**Say this plainly: a signed-in author in a desktop browser sees a
+working-looking screen whether or not any of this is right.** The middleware
+exemption only fails for a cookie-less fetch. The cache header only fails on a
+second deploy. The `needs_home_screen` state only appears on iOS. The phone is the
+proof, and there is no substitute for it.
+
+On the iPhone XS Max, against a deployed build (or the dev server over the LAN
+with a trusted certificate — iOS will not register a worker over plain `http://`
+except on `localhost`, which the phone is not):
+
+1. Open the site in **Safari**. Go to `/profile/edit` and scroll to the bottom.
+   **Expected:** the *needs_home_screen* sentence, no switch. If a switch appears
+   here, `pushCapability()` is not detecting the tab case and step 7's most
+   important state is dead code.
+2. Share sheet → **Add to Home Screen**. Add it.
+3. **Close Safari** and open Daily Words from the Home Screen icon. It must open
+   without Safari chrome — that is `display: standalone` doing its job, and it is
+   the thing iOS keys Web Push off.
+4. `/profile` → **Edit my answers** → scroll to the bottom. **Expected:** the
+   switch, with `From 7am to 8pm, every 2 hours, until the card exists.`
+5. Tap it. **Expected:** iOS's permission sheet. Tap **Allow**. The switch settles
+   to on. If no sheet appears, the gesture was lost — check that nothing is
+   awaited above `requestNotificationPermission()` in step 7 and that phase 2's
+   `enablePush()` is not asking as well.
+6. Background the app (Home button), so the notification is not suppressed by
+   being foregrounded.
+7. From a laptop: `npm run push:send` (phase 4's script, against the same
+   account). **Expected:** one notification on the lock screen within seconds.
+8. Tap it. **Expected:** Daily Words opens — from the Home Screen icon's window,
+   not Safari — on `/today`, with the notification cleared from the lock screen.
+9. Run `npm run push:send` twice in a row. **Expected:** one notification on the
+   lock screen, not two, and the second one still buzzes. That is `tag` +
+   `renotify` together; if two stack, the tag is not being sent, and if the
+   second is silent, `renotify` was dropped.
+10. Turn the switch off, `npm run push:send` again. **Expected:** nothing
+    arrives.
+
+**Exit criteria:**
+
+- `curl -I http://localhost:3200/sw.js` with no cookie jar answers `200`, a
+  JavaScript content type, and a cache header containing neither `immutable` nor
+  a non-zero `max-age`.
+- `npm run badges:check` passes with `/^(badges|levels|sw)/`.
+- `npm run test:layout`, `npm run typecheck`, `npm run lint`, `npm run build`
+  all pass, and `test:layout`'s eighteen assertions are unmodified.
+- On the XS Max, installed to the Home Screen, the switch turns on, a
+  `push:send` lands on the lock screen, and tapping it opens `/today`.
+- In Safari **in a tab** on the same phone, the same screen says to install it
+  rather than showing a dead switch.
+
+---
+
+## Handoffs
+
+**To phase 2 — settled, nothing outstanding.** Four properties this phase depends
+on and cannot enforce from here, all now written into phase 2's plan and restated
+at the top of the Interface Contract: `enablePush()` does not ask for permission;
+`PushSupport` has four kinds with phase 2's spellings; `pushCapability()` exists
+and is synchronous so `<PushSync/>` costs nothing; and `client.ts` carries no
+`import "server-only"` and imports no zod value (phase 1's `push:check` asserts
+the first half of that last one). The endpoint mirror is phase 2's and this phase
+creates no second one.
+
+**To phase 4 — settled.** The payload shape is in the Interface Contract and both
+sides now agree on it: `{ title, body, url, tag }`, all four sent, every one
+defaulted here. The tag is the constant `"daily-card-reminder"` — phase 4's
+per-day `dw-card-<localDate>` was the losing side, because a per-day tag lets
+yesterday's undismissed reminder survive beside today's. The `url` is `"/today"`;
+the worker refuses anything not same-origin-absolute and falls back to it anyway.
+
+**Deliberately not done here:**
+
+- **The stale-row DELETE.** `syncSubscription()` clears the mirror when a
+  subscription has vanished and does not tell the server. The row is reaped by
+  phase 4's 410/404 handling on the next send. If that reaping turns out not to
+  happen promptly enough to matter, the fix is a `DELETE` by endpoint from
+  `syncSubscription()` — phase 2's file, not this one — but it costs a request on
+  a path whose whole design is silence, so it should be measured before it is
+  added.
+- **Anything on `/today`.** D11. Not a banner, not a bell, not a "reminders are
+  off" hint. F18 D3 measured what one 32px control in that header costs and the
+  answer was a wrapped title at 375px with all eighteen assertions still green.
+- **Anything on `/profile`.** D6. The pride screen's doc comment enumerates what
+  it does not hold and a reminders row would add three of them at once.
+- **An offline shell / `fetch` handler in `sw.js`.** Named in the worker's own
+  doc comment. Every screen in this app is a private database read; an offline
+  shell is a cached view of something that should never be cached.
+- **`.env.example`, `CLAUDE.md`, `README.md`.** Phase 5. In particular CLAUDE.md
+  gains no paragraph here about the third `next.config.ts` header or the new
+  matcher entry, even though its "Badge and level art" section is where a reader
+  would look for both — that sweep is phase 5's, and phase 5 should know that
+  the sentence *"`src/middleware.ts` excludes `badges` and `levels` from the auth
+  matcher"* and the paragraph beginning *"Do not extend that header to a path
+  whose names are not content-hashed"* are now both incomplete.
+
+---
+
+## Rollback
+
+This phase is additive and reverts cleanly on its own, in either direction.
+
+1. `rm public/sw.js src/components/push/push-sync.tsx src/components/push/reminder-toggle.tsx && rmdir src/components/push`
+2. `src/app/(app)/layout.tsx` — drop the `PushSync` import, the `<PushSync />`
+   line and the doc paragraph.
+3. `src/components/profile/profile-edit-form.tsx` — drop the `ReminderToggle`
+   import, the JSX block and the doc paragraph.
+4. `src/middleware.ts` — remove `|sw\\.js` from the matcher string and the two
+   comment paragraphs.
+5. `scripts/check-badge-art.ts` — regex back to `/^(badges|levels)/` and drop the
+   added paragraph.
+6. `next.config.ts` — delete the third `headers()` block.
+
+No migration, no data, no dependency, no route. Nothing in phases 1, 2 or 4
+imports anything created here, so the revert cannot break them.
+
+**One thing a revert does not undo**, and it is worth knowing before reverting on
+a phone rather than in a branch: a service worker already registered on a device
+**stays registered** when the file stops being served. Removing `public/sw.js`
+makes the next update check 404, and browsers unregister a worker whose script
+404s — but only at the next check, which a standalone PWA may not make for a day.
+On a test phone, unregister it by hand: Settings → Safari → Advanced → Website
+Data, or delete and re-add the Home Screen icon.
