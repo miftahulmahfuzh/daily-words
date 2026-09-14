@@ -427,6 +427,22 @@ Named here so no plan quietly includes them:
 - Offline mode / service-worker caching beyond the bare PWA manifest
 - Any paid dependency
 
+**Amended by [R24].** Two of these bullets have moved, and both are kept above rather
+than rewritten, because what they refused is the record of what had to be argued to
+move them.
+
+- **"Push notifications or reminders of any kind"** now admits exactly one reminder:
+  an opt-in nudge to make today's card, on the schedule [R24] fixes. Everything else
+  this bullet forbade, it still forbids — no badge news, no chat nudges, no journal
+  prompts, no announcements, and nothing at all for a user who has not tapped the
+  switch.
+- **"Offline mode / service-worker caching beyond the bare PWA manifest"** still holds
+  in full. There is now a service worker, because iOS grants Web Push nowhere else,
+  and it handles two events: `push` and `notificationclick`. It caches nothing and
+  registers no `fetch` handler.
+
+The other six bullets are untouched by [R24].
+
 ---
 
 # Reconciliation Decisions
@@ -567,6 +583,13 @@ but nothing writes to the row when a user simply stops appearing.
 **Ruling:** `/profile` **recomputes on read** and treats `user_stats` as a value to
 verify and repair. No cron job — a scheduled job is the first step toward the
 notifications this roadmap forbids, and recomputation is trivially cheap at one user.
+
+**Amended by [R24].** Everything above about `user_stats` stands exactly as written:
+it is still a cache, `/profile` still recomputes from `daily_cards` on read, and no
+scheduled job writes to that row or to any other cache. What [R24] supersedes is the
+generalisation — this app now runs an hourly job, and it does send notifications. The
+clause that was load-bearing and survives is the one about *cards*: nothing scheduled
+creates a `daily_cards` row, and `POST /api/cards` is still the only path that does.
 
 ---
 
@@ -819,6 +842,73 @@ Four things this does **not** change, each of which was checked rather than assu
 
 **Overrides:** the final clause of [R21]'s Overrides paragraph, and F10 §"not behind a
 button, sheet, or FAB". F10's composer is otherwise unchanged.
+
+---
+
+### [R24] The daily card may be reminded for. The out-of-scope bullet is overruled.
+
+Decided on a direct user request, in their own words:
+
+> *"make sure the app send a different reminder as a push notification in my xs max
+> to generate today's card. start from 7 am in the morning, then send a new one every
+> 2 hours until 8 pm"*
+
+This roadmap forbade the feature twice — once in § "Explicitly out of scope for
+v0.1.0", and once inside [R11], which reached past its own subject to rule out
+scheduled jobs in general on the grounds that one is "the first step toward the
+notifications this roadmap forbids". Both prohibitions were written before there was
+a user asking for it. There is now, and the argument for them was never that a
+reminder is bad — it was that the ritual is the product and a reminder is the obvious
+first thing to erode it. That argument is answered below rather than dismissed.
+
+**Ruling:** Daily Words may send Web Push notifications, and may run a scheduled job
+to send them, under four conditions, all of which are structural rather than
+aspirational:
+
+1. **The opt-in is a row.** A user is reminded because a `push_subscriptions` row
+   exists, created by a tap they made on `/profile/edit`. There is no default-on, no
+   re-prompt, no `profiles.reminders_enabled` column, and therefore no second place
+   that can claim the user agreed when the device says otherwise. Turning it off is
+   deleting the row.
+2. **The daily card is the only subject.** No badge news, no chat nudge, no journal
+   prompt, no announcement, no re-engagement. One notification type, one destination
+   — `/today`.
+3. **Nothing scheduled may create a card.** This is the principle [R11] was reaching
+   for, and it survives intact. `POST /api/cards` is still the only path that writes
+   a `daily_cards` row and it is still finger-triggered. The scheduler sends a
+   *message*; it does not press the button. A user who ignores all seven reminders
+   has no card that day, and that is the correct outcome, not a bug to be fixed by
+   generating one for them.
+4. **Nothing may threaten a streak.** The copy carries no countdown, no "at risk", no
+   "don't break it" — the same rule `/profile` already keeps, now applied in the one
+   place where it would be easiest to break and hardest to take back, because a
+   notification speaks to someone who did not open the app.
+
+Four things this does **not** change:
+
+- **[R11]'s actual ruling stands, unchanged.** `user_stats` is still a cache, still
+  never displayed, and `/profile` still recomputes from `daily_cards` on read. No
+  scheduled job writes to that row. What is superseded is the second half of one
+  sentence — the generalisation from "this recomputation needs no cron" to "no cron,
+  ever" — and nothing else in that decision.
+- **The ritual, and the screen it lives on.** `/today` gains no pixel and no control;
+  [R19]'s vertical budget and the eighteen no-scroll assertions are untouched.
+  `NoCardYet` keeps its line — *"Nothing is generated until you press it"* — and that
+  line stays literally true. A reminder is an argument for pressing the button, which
+  is the only thing this roadmap ever insisted the button be.
+- **"Offline mode / service-worker caching" stays out of scope.** A service worker now
+  exists, because iOS grants Web Push nowhere else, and it handles exactly two events
+  — `push` and `notificationclick`. It caches nothing and registers no `fetch`
+  handler, so the caching that bullet refused is still refused.
+- **"Any paid dependency" stays out of scope.** Web Push is a browser-vendor service
+  with no account, no key exchange and no bill; `web-push` is MIT.
+
+**Overrides:** the "Push notifications or reminders of any kind" bullet in
+§ "Explicitly out of scope for v0.1.0", and the "No cron job" sentence in [R11]. Both
+are amended in place below their originals rather than rewritten, because what they
+said is the record of what had to be argued to move them. Every `plans/F*.md` line
+asserting that this app has no scheduler is historical and is corrected by
+`plans/F30-push-reminders.md` rather than by editing eleven files.
 
 ---
 

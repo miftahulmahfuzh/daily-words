@@ -71,6 +71,13 @@
       "when": 1787903644142,
       "tag": "0009_rename_dumbledore_badge_key",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789360790442,
+      "tag": "0010_open_hawkeye",
+      "breakpoints": true
     }
   ]
 }
