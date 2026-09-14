@@ -24,7 +24,7 @@
     },
     {
       "card": null,
-      "commit": null,
+      "commit": "dd122a4",
       "depends_on": [
         1
       ],
@@ -33,12 +33,12 @@
       "note": null,
       "package": "lib/env`, `lib/db/queries`, `lib/push`, `app/api/push",
       "plan": ".workflows/plan/push-card-reminders/phase-2.md",
-      "reported_at": null,
+      "reported_at": "2026-09-14T05:03:54+00:00",
       "satisfies": [
         "R1"
       ],
-      "status": "pending",
-      "task_id": null,
+      "status": "done",
+      "task_id": "P1-DW-A002",
       "title": "Subscriptions, keys and the sender"
     },
     {
@@ -57,7 +57,7 @@
       "satisfies": [
         "R1"
       ],
-      "status": "pending",
+      "status": "spawned",
       "task_id": null,
       "title": "The service worker and the switch"
     },
@@ -107,7 +107,7 @@
   "plan": "/home/miftah/daily-words/.workflows/orchestration/push-card-reminders/PLAN.md",
   "repo": "/home/miftah/daily-words",
   "slug": "push-card-reminders",
-  "updated": "2026-09-14T04:47:40+00:00",
+  "updated": "2026-09-14T05:04:07+00:00",
   "verified_at": "2026-09-14T04:34:07+00:00",
   "worktree": "/home/miftah/.worktrees/daily-words/push-card-reminders"
 }
