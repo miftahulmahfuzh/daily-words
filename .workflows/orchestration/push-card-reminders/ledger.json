@@ -85,7 +85,7 @@
     },
     {
       "card": null,
-      "commit": null,
+      "commit": "a48655d",
       "depends_on": [
         1,
         2,
@@ -97,17 +97,17 @@
       "note": null,
       "package": "root docs, `plans`, `lib/db",
       "plan": ".workflows/plan/push-card-reminders/phase-5.md",
-      "reported_at": null,
+      "reported_at": "2026-09-14T05:32:26+00:00",
       "satisfies": [],
-      "status": "pending",
-      "task_id": null,
+      "status": "done",
+      "task_id": "P1-DW-A005",
       "title": "The doc sweep"
     }
   ],
   "plan": "/home/miftah/daily-words/.workflows/orchestration/push-card-reminders/PLAN.md",
   "repo": "/home/miftah/daily-words",
   "slug": "push-card-reminders",
-  "updated": "2026-09-14T05:17:54+00:00",
+  "updated": "2026-09-14T05:32:26+00:00",
   "verified_at": "2026-09-14T05:17:32+00:00",
   "worktree": "/home/miftah/.worktrees/daily-words/push-card-reminders"
 }

@@ -6,7 +6,7 @@
 **Worktree:** `/home/miftah/.worktrees/daily-words/push-card-reminders`
 **Branch:** `feature/push-card-reminders` (base: `origin/main` @ `5e9ff55`)
 **Phases:** 5
-**Status:** phase 4/5 complete
+**Status:** phase 5/5 complete — all phases done
 **Coordinator:** —
 
 ---
@@ -136,7 +136,7 @@ Every phase must hold all of these. A phase that cannot is a phase that is wrong
 | 2 ✅ | Subscriptions, keys and the sender | R1 | `lib/env`, `lib/db/queries`, `lib/push`, `app/api/push` | 10 | 1 | HARD | `.workflows/plan/push-card-reminders/phase-2.md` | P1-DW-A002 | — |
 | 3 ✅ | The service worker and the switch | R1 | `public`, `src/middleware`, `components/push`, `app/(app)` | 8 | 1, 2 | HARD | `.workflows/plan/push-card-reminders/phase-3.md` | P1-DW-A003 | — |
 | 4 ✅ | The tick, the scheduler and the copy in flight | R1, R2, R3 | `lib/push`, `app/api/push/tick`, `.github`, `scripts` | 6 | 1, 2 | HARD | `.workflows/plan/push-card-reminders/phase-4.md` | P1-DW-A004 | — |
-| 5 | The doc sweep | — (invariant 12) | root docs, `plans`, `lib/db` | 6 | 1, 2, 3, 4 | NORMAL | `.workflows/plan/push-card-reminders/phase-5.md` | P1-DW-A005 | — |
+| 5 ✅ | The doc sweep | — (invariant 12) | root docs, `plans`, `lib/db` | 6 | 1, 2, 3, 4 | NORMAL | `.workflows/plan/push-card-reminders/phase-5.md` | P1-DW-A005 | — |
 
 Phase 3's `Depends on` gained an edge to phase 1: `reminder-toggle.tsx` imports
 `REMINDER_FIRST_HOUR`, `REMINDER_EVERY_HOURS` and `REMINDER_UNTIL_HOUR` to write
