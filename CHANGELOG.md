@@ -12,6 +12,75 @@ than restated.
 
 ## [Unreleased]
 
+**Push reminders to make today's card (F30)**
+
+- The app sends a push notification asking the user to make today's card:
+  **seven of them**, at 07:00, 09:00, 11:00, 13:00, 15:00, 17:00 and 19:00 in
+  the user's own timezone, and **every one reads differently**. It goes quiet
+  for the rest of the day the moment the card exists.
+- **No notification creates a card.** `POST /api/cards` is unchanged, and so is
+  its "If you find yourself writing a scheduler, stop" comment. The scheduler
+  sends a message; it does not press the button. `[R11]`'s "no cron job"
+  generalisation is superseded by **`[R24]`** and replaced by a narrower
+  invariant: *nothing scheduled may create a card*. `[R11]`'s actual ruling —
+  `user_stats` is a cache, recomputed on read, never trusted for display — is
+  untouched, and this feature neither reads nor writes that table.
+- The seven slots are **derived** from three constants
+  (`REMINDER_FIRST_HOUR = 7`, `REMINDER_EVERY_HOURS = 2`,
+  `REMINDER_UNTIL_HOUR = 20`) in `src/lib/push/schedule.ts`, not written out as
+  an array, so "every two hours until 8 pm" is what the code says. 20:00 bounds
+  the window and no two-hour step from 07:00 lands on it.
+- The copy is a **curated deterministic deck** (`src/lib/push/reminders.ts`),
+  keyed on `(local date, slot)` — not a model call. An unattended, billable call
+  on the one path whose job is to be quiet was the wrong trade, and a deck is
+  the only version of this `npm run push:check` can assert offline.
+- `push_subscriptions` and `push_deliveries` (migration 0010, additive).
+  Delivery is idempotent per `(user, local date, slot)` by unique index rather
+  than by application code, and the row is claimed **before** the send — the
+  same discipline as the chat's turn cap and the journal insight's claim, with
+  the same deliberate cost: a failed send is one missed reminder, never a
+  duplicate two hours later.
+- `src/lib/db/queries/push.ts` holds the **second** function in the application
+  that reads rows without a user id — `listReminderCandidates()` — and names
+  itself as loudly as `getShareBySlug` does. Every other function there keeps
+  `userId` first and in the WHERE clause.
+- `public/sw.js`, the app's first service worker. It handles `push` and
+  `notificationclick` and **nothing else** — no `fetch` handler, so offline
+  caching remains out of scope and absent. `/sw.js` joins the middleware
+  matcher's lookahead beside `manifest.webmanifest`, and `badges:check` §12 now
+  guards `sw` as a forbidden `src/app` directory prefix, because that lookahead
+  is prefix-matched.
+- `/sw.js` is served `cache-control: no-cache` — the deliberate **inverse** of
+  the two `immutable` blocks above it in `next.config.ts`. Those filenames carry
+  a content hash; this one does not, and `immutable` on a fixed name is a
+  service worker nobody can update.
+- The switch is on `/profile/edit`, not `/profile` and not `/today`. It writes on
+  tap rather than through Save, and it draws an honest state for the one thing a
+  desktop cannot show you: **iOS grants Web Push only to a Home-Screen install.**
+- The scheduler is `.github/workflows/push-reminders.yml`, hourly, one `curl`,
+  one secret — the repo's first `.github/` directory. **Not** a `crons` block in
+  `vercel.json`: a sub-daily entry is rejected at deploy time on a Hobby plan,
+  and a failed *deployment* is a worse failure than a scheduler living one file
+  away. `vercel.json` keeps its two lines and its one purpose.
+- New: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`
+  — all four optional. With none of them set the app boots, builds and serves
+  exactly as before; a missing key is "reminders are off", never a boot failure.
+  The VAPID pair is not a provider account: no vendor, no bill, no sign-up,
+  generated locally with `npx web-push generate-vapid-keys`. `.env.example` says
+  so at length, because "another API key" is the wrong mental model.
+- New dependency: `web-push` (MIT, free). It owns VAPID JWT signing, RFC 8291
+  `aes128gcm` payload encryption and the per-service request shape. The
+  roadmap's "no paid dependency" line is untouched.
+- `npm run push:check` (offline), `npm run push:db`, `npm run push:send`.
+- **Superseded lines, left as written.** `CHANGELOG.md:245` and `:396` still say
+  there is no cron. Both were true of the releases they document and are history;
+  this entry is the amendment, exactly as the badge-rename entry below leaves the
+  v0.2.0 entry naming the old key. `ROADMAP_v0.1.0.md:422` and `:562`,
+  `README.md`, `CLAUDE.md`, `.env.example` and
+  `src/lib/db/schema.ts`'s `shares` comment were all amended in place;
+  `plans/F30-push-reminders.md` §8 is the full table of which prohibitions moved
+  and which did not.
+
 **The `Avada Kedavra` badge is redrawn, and rekeyed `dumbledore` → `voldy`**
 
 - New master for the badge, supplied by hand rather than generated — the fourth

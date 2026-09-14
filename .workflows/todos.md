@@ -2,38 +2,46 @@
 
 **Package Path**: `.`
 **Package Code**: DW
-**Last Updated**: 2026-09-14 12:12
-**Total Active Tasks**: 1
+**Last Updated**: 2026-09-14 12:27
+**Total Active Tasks**: 0
 
 ## Quick Stats
 - P0 Critical: 0
-- P1 High: 1
+- P1 High: 0
 - P2 Medium: 0
 - P3 Low: 0
 - P4 Backlog: 0
 - Blocked: 0
-- Completed: 4
+- Completed: 5
 
 ---
 
 ## Active Tasks
 
-### [P1] High
+_None._
 
-- [ ] **P1-DW-A005** Phase 5: The doc sweep
+---
+
+## Completed Tasks
+
+- [x] **P1-DW-A005** Phase 5: The doc sweep
   - **Difficulty**: NORMAL
   - **Type**: Feature
   - **Context**: Owns root docs (`CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.env.example`), `plans/`, and one comment in `src/lib/db/schema.ts` (6 files). Implements no requirement itself — R1–R3 are served entirely by phases 1–4 — but serves invariant 12 (docs must not contradict the code): writes `plans/F30-push-reminders.md` in the house format naming `[R24]`, adds a `CLAUDE.md` section on the feature's seven silent-failure traps and three Commands-block lines, and updates `.env.example`'s VAPID/CRON_SECRET prose, amending every superseded "no cron"/"no push" sentence rather than deleting it. No behaviour changes; the one edit under `src/` is a comment. Exit: no surviving unexplained "no cron" hits in README/CLAUDE, every hit in CHANGELOG/src is either named history or an amended sentence; `plans/F30-push-reminders.md` exists, names `[R24]`, and its §8 table accounts for all thirteen prohibitions from the analysis's Reference List; `.env.example` explains the VAPID pair as a locally generated identity and `CRON_SECRET` as a two-place shared secret; `git diff --stat` names no file outside this phase's six; typecheck/lint and every check script pass unchanged.
-  - **Status**: open
+  - **Status**: completed
   - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 5 of 5)
   - **Satisfies**: — (invariant 12)
   - **Depends on**: P1-DW-A001, P1-DW-A002, P1-DW-A003, P1-DW-A004
   - **Plan**: `.workflows/plan/P1-DW-A005.md`
   - **Unblocked**: 2026-09-14 12:12 — all four declared dependencies have now landed. Phase 3 (P1-DW-A003) completed at 12:10 concurrently in this same worktree, and phase 4 (P1-DW-A004) completed at 12:12. Phase 5 touches only docs plus one comment in `src/lib/db/schema.ts`, so it can start as soon as phase 3's own commit has landed on the branch.
-
----
-
-## Completed Tasks
+  - **Completed**: 2026-09-14 12:27
+  - **Method**: /do
+  - **Files**: CLAUDE.md, README.md, CHANGELOG.md, .env.example, src/lib/db/schema.ts, plans/F30-push-reminders.md
+  - **Drift**: Minor anchor drift, not code drift: phase 2's actual `.env.example` stub prose (the block after `APP_URL=`) differs word-for-word from what phase 5's plan quoted as the anchor, though the first line (`# F30 push reminders. ALL FOUR ARE OPTIONAL: with none of them set the app`) and the last line (`CRON_SECRET=`) match exactly, and the four variable names/order match. Followed the plan's intent: deleted the entire stub block and appended phase 5's full replacement verbatim, since Step 8 says to replace it wholesale regardless of the stub's middle wording.
+  - **Drift**: Found and fixed a genuine self-contradiction inside phase 5's own plan: Step 3's and Step 4's "Code — after" blocks (which were applied verbatim from the adopted plan) each contained the literal phrase "there is no cron" inside `CLAUDE.md` prose, while the same phase's Verification section states as a hard, explicit exit criterion that `grep -rn -i "no cron" README.md CLAUDE.md` returns nothing — "a hit in either file is a missed edit." Per the /implement precedence ladder, the phase's own exit criteria (rung 2) outranks the code block's exact prose (rung 3), so the two spots in `CLAUDE.md` were reworded to preserve their meaning (the invariant that replaces the old rule; the [R11] generalisation being superseded) without using the literal trigger phrase, rather than leaving the grep failing. Verified afterward that `grep -rn -i "no cron\|there is no cron" README.md CLAUDE.md` returns zero hits, while `CHANGELOG.md` and `src/` still carry exactly the expected historical/amended hits (CHANGELOG.md's two pre-existing v0.1.0/v0.2.0 entries named by `file:line` in the new `[Unreleased]` entry, `src/app/api/cards/route.ts:25` and `src/lib/push/tick.ts:25` untouched from earlier phases, and `src/lib/db/schema.ts:550` the amended comment this phase wrote).
+  - **Decided**: `CLAUDE.md` wording at Step 3's Conventions bullet and Step 4's new section → reworded away from the literal phrase "there is no cron" while keeping the same meaning (rung 2: phase exit criteria, specifically Grep 1's explicit zero-hits requirement, over rung 3: the plan's own code-block prose).
+  - **Verification**: `typecheck`, `lint`, `build`, `push:check`, `push:db`, `vocab:check`, `nav:check`, `profile:check`, `chat:check`, `discover:check`, `journal:check`, `share:check`, `claim:check`, `badges:check`, `stats:check` all pass; `test:layout` 96 passed / 10 skipped (the skipped need `DW_TEST_SESSION`), same as prior phases. All five verification greps from the phase plan pass after the wording fix above. `git diff --stat` shows exactly the six files this phase owns (five modified + one new), nothing else.
+  - **Drift**: `npm run dates:check` still shows its one pre-existing, unrelated failure — the '/today header' ICU comma difference, "Sunday, 9 August" vs "Sunday 9 August" — already documented as environment drift in phases 1 and 2's completion records. Confirmed via `git diff --stat -- src/` that this phase touches only `src/lib/db/schema.ts`, comment-only.
 
 - [x] **P1-DW-A004** Phase 4: The tick, the scheduler and the copy in flight
   - **Difficulty**: HARD

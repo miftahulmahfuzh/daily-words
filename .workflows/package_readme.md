@@ -13,7 +13,8 @@ whole app: `src/app` holds the routes, `src/lib/<domain>` holds the domain modul
 stand in for a unit-test suite.
 
 **Documentation Created: 2026-09-14**, during phase 1 of 5 of the push-card-reminders
-plan set (F30), and extended in place by each phase since — most recently phase 4. This
+plan set (F30), and extended in place by each phase since — most recently phase 5, the
+last. This
 file therefore documents the F30 surface in detail and the rest of the app by pointer — `CLAUDE.md` and `ROADMAP_v0.1.0.md` remain the authority for
 everything else, in the order given under **Authority** below.
 
@@ -35,6 +36,173 @@ everything else, in the order given under **Authority** below.
 5. `plans/F*.md` — each plan's header lists which of its sections are superseded.
 
 A plan that contradicts the roadmap loses.
+
+---
+
+## Recent Changes — F30 phase 5 (2026-09-14)
+
+Task `P1-DW-A005`, "The doc sweep". The last phase of the set, and **it implements no
+behaviour**: no route, no module, no component, no migration, no dependency. The one
+file it touches under `src/` is a comment. What it changes is what the next reader is
+told, which for a feature whose failures are all silent is not a smaller job than the
+code.
+
+The single rule the whole phase follows: **every superseded sentence was amended in
+place, beneath its original, never deleted.** What the roadmap and eleven plans refused
+is the record of what had to be argued to move them, and a repository whose prohibitions
+quietly vanish the moment somebody breaks one cannot be read at all.
+
+### `plans/F30-push-reminders.md` — the file [R24] promised in phase 1
+
+361 lines in the house plan format. [R24] closes by saying that every `plans/F*.md` line
+asserting this app has no scheduler is corrected "by `plans/F30-push-reminders.md`
+rather than by editing eleven files" — phase 1 wrote that sentence against a file that
+did not yet exist, and this phase is what makes it true.
+
+**§8 is the load-bearing section**, and the plan's own header says so: a table of every
+prohibition in the plan set, marking **four amended in part, two amended outright and
+seven that simply still stand**. It exists because "the roadmap forbids notifications"
+stopped being a sentence anyone can use without naming which clause they mean.
+
+| Moved in part | Still true as written |
+|---|---|
+| `F1:93` — push and the worker, **not** offline caching | `F3:76` — no background job, queue, cron or `waitUntil` |
+| `F7:76` — reminders, **not** the "finish your profile" nag | `F6:76` — no nudge to resume a chat |
+| `F8:105` — notifications, **not** scheduled discovery or auto-adding | `F10:77` — no background work for the journal |
+| `F9:69` — push, **not** email and **not** loss aversion | `F13:213` — badges notify nobody |
+| `F5:87`, `F16:219` — amended outright | `F17:277` — the user is never prompted to finish |
+
+The `F9` row is the one that constrains this feature's own copy: the loss-aversion ban
+directly below the amended clause is untouched, which is why the 43-line deck counts
+nothing and threatens nothing. The `F1` row is the one most likely to be misread —
+the service worker exists and offline caching does not.
+
+§§1–7 are the argument (the two load-bearing words in the request, the ruling that had
+to come first, the derivation of the slots, why a deck, why GitHub Actions, the four
+honest iOS states); §9 is D1–D10; §§10–11 are what is touched and how it is verified.
+
+### `CLAUDE.md` — one new section and three Commands lines
+
+**§ "The app has one scheduled job, and it cannot make a card"**, placed after the
+`profile-peek` paragraph and before § Authority order. It opens on what [R24] did and
+did not amend, states the replacement invariant as a block quote — *nothing scheduled
+may create a card* — carries an ASCII diagram of the whole path from the hourly workflow
+to `notificationclick`, and then the traps. **Each trap is one that fails without
+throwing**: the Home-Screen requirement, the user-gesture rule for
+`requestNotificationPermission()`, the two `/sw.js` configuration lines, the
+`userVisibleOnly` promise, the claim-before-send discipline, GitHub's late cron, the
+two places `CRON_SECRET` must match, and iOS endpoint rotation. It closes on *what this
+feature is still not* — no badge news, no chat nudge, no email, no digest, no streak
+threat — pointing at §8 of the plan for the full table.
+
+Three lines in the Commands block, in the house format:
+
+```
+npm run push:check    # F30's slot derivation, catch-up matrix and copy deck, offline
+npm run push:db       # F30's delivery idempotence, the 410 sweep and the card-exists suppression; seeds a fixture user
+npm run push:send     # fire one real notification at your own subscriptions; no schedule, no rows written
+```
+
+Two amendments elsewhere in the file, both to sentences that had leaned on the absence
+of a scheduler rather than on their own reason:
+
+- **`stats:recompute` "never on a schedule"** kept the instruction and replaced its
+  justification. It used to end "there is no cron in v0.1.0", which stopped being true;
+  the reason now given is that `--prune` deletes award rows and is the one destructive
+  operation in the app, while the hourly tick writes nothing outside `push_deliveries`.
+- **§ Conventions' card-creation bullet** — "No cron, no `revalidate`, no creation on
+  page load" — now reads "No `revalidate`, no creation on page load, and **nothing
+  scheduled may create a card**", and says explicitly that
+  `src/app/api/cards/route.ts:25`'s *"If you find yourself writing a scheduler, stop"* is
+  unchanged byte for byte and is about card creation rather than about the word.
+- § Authority order's first entry widens to **[R1]–[R24]** and now says out loud that
+  the list is amendable: [R22] says so, [R23] amends [R21], [R24] amends [R11]. A later
+  number contradicting an earlier one is the mechanism working, not a conflict to guess
+  at.
+
+### `.env.example` — the VAPID and `CRON_SECRET` prose, rewritten
+
+The four variables were already declared and already optional; what changed is the
+explanation, and it exists to kill one specific wrong mental model. **"Another API key"
+sends a reader looking for a sign-up that does not exist**: the VAPID pair has no
+vendor, no account, no bill, no dashboard and no key exchange, and is generated locally
+with `npx web-push generate-vapid-keys`. The file now names **five key families** and
+says which three are provider accounts at all:
+
+| Variable | What it actually is |
+|---|---|
+| `LLM_API_KEY` | z.ai (GLM) — the only one the running app uses for text |
+| `EMBEDDING_API_KEY` | OpenAI, project `dword-embeddings` — runtime, F15 journal dedup |
+| `OPENAI_API_KEY` | offline badge/level art tooling only, never under `src/` |
+| `OPENROUTER_API_KEY` | offline badge/level art tooling only, never under `src/` |
+| `VAPID_*` | no provider, no account, no bill — generated on this machine |
+
+with the existing rule restated rather than rediscovered: do not paste one secret into
+two variables, which hollows out the separation while appearing to honour it.
+
+Two warnings are stated in the register they deserve. **Changing the VAPID pair
+invalidates every existing subscription, silently** — every opted-in device simply stops
+receiving, with no error anywhere, until it re-subscribes; rotate it the way
+`AUTH_SECRET` is rotated, not the way an API key is. And **`CRON_SECRET` is set in two
+places and they must match** — the Vercel project's environment variables and the
+repository's Actions secrets — where a mismatch is a 401 that writes nothing, leaves the
+app healthy, and is visible *only* in that run's `curl` step in the Actions tab. The
+file now says to look there first when reminders stop, before opening anything under
+`src/`.
+
+`VAPID_SUBJECT=` also stops shipping blank: it carries `mailto:you@example.com` as a
+shape to copy, since a present-but-malformed value is the one entry in the block that
+can fail the boot.
+
+### `README.md` — three amendments, and the out-of-scope list
+
+The second paragraph's "**no cron**, no creation on page load, no card waiting for you"
+becomes "no creation on page load … the app has exactly one scheduled job and it is a
+reminder: it sends a notification asking you to press the button, and it creates
+nothing." The `/today` row of the screens table takes the same correction.
+
+The out-of-scope paragraph drops "push notifications" from the list and gains a
+paragraph saying exactly what left it and what did not: an opt-in reminder to make
+today's card, seven times between 07:00 and 19:00 in the user's own timezone, silent the
+moment the card exists — and **still** no notification for a badge, a chat, a journal
+line or a streak at risk, no email, no loss-aversion copy. It ends on the sentence most
+worth having in the README, because the tree now visibly contains a service worker:
+**offline caching is still out of scope and still absent**, `public/sw.js` has no
+`fetch` handler at all.
+
+### `CHANGELOG.md` — the F30 `[Unreleased]` entry
+
+Sixteen bullets above the badge-rename entry, in the file's stated style: what changed
+and *why*, not a restatement of the diff. Its last bullet is the one that makes the rest
+readable — **"Superseded lines, left as written"** — recording that `CHANGELOG.md:245`
+and `:396` still say there is no cron, that both were true of the releases they document
+and are history, and that this entry is the amendment. Precisely how the v0.2.0 entry
+below still names the old `dumbledore` badge key.
+
+### `src/lib/db/schema.ts:550` — the one line of source in this phase
+
+The `shares` table's `expires_at` comment. It read "There is no cron in this app
+([R11]); a TTL with nothing to enforce it is a lie in the schema", and half of that is
+now false. The amendment keeps the original above it and adds: there is now exactly one
+scheduled job, so "nothing could enforce it" is no longer the reason — **the column
+stays absent on the half of the argument that was always the stronger one.** A TTL
+checked on read is a different feature with a different sentence in front of a stranger
+("your link expired") that nobody has asked for. It closes by fencing the tick: it
+writes to `push_deliveries` and to nothing else, it is not an expiry sweep, and it must
+not be grown into one.
+
+### What phase 5 deliberately did not do
+
+**`ROADMAP_v0.1.0.md` is untouched.** Its amendment was phase 1's work — [R24] was
+written before a line of code, because the authority order makes the roadmap win over
+any plan and building four phases against a document that forbids the feature is the
+contradiction that order exists to prevent. There is no F30 row in a feature table
+because that is not where [R24] points; it points at the plan file, which now exists.
+
+**No `plans/F*.md` was edited.** Eleven of them assert this app has no scheduler. They
+are corrected by one table in one new file, per [R24]'s own instruction — editing eleven
+plans would destroy eleven records of what was decided at the time and leave nothing
+that says a decision changed.
 
 ---
 
@@ -1056,6 +1224,14 @@ Both scripts need `--conditions=react-server` (already in the npm scripts): ever
 under `lib/db/` and `lib/push/` imports `server-only`, whose default export throws
 outside a server bundle.
 
+**Phase 5 changed no check script at all** — it verifies by `npm run typecheck`,
+`npm run lint` and reading. All three push commands are now listed in `CLAUDE.md`
+§ Commands, which is where a reader looks for them; this file is no longer the only
+place they are written down. `CLAUDE.md`'s new § "The app has one scheduled job" also
+carries the manual pass — the cookie-less `curl -sI /sw.js`, `npm run push:send`, and
+the tick driven by hand with the secret from `.env.local` — for the things a desktop
+cannot show you.
+
 The full command list for the rest of the app is in `CLAUDE.md` § Commands.
 
 ---
@@ -1152,10 +1328,30 @@ The full command list for the rest of the app is in `CLAUDE.md` § Commands.
   abandons a fan-out with slots already claimed.
 - **Do not let `push:send` write a row or prune an endpoint.** It exists to be run
   repeatedly while tuning copy, and a spent slot would suppress the real reminder.
+- **Do not delete a superseded sentence.** Every "no cron" / "no push" line in the
+  roadmap, the README, `CLAUDE.md`, `CHANGELOG.md` and `schema.ts` was amended *in
+  place, beneath its original*. What they refused is the record of what had to be argued
+  to move them, and a prohibition that vanishes when somebody breaks it teaches the next
+  reader that none of them mean anything.
+- **Do not cite an earlier plan's prohibition without checking §8** of
+  `plans/F30-push-reminders.md`. Four moved in part, two outright, seven still stand —
+  and the partial ones are where the mistake lives: F1 moved on push and **not** on
+  offline caching, F7 on reminders and **not** on the nag, F9 on push and **not** on
+  email or loss aversion.
+- **Do not edit the eleven plans that say this app has no scheduler.** They are history
+  and [R24] corrects them by one table in one file. Editing them destroys eleven records
+  of what was decided and leaves nothing saying a decision changed.
+- **Do not grow the tick into an expiry sweep.** `schema.ts`'s amended `shares` comment
+  fences it: `push_deliveries` and nothing else. `expires_at` is still absent on the
+  half of the argument that never depended on there being no cron.
+- **Do not describe the VAPID pair as an API key** in any doc. There is no vendor, no
+  account and no bill, and the wrong mental model sends a reader hunting a sign-up that
+  does not exist.
 
 ## Notes
 
-**Phase 4 of 5.** The phases of the `PUSH_CARD_REMINDERS_PLAN.md` set:
+**Phase 5 of 5 — the set is complete.** The phases of the
+`PUSH_CARD_REMINDERS_PLAN.md` set:
 
 | Phase | Task | Adds |
 |---|---|---|
@@ -1163,7 +1359,7 @@ The full command list for the rest of the app is in `CLAUDE.md` § Commands.
 | ~~2~~ | ~~`P1-DW-A002`~~ | ~~Subscriptions, VAPID keys and the sender~~ — landed |
 | ~~3~~ | ~~`P1-DW-A003`~~ | ~~The service worker, `<PushSync />` and the switch~~ — landed |
 | ~~4~~ | ~~`P1-DW-A004`~~ | ~~The tick, the scheduler and the copy in flight~~ — landed |
-| 5 | `P1-DW-A005` | The doc sweep |
+| ~~5~~ | ~~`P1-DW-A005`~~ | ~~The doc sweep~~ — landed |
 
 **The feature is end-to-end after phase 4.** Every module phases 1–3 built now has a
 runtime caller: `dueSlot`, `isReminderSlot` via `dueSlot`, `reminderFor`, `sendPush`,
@@ -1178,11 +1374,14 @@ The seam between the halves is `PushPayload` — `{ title, body, url, tag }`, na
 `readNotification` in `public/sw.js`. **Neither side may change it alone**, and it is now
 genuinely on the wire.
 
-What phase 5 has left is the doc sweep: `CLAUDE.md` § Commands does not yet list
-`push:check`, `push:db` or `push:send`, `.env.example`'s four variables want the
-`CRON_SECRET`/`VAPID_*` distinction spelled out beside the `EMBEDDING_API_KEY` one, and
-the roadmap's feature table has no F30 row.
+**Phase 5 closed the doc sweep and nothing else.** `CLAUDE.md` § Commands now lists
+`push:check`, `push:db` and `push:send`; `.env.example` spells out the
+`VAPID_*`/`CRON_SECRET` distinction beside the `EMBEDDING_API_KEY` one and names all
+five key families; `CHANGELOG.md` has the F30 `[Unreleased]` entry. The roadmap has no
+F30 feature-table row and does not want one — [R24] points at the plan file, not at a
+table, and phase 1 amended the roadmap already.
 
 Every `plans/F*.md` line asserting that this app has no scheduler is now historical.
-Per [R24] those are corrected by `plans/F30-push-reminders.md` rather than by editing
-eleven files.
+Per [R24] those are corrected by `plans/F30-push-reminders.md` — §8 of which now exists
+and is the table to read before citing any of them — rather than by editing eleven
+files.

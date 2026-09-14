@@ -547,8 +547,18 @@ export const shares = pgTable(
     payloadVersion: integer('payload_version').notNull().default(1),
 
     createdAt: tsz('created_at').notNull().defaultNow(),
-    // No expires_at. There is no cron in this app ([R11]); a TTL with nothing to
-    // enforce it is a lie in the schema. Revocation is manual and immediate.
+    // No expires_at. Written when there was no cron in this app at all ([R11]),
+    // on the grounds that a TTL with nothing to enforce it is a lie in the
+    // schema. Revocation is manual and immediate.
+    //
+    // Amended by F30 ([R24]): there is now exactly one scheduled job, an hourly
+    // tick that sends card reminders, so "there is nothing that could enforce
+    // it" is no longer the reason. The column stays absent on the half of the
+    // argument that was always the stronger one — a TTL checked on read is a
+    // different feature, with a different sentence in front of a stranger
+    // ("your link expired"), that nobody has asked for. The tick writes to
+    // push_deliveries and to nothing else: it is not an expiry sweep and must
+    // not be grown into one.
   },
   (t) => [
     /** The public read path, and the only one that takes no user id. */

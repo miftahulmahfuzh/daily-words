@@ -11,8 +11,10 @@ Phone-first, iOS Safari specifically. One device held in one hand. Live at
 **[dword.site](https://dword.site)**.
 
 Six words a day, and **nothing is generated until you press the button** — no
-cron, no creation on page load, no card waiting for you when you open the app.
-The press is the exercise:
+creation on page load, no card waiting for you when you open the app. The app
+has exactly one scheduled job and it is a reminder: it sends a notification
+asking you to press the button, and it creates nothing. The press is the
+exercise:
 
 <p align="center">
   <img src="docs/media/today.gif" width="300" alt="The /today screen showing a dashed empty card reading “No card yet. Six words are waiting to be written out.” Pressing “Make today’s card” shows a spinner, then six words with their definitions fill the card, the streak pill moves from 13 to 14 days, and two badge reveals appear under it in turn.">
@@ -98,7 +100,7 @@ project — with a seeded account. `docs/media/README.md` says how to reproduce 
 
 | Screen | What happens there |
 |---|---|
-| `/today` | The daily card: six words, two lines each, **never scrolls**. Created only when the user presses the button — no cron, no generation on page load. |
+| `/today` | The daily card: six words, two lines each, **never scrolls**. Created only when the user presses the button — no generation on page load, and the one scheduled job in the app points at the button rather than pressing it. |
 | `/calendar`, `/card/[date]` | Ticks and crosses for the days that have a card, and any past card in full. |
 | `/vocab` | The collection. **Mine** searches in the browser; **Discover** asks the model for a word the user does not already have. |
 | `/vocab/new` | Add a word. One model call validates the term, corrects likely typos (`genteell` → *genteel*), and returns part of speech, pronunciation, a one-line definition and examples — all persisted on write. |
@@ -337,7 +339,16 @@ navigation, the badge art skill and its detail dialog, vocab and journal
 duplicate handling, sharing and claiming, instant collection search, and level
 art.
 
-Out of scope on purpose: any sign-in method other than Google, push
-notifications, social features and leaderboards, audio pronunciation, imports
-from Kindle or Goodreads, spaced repetition (the card is deliberately dumber than
-SRS), offline caching beyond the bare PWA manifest, and any paid dependency.
+Out of scope on purpose: any sign-in method other than Google, social features
+and leaderboards, audio pronunciation, imports from Kindle or Goodreads, spaced
+repetition (the card is deliberately dumber than SRS), offline caching beyond the
+bare PWA manifest, and any paid dependency.
+
+Push notifications left that list in F30, under roadmap ruling [R24], and only
+for one thing: an opt-in reminder to make today's card, seven times between
+07:00 and 19:00 in your own timezone, silent the moment the card exists. There
+is still no notification for a badge, a chat, a journal line or a streak at
+risk, no email of any kind, and no loss-aversion copy anywhere. **Offline
+caching is still out of scope and still absent** — `public/sw.js` handles
+`push` and `notificationclick` and has no `fetch` handler at all, so the service
+worker in the tree intercepts nothing and caches nothing.
