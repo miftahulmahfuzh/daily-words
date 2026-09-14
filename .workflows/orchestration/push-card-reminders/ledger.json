@@ -43,44 +43,44 @@
     },
     {
       "card": null,
-      "commit": null,
+      "commit": "bd1c888",
       "depends_on": [
         1,
         2
       ],
       "difficulty": "HARD",
       "n": 3,
-      "note": null,
+      "note": "8 files landed, curl-verified /sw.js exemption; iOS device pass still needs a human. Fixed a plan drift: **/*.js literal inside sw.js's block comment closed it early (*/), rephrased.",
       "package": "public`, `src/middleware`, `components/push`, `app/(app)",
       "plan": ".workflows/plan/push-card-reminders/phase-3.md",
-      "reported_at": null,
+      "reported_at": "2026-09-14T05:17:32+00:00",
       "satisfies": [
         "R1"
       ],
-      "status": "spawned",
-      "task_id": null,
+      "status": "done",
+      "task_id": "P1-DW-A003",
       "title": "The service worker and the switch"
     },
     {
       "card": null,
-      "commit": null,
+      "commit": "03e1a99",
       "depends_on": [
         1,
         2
       ],
       "difficulty": "HARD",
       "n": 4,
-      "note": null,
+      "note": "Tick + scheduler + push:send/push:db landed; todos.md and package_readme.md left uncommitted for phase 3's own handler to avoid a race. push:send and the Actions manual run need a live device/secret to finish.",
       "package": "lib/push`, `app/api/push/tick`, `.github`, `scripts",
       "plan": ".workflows/plan/push-card-reminders/phase-4.md",
-      "reported_at": null,
+      "reported_at": "2026-09-14T05:17:54+00:00",
       "satisfies": [
         "R1",
         "R2",
         "R3"
       ],
-      "status": "spawned",
-      "task_id": null,
+      "status": "done",
+      "task_id": "P1-DW-A004",
       "title": "The tick, the scheduler and the copy in flight"
     },
     {
@@ -107,7 +107,7 @@
   "plan": "/home/miftah/daily-words/.workflows/orchestration/push-card-reminders/PLAN.md",
   "repo": "/home/miftah/daily-words",
   "slug": "push-card-reminders",
-  "updated": "2026-09-14T05:04:13+00:00",
-  "verified_at": "2026-09-14T04:34:07+00:00",
+  "updated": "2026-09-14T05:17:54+00:00",
+  "verified_at": "2026-09-14T05:17:32+00:00",
   "worktree": "/home/miftah/.worktrees/daily-words/push-card-reminders"
 }
