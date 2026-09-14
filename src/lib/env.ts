@@ -95,6 +95,78 @@ const schema = z.object({
   EMBEDDING_BASE_URL: blankIsAbsent(z.url().default('https://api.openai.com/v1')),
   EMBEDDING_MODEL: blankIsAbsent(z.string().min(1).default('text-embedding-3-small')),
   EMBEDDING_API_KEY: blankIsAbsent(z.string().min(1).optional()),
+  /**
+   * F30's Web Push credentials. **All four are optional, and that is the whole
+   * design**: with none of them set the application boots, builds and serves,
+   * `GET /api/push/key` answers `{ publicKey: null }`, and the switch on
+   * /profile/edit says "reminders aren't available" rather than throwing behind
+   * it. A missing key is "reminders are off", never a boot failure.
+   *
+   * That is the `EMBEDDING_API_KEY` precedent one entry above, and it exists for
+   * the same measured reason: `.env.example` ships these blank, `FOO=` is an
+   * empty string rather than an absent variable, and an unwrapped
+   * `z.string().min(1)` would refuse `""` and take the whole app down for a
+   * developer who copied the example and filled in nothing. CI and
+   * `npm run build` have no keys at all.
+   *
+   * The pair is generated once, by hand, and never rotated casually — rotating
+   * the public key invalidates every subscription every device has already
+   * registered, and the only symptom is silence:
+   *
+   *     npx web-push generate-vapid-keys
+   */
+  VAPID_PUBLIC_KEY: blankIsAbsent(z.string().min(1).optional()),
+  /**
+   * The private half. **Never reaches a browser**, which is what
+   * `import 'server-only'` at the top of this file mechanically guarantees: a
+   * client component that imports `env`, directly or transitively, is a build
+   * error rather than a leak. Exactly two files under `src/` name this variable
+   * — this one and `lib/push/send.ts` — and `npm run push:check` asserts that
+   * both of them carry that import.
+   */
+  VAPID_PRIVATE_KEY: blankIsAbsent(z.string().min(1).optional()),
+  /**
+   * Who to contact about a misbehaving sender. RFC 8292 requires the VAPID JWT's
+   * `sub` claim to be a `mailto:` or `https:` URI, and Apple's push service
+   * rejects a request whose subject is neither — a 400 with a body nobody reads,
+   * which presents as "notifications just don't arrive".
+   *
+   * Refined rather than left free-form, and this is the one entry in the
+   * optional block where a *present* value can fail the boot. The argument is
+   * the same one `setTimezoneSchema` makes for a bogus zone: it has a default,
+   * so a blank deploy never reaches the refinement, and a value that is present
+   * and malformed is a typo somebody made on purpose. Failing at boot names it;
+   * the alternative is a deploy that looks healthy and delivers nothing at 07:00
+   * on a Sunday.
+   *
+   * The default is an `https:` URL rather than a `mailto:` so that no personal
+   * address is committed to the repository. Set a real mailbox in `.env.local`.
+   */
+  VAPID_SUBJECT: blankIsAbsent(
+    z
+      .string()
+      .min(1)
+      .refine((v) => v.startsWith('mailto:') || v.startsWith('https://'), {
+        message: 'VAPID_SUBJECT must be a mailto: address or an https:// URL (RFC 8292).',
+      })
+      .default('https://dword.site'),
+  ),
+  /**
+   * The shared secret the hourly tick presents. **Declared here, consumed
+   * nowhere in this phase** — `app/api/push/tick/route.ts` compares it with
+   * `timingSafeEqual` and is the only reader.
+   *
+   * It lives here rather than beside its consumer because this file is one file:
+   * two features editing the same zod object is a merge conflict with no upside,
+   * and an environment variable that appears in `.env.example` but not in the
+   * validator is exactly the drift this module exists to prevent.
+   *
+   * Optional, like the three above and for the same reason — but note the shape
+   * of the failure it implies: **unset means the tick endpoint refuses every
+   * request**, because the comparison is written to fail closed. An unset secret
+   * is never an open door.
+   */
+  CRON_SECRET: blankIsAbsent(z.string().min(1).optional()),
 })
 
 const parsed = schema.safeParse(process.env)

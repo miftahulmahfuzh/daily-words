@@ -2,17 +2,17 @@
 
 **Package Path**: `.`
 **Package Code**: DW
-**Last Updated**: 2026-09-14 11:42
-**Total Active Tasks**: 4
+**Last Updated**: 2026-09-14 11:57
+**Total Active Tasks**: 3
 
 ## Quick Stats
 - P0 Critical: 0
-- P1 High: 4
+- P1 High: 3
 - P2 Medium: 0
 - P3 Low: 0
 - P4 Backlog: 0
 - Blocked: 0
-- Completed: 1
+- Completed: 2
 
 ---
 
@@ -20,25 +20,16 @@
 
 ### [P1] High
 
-- [ ] **P1-DW-A002** Phase 2: Subscriptions, keys and the sender
-  - **Difficulty**: HARD
-  - **Type**: Feature
-  - **Context**: Owns `src/lib/env`, `src/lib/db/queries`, `src/lib/push`, `src/app/api/push` (10 files). Adds the four optional VAPID/CRON_SECRET env vars, `lib/db/queries/push.ts`'s subscription and delivery CRUD (`upsertSubscription`, `deleteSubscription`, `listSubscriptions`, `deleteDeadSubscription`, `listReminderCandidates`, `claimDelivery`), the `GET /api/push/key` and subscribe/unsubscribe routes, and `lib/push/send.ts`, which encrypts and VAPID-signs one notification and classifies the response instead of throwing. Exit: app boots/builds/serves with all four vars unset; `GET /api/push/key` answers `{"publicKey":null}` unconfigured (and the real key configured) with `no-store` and 401 with no cookie; `POST /api/push/subscription` is idempotent on `endpoint`; typecheck/lint/build and all eleven existing check scripts pass; nothing under `src/` names `NEXT_PUBLIC_`, and both secret-bearing files carry `import 'server-only'`.
-  - **Status**: open
-  - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 2 of 5)
-  - **Satisfies**: R1
-  - **Depends on**: P1-DW-A001
-  - **Plan**: `.workflows/plan/P1-DW-A002.md`
-
 - [ ] **P1-DW-A003** Phase 3: The service worker and the switch
   - **Difficulty**: HARD
   - **Type**: Feature
   - **Context**: Owns `public`, `src/middleware`, `components/push`, `app/(app)` (8 files). Adds `public/sw.js` (shows a notification for every push including a malformed one, opens `/today` on tap), the render-nothing `PushSync` reconciler that re-registers a rotated iOS endpoint, and the `ReminderToggle` switch on `/profile/edit` that tells the truth in all four cases it can't subscribe (no support, not installed to Home Screen, no server key, permission denied) — built on Phase 2's `lib/push/client.ts`. Exit: `curl -I /sw.js` with no cookie jar answers 200, JS content-type, no `immutable`/non-zero `max-age`; `badges:check` passes with the widened `/^(badges|levels|sw)/`; `test:layout`, typecheck, lint, build all pass with the eighteen layout assertions unmodified; on an installed XS Max the switch turns on and a `push:send` lands and opens `/today`; in Safari-in-a-tab the same screen prompts to install rather than showing a dead switch.
-  - **Status**: blocked
+  - **Status**: open
   - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 3 of 5)
   - **Satisfies**: R1
   - **Depends on**: P1-DW-A001, P1-DW-A002
   - **Plan**: `.workflows/plan/P1-DW-A003.md`
+  - **Unblocked**: 2026-09-14 11:57 — P1-DW-A002 (phase 2) landed
 
 - [ ] **P1-DW-A004** Phase 4: The tick, the scheduler and the copy in flight
   - **Difficulty**: HARD
@@ -63,6 +54,22 @@
 ---
 
 ## Completed Tasks
+
+- [x] **P1-DW-A002** Phase 2: Subscriptions, keys and the sender
+  - **Difficulty**: HARD
+  - **Type**: Feature
+  - **Context**: Owns `src/lib/env`, `src/lib/db/queries`, `src/lib/push`, `src/app/api/push` (10 files). Adds the four optional VAPID/CRON_SECRET env vars, `lib/db/queries/push.ts`'s subscription and delivery CRUD (`upsertSubscription`, `deleteSubscription`, `listSubscriptions`, `deleteDeadSubscription`, `listReminderCandidates`, `claimDelivery`), the `GET /api/push/key` and subscribe/unsubscribe routes, and `lib/push/send.ts`, which encrypts and VAPID-signs one notification and classifies the response instead of throwing. Exit: app boots/builds/serves with all four vars unset; `GET /api/push/key` answers `{"publicKey":null}` unconfigured (and the real key configured) with `no-store` and 401 with no cookie; `POST /api/push/subscription` is idempotent on `endpoint`; typecheck/lint/build and all eleven existing check scripts pass; nothing under `src/` names `NEXT_PUBLIC_`, and both secret-bearing files carry `import 'server-only'`.
+  - **Status**: completed
+  - **Plan Set**: `PUSH_CARD_REMINDERS_PLAN.md` (phase 2 of 5)
+  - **Satisfies**: R1
+  - **Depends on**: P1-DW-A001
+  - **Plan**: `.workflows/plan/P1-DW-A002.md`
+  - **Completed**: 2026-09-14 11:57
+  - **Method**: /do
+  - **Files**: package.json, package-lock.json, src/lib/env.ts, .env.example, src/lib/push/schemas.ts, src/lib/db/queries/push.ts, src/lib/push/send.ts, src/lib/push/client.ts, src/app/api/push/key/route.ts, src/app/api/push/subscription/route.ts
+  - **Drift**: TS 5.7+ narrowed `Uint8Array` to `Uint8Array<ArrayBufferLike>`, which no longer structurally satisfies the DOM lib's `BufferSource`. Added an explicit `as BufferSource` cast (with an explanatory comment) at the `applicationServerKey` call site in `src/lib/push/client.ts`. A TS/lib.dom version issue in this environment, not a behavioural change to the plan's code.
+  - **Drift**: The plan's own code block for `src/lib/push/client.ts` carried a doc comment that literally named `VAPID_PRIVATE_KEY` and `CRON_SECRET` while explaining that `client.ts` names neither — and `scripts/check-push.ts`'s invariant-7 assertion scans raw source text including comments, so the plan's comment tripped its own check (3 failing assertions). Rewrote the comment to state the property without spelling out the literal variable names; `npm run push:check` now passes.
+  - **Drift**: `npm run dates:check` still has its single pre-existing failure — the '/today header' assertion expects "Sunday, 9 August" while this environment's Intl/ICU produces "Sunday 9 August". Identical to the note on P1-DW-A001; `git diff --stat` confirms this phase touches none of those files.
 
 - [x] **P1-DW-A001** Phase 1: The ruling, the schema and the schedule
   - **Difficulty**: NORMAL
