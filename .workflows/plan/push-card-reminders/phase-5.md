@@ -1,0 +1,1271 @@
+# Phase 5: The doc sweep
+
+**Plan set:** `PUSH_CARD_REMINDERS_PLAN.md`
+**Analysis:** `20260914-104032-K7P2_code_analyzer.md`
+**Satisfies:** none. R1, R2 and R3 are served entirely by phases 1–4; this phase implements no part of any of them, and reconciliation moved it off the index's Requirements table to say so. What it serves is **invariant 12** — docs do not contradict the code — which is the one drift no check script in this project can see. The feature is not finished while five files tell its next reader it is forbidden, but that is a different claim from serving a requirement, and a `Satisfies` line that says R1 sends `create-task` looking for delivery code here.
+**Depends on:** Phase 1, 2, 3, 4
+**Difficulty:** NORMAL
+**Package:** root docs (`CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.env.example`), `plans/`, and one comment in `src/lib/db/schema.ts`
+
+---
+
+## Goal
+
+After this phase, no file in the repository claims the app has no scheduler or
+sends no notifications, and every sentence that used to claim it says instead
+what changed and why — with the original reasoning left visible rather than
+deleted. `CLAUDE.md` gains the section that tells the next reader the seven
+things about this feature that fail without throwing. `plans/F30-push-reminders.md`
+records the decisions in the house format, including the table of which
+prohibitions `[R24]` moved and which it did not.
+
+**This phase changes no behaviour.** The single edit under `src/` is a comment.
+
+---
+
+## Interface Contract
+
+The reconciler reads this section to detect cross-phase conflicts. Be exact and exhaustive.
+
+**Deletes:** nothing. No symbol, no file, no config key. Every prose edit in this
+phase is an amendment that keeps the superseded sentence's reasoning legible —
+see Decision D1 in the brief, and the repo's own precedent (`[R23]` amends
+`[R21]` and says so; the `dumbledore` → `voldy` CHANGELOG entry leaves the
+v0.2.0 entry naming the old key, out loud, "because it is history and was left
+as written").
+
+**Renames:** none.
+
+**Creates:**
+- `plans/F30-push-reminders.md` (new file, ~11 numbered sections + `D1`–`D10`)
+- `CLAUDE.md` — new `## The app has one scheduled job, and it cannot make a card`
+  section, inserted between the existing `## There is exactly one modal in the app`
+  section (which ends with the `scripts/profile-peek.ts` paragraph, currently
+  `CLAUDE.md:494-496`) and `## Authority order for the docs` (currently `:498`)
+- `CLAUDE.md` — three lines in the ` ```bash ` Commands block (currently `:70-108`),
+  inserted after `npm run stats:recompute …` (`:105`) and before `npm run demo:seed` (`:106`)
+- `.env.example` — a `VAPID_*` prose block and a `CRON_SECRET` prose block,
+  appended after `APP_URL=` (`:62`), replacing phase 2's stub
+
+**Signature changes:** none.
+
+**Requires (from earlier phases):**
+- `ROADMAP_v0.1.0.md` contains `[R24]`, amending the "Push notifications or
+  reminders of any kind" bullet at `:422` and `[R11]`'s closing paragraph at
+  `:562` (**Phase 1** — this phase *cites* `[R24]`, never writes it). **Verified
+  in reconciliation**: the last decision in the file today is `[R23]` at `:784`,
+  so `[R24]` is the correct next number and this phase's authority-order
+  correction to `[R1]–[R24]` in Step 5 is right.
+- `src/lib/push/schedule.ts` exports `REMINDER_FIRST_HOUR`, `REMINDER_EVERY_HOURS`,
+  `REMINDER_UNTIL_HOUR`, `REMINDER_SLOTS` and `dueSlot({ localHour, delivered })`
+  (**Phase 1**)
+- `src/lib/push/reminders.ts` exports `reminderFor(date, slot)` (**Phase 1**)
+- `package.json` has `push:check` (**Phase 1**), `push:db` and `push:send` (**Phase 4**)
+- `src/lib/env.ts` declares `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `VAPID_SUBJECT`, `CRON_SECRET`, all optional (**Phase 2**)
+- `.env.example` carries phase 2's **stub** block for those four variables,
+  appended after `APP_URL=` at `:62`, the file's current last line (**Phase 2** —
+  this phase replaces it). **Verified in reconciliation**: phase 2's stub begins
+  `# F30 push reminders. ALL FOUR ARE OPTIONAL: with none of them set the app`
+  and ends `CRON_SECRET=`, with the four variables in the order
+  `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`. That is
+  exactly the block Step 8 deletes.
+- `GET /api/push/key` answers `{ publicKey: null }` when unconfigured (**Phase 2**)
+- `public/sw.js` exists, handles `push` and `notificationclick`, and has **no
+  `fetch` handler** (**Phase 3**). **Verified in reconciliation**: phase 3's
+  worker registers exactly four listeners — `install`, `activate`, `push`,
+  `notificationclick` — and its own doc comment says "There is no `fetch` handler
+  and there must not be one." The README's "offline caching is still out of
+  scope and still absent" claim rests on this, and this phase says so in prose.
+- `src/middleware.ts`'s matcher lookahead contains `sw\.js`; `scripts/check-badge-art.ts`
+  §12's excluded-prefix regex contains `sw` (**Phase 3**)
+- `next.config.ts` serves `/sw.js` with a non-`immutable` cache header (**Phase 3**)
+- `POST /api/push/tick` authenticates with `CRON_SECRET` via `timingSafeEqual`,
+  read from an **`Authorization: Bearer <secret>`** header;
+  `.github/workflows/push-reminders.yml` runs hourly (**Phase 4**). **Verified in
+  reconciliation** against phase 4's `secretMatches()` and its workflow's
+  `-H "authorization: Bearer ${CRON_SECRET}"`, which is what the `curl` in this
+  phase's CLAUDE.md section shows.
+- `src/app/api/cards/route.ts:25`'s "If you find yourself writing a scheduler,
+  stop" comment is **unchanged, byte for byte**. **Verified in reconciliation**:
+  phase 4's "Leaves alone" list names `src/app/api/cards/route.ts` explicitly as
+  "untouched by anybody", no step in any of the five phases opens that file, and
+  the comment is present in the tree today at `:25`–`:28`. This phase's prose
+  asserts it is intact, so a phase-4 edit to it would make this phase's CLAUDE.md
+  section wrong.
+
+**Leaves alone (owned by others):**
+- `ROADMAP_v0.1.0.md` — **entirely**. Phase 1 owns `[R24]`, `:422` and `:562`.
+- `package.json`, `next.config.ts`, `vercel.json`, `src/middleware.ts`,
+  `public/**`, `drizzle/**`, `.github/**`
+- every route handler, every component, every script under `scripts/`
+- every file under `src/` except the one comment in `src/lib/db/schema.ts`
+- `.env.example` lines 1–62 (`DATABASE_URL` … `APP_URL=`) — untouched. This
+  phase only replaces the block phase 2 appended **after** `APP_URL=`.
+- `plans/F1` … `plans/F29` — **not edited**. `plans/F30-push-reminders.md` §8
+  names each superseded line by `file:line`; the F1–F29 files themselves stay as
+  written, per the plan-header convention CLAUDE.md's authority order already
+  describes ("Each plan's header lists which of its sections are superseded").
+- `CHANGELOG.md:245` and `CHANGELOG.md:396` — **not edited**. See Step 7's D-note.
+
+---
+
+## Files
+
+| File | Action | What changes |
+|---|---|---|
+| `CLAUDE.md` | modify | 5 edits: 3 command lines (`:105`↔`:106`); the `stats:recompute` "no cron in v0.1.0" sentence (`:113`); the Conventions "No cron" bullet (`:554`); a new section between `:496` and `:498`; the authority-order `[R1]–[R21]` range (`:500`) |
+| `README.md` | modify | 3 passages: the lede (`:13-15`), the `/today` table row (`:101`), the out-of-scope paragraph (`:339-345`) |
+| `CHANGELOG.md` | modify | one new `## [Unreleased]` entry, inserted at `:15` (above the badge-rename entry). Nothing below `:44` is touched |
+| `.env.example` | modify | append after `:62`; replaces phase 2's stub with the full prose block |
+| `src/lib/db/schema.ts` | modify | the `shares` `// No expires_at.` comment at `:549-551`, **amended**, not deleted |
+| `plans/F30-push-reminders.md` | create | the feature plan in the house style |
+
+---
+
+## Implementation Steps
+
+### Step 1: CLAUDE.md — three lines in the Commands block
+
+**File:** `CLAUDE.md:105-106`
+**Change:** Insert three `npm run push:*` lines between the `stats:recompute`
+line and the `demo:seed` line, keeping the column alignment of the existing
+glosses (the `#` sits at column 42 for the short commands; the two long ones
+already overflow, and `push:db`'s gloss does too — match `share:db`'s precedent
+rather than re-aligning the block).
+
+**Code — before:**
+````
+npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay badges
+npm run demo:seed                        # the README's demo account; --clean removes it
+npm run demo:capture                     # rewrite docs/media/* from the running app
+```
+````
+
+**Code — after:**
+````
+npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay badges
+npm run push:check                       # F30's slot derivation, catch-up matrix and copy deck, offline
+npm run push:db                          # F30's delivery idempotence, the 410 sweep and the card-exists suppression; seeds a fixture user
+npm run push:send                        # fire one real notification at your own subscriptions; no schedule, no rows written
+npm run demo:seed                        # the README's demo account; --clean removes it
+npm run demo:capture                     # rewrite docs/media/* from the running app
+```
+````
+
+**Impact:** none on behaviour. The list's own claim — that it is the set of
+commands this repo has — stops being false.
+
+---
+
+### Step 2: CLAUDE.md — the `stats:recompute` "no cron in v0.1.0" sentence
+
+**File:** `CLAUDE.md:110-114`
+**Change:** The instruction *"never on a schedule"* is unchanged and is the
+important half. What is no longer true is the justification hung off it.
+
+**Code — before:**
+```
+`npm run stats:recompute` takes `--user=<uuid|email>`, `--all`, `--dry-run`,
+`--prune` and `--force`. `--prune` is the only destructive operation in the app
+and refuses to combine with `--all` without `--force`. Run it after any change to
+`lib/gamification/badges.ts`, and never on a schedule — there is no cron in
+v0.1.0.
+```
+
+**Code — after:**
+```
+`npm run stats:recompute` takes `--user=<uuid|email>`, `--all`, `--dry-run`,
+`--prune` and `--force`. `--prune` is the only destructive operation in the app
+and refuses to combine with `--all` without `--force`. Run it after any change to
+`lib/gamification/badges.ts`, and **never on a schedule**. That instruction is
+unchanged and now needs its own reason, because it used to lean on one that has
+gone: F30 put a single scheduled job in the app ([R24]), and this is not a
+candidate for it. `--prune` deletes award rows, the hourly tick writes nothing
+outside `push_deliveries`, and the one destructive operation in the app stays
+something a person types on purpose after reading what changed.
+```
+
+**Impact:** none. The rule survives with a stronger argument than the one it had.
+
+---
+
+### Step 3: CLAUDE.md — the Conventions bullet
+
+**File:** `CLAUDE.md:554-555`
+**Change:** Amend the bullet. The sentence that matters — `POST /api/cards` is
+the only thing that creates a card — is unchanged and is now load-bearing in a
+way it was not before, because there *is* something on a schedule to distinguish
+it from.
+
+**Code — before:**
+```
+- The daily card is created by `POST /api/cards` and by nothing else. No cron, no
+  `revalidate`, no creation on page load.
+```
+
+**Code — after:**
+```
+- The daily card is created by `POST /api/cards` and by nothing else. No
+  `revalidate`, no creation on page load — and **nothing scheduled may create a
+  card**, which is the narrower invariant that replaced "there is no cron" when
+  F30 shipped one ([R24]). The hourly tick reads `daily_cards` to find out
+  whether to stay quiet; it has no write path into that table and never will.
+  `src/app/api/cards/route.ts:25` still says *"If you find yourself writing a
+  scheduler, stop"* and is unchanged, byte for byte: read it as being about card
+  creation, which is what it is about, rather than about the word "scheduler".
+```
+
+**Impact:** none.
+
+---
+
+### Step 4: CLAUDE.md — the new section
+
+**File:** `CLAUDE.md` — insert **after** the `## There is exactly one modal in
+the app` section (which ends with the `scripts/profile-peek.ts` paragraph at
+`:494-496`) and **before** the `## Authority order for the docs` heading at
+`:498`. That position is deliberate: the closing trio — Authority order, Traps
+that fail silently, Conventions — is the document's reference material and stays
+last; this is a feature section and belongs with the other feature sections.
+
+**Change:** add the section below, verbatim.
+
+**Code:**
+````markdown
+## The app has one scheduled job, and it cannot make a card
+
+`[R24]` is what authorises it, and it amends exactly two sentences in the
+roadmap: the "Push notifications or reminders of any kind" bullet in
+§ Explicitly out of scope, and the closing paragraph of `[R11]`. **`[R11]`'s
+actual ruling is untouched** — `user_stats` is still a cache, still recomputed
+on read, still never trusted for display, and nothing in this feature writes to
+it or reads it. What was superseded is only the generalisation *from* it: *"No
+cron job — a scheduled job is the first step toward the notifications this
+roadmap forbids."* The step was taken deliberately, once, by the owner, for one
+thing, and the invariant that replaces "there is no cron" is narrower and
+stronger:
+
+> **Nothing scheduled may create a card.**
+
+`src/app/api/cards/route.ts:25` still says *"If you find yourself writing a
+scheduler, stop"* and it is **unchanged, byte for byte** — F30 did not relax it
+and did not need to. The scheduler sends a *message*; it does not press the
+button. A notification that made the card would take the app's one deliberate
+act and perform it on the user's behalf while they were asleep, which is the
+whole thing `/today` is about.
+
+The shape, end to end:
+
+```
+GitHub Actions, hourly ──► POST /api/push/tick   (CRON_SECRET, timingSafeEqual)
+                                 │
+                  per subscribed user:
+                    resolveTimezone      ──► !ok ? send nothing, write nothing
+                    localDateNow + localHour       (lib/time/local-date.ts, as always)
+                    getCardForDate       ──► card exists ? quiet for the rest of the day
+                    dueSlot({ localHour, delivered })  ──► 7 9 11 13 15 17 19, or none
+                    reminderFor(date, slot)            ──► a line nothing else that day used
+                    claim the slot, send, record the outcome
+                                 │
+                    web-push ──► web.push.apple.com ──► public/sw.js  'push'
+                                                          showNotification
+                                                          'notificationclick' ──► /today
+```
+
+Seven slots, and they are **derived** from `REMINDER_FIRST_HOUR = 7`,
+`REMINDER_EVERY_HOURS = 2` and `REMINDER_UNTIL_HOUR = 20` in
+`src/lib/push/schedule.ts` rather than written out as an array, so the sentence
+that was asked for is what the code says. 20:00 bounds the window and no
+two-hour step from 07:00 lands on it, which is why the last one is 19:00.
+
+**The copy is a deck, not a model call.** `src/lib/push/reminders.ts` is a
+curated list and `reminderFor(date, slot)` is deterministic in `(local date,
+slot)`, so a day's seven reminders are pairwise distinct and a replay of the
+same day says the same things. A cron fan-out through `lib/llm/` would put an
+unattended, billable, failure-prone call on the one path in the app whose entire
+job is to be quiet and reliable — and `npm run push:check` can assert a deck
+offline in a way it can never assert a model.
+
+### The scheduler is a GitHub Actions workflow, and `vercel.json` must not grow a `crons` block
+
+`vercel.json` is two lines with one purpose — `regions: ["sin1"]`, beside Neon —
+and it stays that way. A `crons` entry finer than once a day is **rejected at
+deploy time on a Hobby plan**: not the cron failing, the *deployment* failing,
+which takes the whole app down for a scheduling convenience. `.github/workflows/push-reminders.yml`
+is one `curl` and one secret and cannot do that. It is also the repo's first
+`.github/` directory of any kind; there is still no CI.
+
+### Traps, each of which fails without throwing
+
+- **iOS grants Web Push only to a Home-Screen install.** Safari on iOS 16.4+
+  exposes `pushManager` exclusively to a web app launched from the Home Screen.
+  In an ordinary Safari tab `navigator.serviceWorker` exists and
+  `registration.pushManager` does not. **The author testing this is on a desktop
+  and is always signed in**, where everything works first time — desktop Chrome
+  grants push to a plain tab. The only proof is the phone, installed to the Home
+  Screen, plus `npm run push:send`. The switch on `/profile/edit` says this in
+  its own copy rather than drawing a dead control, which is the same honesty the
+  `curl`-with-no-cookie-jar rule buys for `/s/<slug>`.
+- **`Notification.requestPermission()` must be called from a user gesture** on
+  iOS. An effect-driven prompt is refused silently: no throw, no dialog, no
+  console line. The toggle asks; nothing else may.
+- **`/sw.js` must stay in the middleware matcher's lookahead.** A service-worker
+  update check is a cookie-less fetch, so without the exemption it gets a 307 to
+  an HTML sign-in page and the browser is handed HTML where it asked for a
+  script. It fails only for a reader with no session, which the author never is
+  — the identical class of bug `isPublicSharePath` exists for. And the lookahead
+  is **prefix-matched**, which is why `badges:check` §12 now guards `sw`
+  alongside `badges` and `levels`: a route at `src/app/sw-settings/` would be
+  exempted from auth by a rule written for a file.
+- **`/sw.js` must never get the `immutable` header** that `/badges/*` and
+  `/levels/*` carry. Those filenames contain the first 8 hex of their content's
+  SHA-256, so regenerating a file changes its URL and every cache misses
+  correctly. `sw.js` is one fixed name whose bytes change, and a year of
+  `immutable` on it is a service worker that can never be updated — on a device
+  you cannot reach, for users who will never think to clear a website's data.
+  `next.config.ts` carries it as the deliberate inverse of the two blocks above
+  it.
+- **`userVisibleOnly: true` is a promise, and the browser collects on it.** A
+  push handled without calling `showNotification` costs the *subscription*, not
+  the message. So `public/sw.js` shows a notification on every `push` event,
+  including one whose payload will not parse.
+- **A `push_deliveries` row is claimed before the send, never after.** Two ticks
+  overlapping — a late run catching up beside the next scheduled one — would
+  otherwise both find the slot undelivered and both send. Same discipline as the
+  chat's `UPDATE … WHERE turn_count < 8` and the journal insight's conditional
+  claim, and the same cost, stated plainly: a send that fails leaves a failed row
+  rather than retrying, so a transient failure is one missed reminder instead of
+  a duplicate two hours later. With seven slots in a day, missing one is the
+  cheaper mistake, and it is the one that does not train a person to ignore the
+  lock screen.
+- **GitHub Actions' cron runs late.** It is a best-effort queue rather than a
+  guarantee, and a run can land well behind its stamp. That is survivable only
+  because `dueSlot` takes the *current* local hour and the set of slots already
+  delivered, and answers with **the slot that is due now, never a backlog**. A
+  tick that misses 11:00 and arrives after 13:00 sends one line, not four in a
+  row at teatime. Remove the catch-up rule and lateness becomes a burst.
+- **`CRON_SECRET` is set in two places and they must match** — the Vercel
+  project's environment variables and the repository's Actions secrets. A
+  mismatch is a 401 that writes nothing and logs nothing anywhere you would
+  think to look; the symptom is in the Actions tab, in that run's `curl` step.
+  Unset on the server, the tick refuses everyone, which is the same silence from
+  the other side.
+- **iOS rotates and revokes push endpoints.** A subscription that worked last
+  week answers 404 or 410, and the only correct response is to delete the row —
+  retrying a Gone endpoint is a request that can never succeed. `<PushSync />`
+  is the other half of that: it re-subscribes a rotated endpoint on the next app
+  open, exactly the way `<TimezoneSync />` reconciles a moved zone, and issues
+  zero requests in the steady state.
+
+### The manual pass, because none of it can be seen from a desktop
+
+```bash
+curl -sI http://localhost:3200/sw.js    # 200 with NO cookie jar, application/javascript.
+                                        # A 307 means the matcher exemption is gone.
+                                        # 'immutable' in cache-control is the other bug.
+npm run push:send                       # one real notification at your own subscriptions
+```
+
+Then the phone: Share → Add to Home Screen, open it from the Home Screen icon,
+turn the switch on under `/profile/edit`, and run `npm run push:send` again. A
+switch that works in desktop Chrome and does nothing on the phone is the
+expected failure of an install that did not happen, not a bug in this code.
+
+The tick itself, against a dev server, with the secret from `.env.local`:
+
+```bash
+curl -s -X POST http://localhost:3200/api/push/tick \
+  -H "Authorization: Bearer $CRON_SECRET"      # 200; a wrong secret is 401 and writes nothing
+```
+
+### What this feature is still not
+
+One notification type, one destination. No badge news, no chat nudge, no journal
+prompt, no email, no digest — and **no "your streak is at risk"**. F9's ban on
+loss-aversion mechanics is not what `[R24]` amended and it still holds
+completely; so do F13's "no badge dot on the Profile tab" and F17's "no 'finish
+your profile' nag anywhere in the app". `plans/F30-push-reminders.md` §8 lists
+every prohibition in the plan set and marks the four that moved against the
+seven that did not, so the next reader can tell a superseded sentence from one
+that is simply still true.
+````
+
+**Impact:** none on behaviour. This is the section whose absence would be the
+drift `badges:check` cannot see — the "scene line still describing superseded
+art" failure `CLAUDE.md` already warns about, applied to itself.
+
+---
+
+### Step 5: CLAUDE.md — the authority-order range
+
+**File:** `CLAUDE.md:499-500`
+**Change:** The range is already stale — `[R22]` and `[R23]` exist and are cited
+three times further down the same file. Phase 1 adds `[R24]`. This is the one
+line in the repo whose job is to tell a reader where the rulings live, so it
+carries the correction.
+
+**Code — before:**
+```
+1. `ROADMAP_v0.1.0.md` § **Reconciliation Decisions** ([R1]–[R21]) — wins over
+   everything, including the rest of that file.
+```
+
+**Code — after:**
+```
+1. `ROADMAP_v0.1.0.md` § **Reconciliation Decisions** ([R1]–[R24]) — wins over
+   everything, including the rest of that file. The list is authoritative and it
+   is also **amendable**: [R22] says so out loud, [R23] amends [R21], and [R24]
+   amends [R11] and the out-of-scope list. A later number that contradicts an
+   earlier one is the mechanism working, not a conflict to resolve by guessing.
+```
+
+**Impact:** none.
+
+---
+
+### Step 6: README.md — three passages
+
+**File:** `README.md:13-15`
+**Change:** The promise — the card is made by a finger and by nothing else — is
+**still true and stays**. Only the unqualified "no cron" moves. Note the
+trailing colon: it leads into the `today.gif`, so the paragraph must still end
+on one.
+
+**Code — before:**
+```
+Six words a day, and **nothing is generated until you press the button** — no
+cron, no creation on page load, no card waiting for you when you open the app.
+The press is the exercise:
+```
+
+**Code — after:**
+```
+Six words a day, and **nothing is generated until you press the button** — no
+creation on page load, no card waiting for you when you open the app. The app
+has exactly one scheduled job and it is a reminder: it sends a notification
+asking you to press the button, and it creates nothing. The press is the
+exercise:
+```
+
+**File:** `README.md:101`
+**Change:** the `/today` row of the "What it does" table.
+
+**Code — before:**
+```
+| `/today` | The daily card: six words, two lines each, **never scrolls**. Created only when the user presses the button — no cron, no generation on page load. |
+```
+
+**Code — after:**
+```
+| `/today` | The daily card: six words, two lines each, **never scrolls**. Created only when the user presses the button — no generation on page load, and the one scheduled job in the app points at the button rather than pressing it. |
+```
+
+**File:** `README.md:339-345`
+**Change:** the `## Status` section's closing paragraph. "Push notifications"
+leaves the list; what it leaves behind is stated, because a reader who finds
+`public/sw.js` in the tree needs to know that "offline caching" is still
+genuinely out of scope and not merely un-updated prose.
+
+**Code — before:**
+```
+Out of scope on purpose: any sign-in method other than Google, push
+notifications, social features and leaderboards, audio pronunciation, imports
+from Kindle or Goodreads, spaced repetition (the card is deliberately dumber than
+SRS), offline caching beyond the bare PWA manifest, and any paid dependency.
+```
+
+**Code — after:**
+```
+Out of scope on purpose: any sign-in method other than Google, social features
+and leaderboards, audio pronunciation, imports from Kindle or Goodreads, spaced
+repetition (the card is deliberately dumber than SRS), offline caching beyond the
+bare PWA manifest, and any paid dependency.
+
+Push notifications left that list in F30, under roadmap ruling [R24], and only
+for one thing: an opt-in reminder to make today's card, seven times between
+07:00 and 19:00 in your own timezone, silent the moment the card exists. There
+is still no notification for a badge, a chat, a journal line or a streak at
+risk, no email of any kind, and no loss-aversion copy anywhere. **Offline
+caching is still out of scope and still absent** — `public/sw.js` handles
+`push` and `notificationclick` and has no `fetch` handler at all, so the service
+worker in the tree intercepts nothing and caches nothing.
+```
+
+**Impact:** none. Three claims stop being false; two claims that remain true are
+now defended rather than merely surviving.
+
+---
+
+### Step 7: CHANGELOG.md — the F30 entry
+
+**File:** `CHANGELOG.md:14-15`
+**Change:** insert a new entry at the top of `## [Unreleased]`, above the badge
+rename entry (`**The `Avada Kedavra` badge is redrawn…**`, currently `:15`).
+Newest first, matching Keep a Changelog and this file's own ordering.
+
+**A decision this step makes, and its argument — upheld in reconciliation:**
+`CHANGELOG.md:245` ("no cron, no `revalidate`, no creation on page load", under
+`[v0.1.0]`) and `CHANGELOG.md:396` ("**There is no cron.** Nothing runs on a
+schedule…", under `[v0.2.0]` § Known gaps) are **not edited**.
+
+The repo's habit is *amend, never delete*, and the question reconciliation had to
+settle is whether "left as written, with a pointer from the top" counts as an
+amendment or as a dodge. It counts, and this file has already ruled on exactly
+this case in its own voice, at `CHANGELOG.md:40`:
+
+> *"The v0.2.0 entry below still names the old key: it is history and was left as
+> written."*
+
+The amendment is the new `[Unreleased]` entry, which is where a reader of a
+changelog starts; the superseded sentences stay where they are because a
+changelog rewritten into the present tense is no longer a changelog, and because
+what those releases claimed is the record of what had to be argued to move it.
+That is the same shape as `ROADMAP:422` keeping its bullet under `[R24]`'s
+amendment, and as `schema.ts:550` keeping its first sentence under Step 9's.
+
+**Every other "no cron" sentence in the repo is amended in place, not left**, and
+the difference is dated prose versus live prose: `README.md` and `CLAUDE.md`
+describe the app as it is now, so a false sentence there is a lie rather than a
+record. Steps 2, 3 and 6 amend all of them. The new entry names both CHANGELOG
+lines by `file:line` so a `grep` hit resolves in the first place a reader looks.
+
+**Code — insert:**
+````markdown
+**Push reminders to make today's card (F30)**
+
+- The app sends a push notification asking the user to make today's card:
+  **seven of them**, at 07:00, 09:00, 11:00, 13:00, 15:00, 17:00 and 19:00 in
+  the user's own timezone, and **every one reads differently**. It goes quiet
+  for the rest of the day the moment the card exists.
+- **No notification creates a card.** `POST /api/cards` is unchanged, and so is
+  its "If you find yourself writing a scheduler, stop" comment. The scheduler
+  sends a message; it does not press the button. `[R11]`'s "no cron job"
+  generalisation is superseded by **`[R24]`** and replaced by a narrower
+  invariant: *nothing scheduled may create a card*. `[R11]`'s actual ruling —
+  `user_stats` is a cache, recomputed on read, never trusted for display — is
+  untouched, and this feature neither reads nor writes that table.
+- The seven slots are **derived** from three constants
+  (`REMINDER_FIRST_HOUR = 7`, `REMINDER_EVERY_HOURS = 2`,
+  `REMINDER_UNTIL_HOUR = 20`) in `src/lib/push/schedule.ts`, not written out as
+  an array, so "every two hours until 8 pm" is what the code says. 20:00 bounds
+  the window and no two-hour step from 07:00 lands on it.
+- The copy is a **curated deterministic deck** (`src/lib/push/reminders.ts`),
+  keyed on `(local date, slot)` — not a model call. An unattended, billable call
+  on the one path whose job is to be quiet was the wrong trade, and a deck is
+  the only version of this `npm run push:check` can assert offline.
+- `push_subscriptions` and `push_deliveries` (migration 0010, additive).
+  Delivery is idempotent per `(user, local date, slot)` by unique index rather
+  than by application code, and the row is claimed **before** the send — the
+  same discipline as the chat's turn cap and the journal insight's claim, with
+  the same deliberate cost: a failed send is one missed reminder, never a
+  duplicate two hours later.
+- `src/lib/db/queries/push.ts` holds the **second** function in the application
+  that reads rows without a user id — `listReminderCandidates()` — and names
+  itself as loudly as `getShareBySlug` does. Every other function there keeps
+  `userId` first and in the WHERE clause.
+- `public/sw.js`, the app's first service worker. It handles `push` and
+  `notificationclick` and **nothing else** — no `fetch` handler, so offline
+  caching remains out of scope and absent. `/sw.js` joins the middleware
+  matcher's lookahead beside `manifest.webmanifest`, and `badges:check` §12 now
+  guards `sw` as a forbidden `src/app` directory prefix, because that lookahead
+  is prefix-matched.
+- `/sw.js` is served `cache-control: no-cache` — the deliberate **inverse** of
+  the two `immutable` blocks above it in `next.config.ts`. Those filenames carry
+  a content hash; this one does not, and `immutable` on a fixed name is a
+  service worker nobody can update.
+- The switch is on `/profile/edit`, not `/profile` and not `/today`. It writes on
+  tap rather than through Save, and it draws an honest state for the one thing a
+  desktop cannot show you: **iOS grants Web Push only to a Home-Screen install.**
+- The scheduler is `.github/workflows/push-reminders.yml`, hourly, one `curl`,
+  one secret — the repo's first `.github/` directory. **Not** a `crons` block in
+  `vercel.json`: a sub-daily entry is rejected at deploy time on a Hobby plan,
+  and a failed *deployment* is a worse failure than a scheduler living one file
+  away. `vercel.json` keeps its two lines and its one purpose.
+- New: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET`
+  — all four optional. With none of them set the app boots, builds and serves
+  exactly as before; a missing key is "reminders are off", never a boot failure.
+  The VAPID pair is not a provider account: no vendor, no bill, no sign-up,
+  generated locally with `npx web-push generate-vapid-keys`. `.env.example` says
+  so at length, because "another API key" is the wrong mental model.
+- New dependency: `web-push` (MIT, free). It owns VAPID JWT signing, RFC 8291
+  `aes128gcm` payload encryption and the per-service request shape. The
+  roadmap's "no paid dependency" line is untouched.
+- `npm run push:check` (offline), `npm run push:db`, `npm run push:send`.
+- **Superseded lines, left as written.** `CHANGELOG.md:245` and `:396` still say
+  there is no cron. Both were true of the releases they document and are history;
+  this entry is the amendment, exactly as the badge-rename entry below leaves the
+  v0.2.0 entry naming the old key. `ROADMAP_v0.1.0.md:422` and `:562`,
+  `README.md`, `CLAUDE.md`, `.env.example` and
+  `src/lib/db/schema.ts`'s `shares` comment were all amended in place;
+  `plans/F30-push-reminders.md` §8 is the full table of which prohibitions moved
+  and which did not.
+
+```
+
+**Impact:** none. `## [Unreleased]` gains one entry; nothing below it moves
+except by line offset.
+
+---
+
+### Step 8: .env.example — the full block
+
+**File:** `.env.example` — everything **after** line 62 (`APP_URL=`).
+
+**Change:** Phase 2 appends a stub here: the four variables with a short
+comment. **Delete that stub in its entirety and append the block below.**
+
+The anchor, checked in reconciliation against phase 2's actual text: everything
+after line 62 (`APP_URL=`, the file's current last line), beginning at
+
+```
+# F30 push reminders. ALL FOUR ARE OPTIONAL: with none of them set the app
+```
+
+and running through the final `CRON_SECRET=` inclusive. That stub declares
+exactly `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` and
+`CRON_SECRET`, in that order. Lines 1–62 are not touched.
+
+**Code — append after `APP_URL=`:**
+```
+# F30 push reminders. ALL FOUR ARE OPTIONAL: with none of them set the app
+# boots, builds and serves exactly as it did before. GET /api/push/key answers
+# { publicKey: null }, the switch on /profile/edit draws its unavailable state,
+# and POST /api/push/tick refuses every caller. A missing key is "reminders are
+# off", never a boot failure — the EMBEDDING_API_KEY precedent, for the same
+# reason: CI has no key either.
+#
+# THE VAPID PAIR IS NOT AN API KEY, and "another provider account" is the wrong
+# mental model — it will send you looking for a sign-up that does not exist.
+# There is no vendor, no account, no bill, no dashboard and no key exchange. You
+# generate the pair yourself, locally:
+#
+#     npx web-push generate-vapid-keys
+#
+# and it identifies *this application* to the browser vendors' push services
+# (web.push.apple.com for the iPhone, and the equivalent elsewhere). The public
+# half is handed to the browser by GET /api/push/key, because there is no
+# NEXT_PUBLIC_* variable anywhere in this repository and there is not going to
+# be one — src/lib/env.ts carries `import 'server-only'` and a route handler is
+# the honest way to publish one field of it. The private half signs the VAPID
+# JWT and never leaves the server; `npm run push:check` asserts that every file
+# under src/ naming it begins with `import 'server-only'`.
+#
+# CHANGING THE PAIR INVALIDATES EVERY EXISTING SUBSCRIPTION, silently. Rows in
+# push_subscriptions are bound to the public key they were created against, so a
+# rotated pair simply stops delivering to every device already opted in, with no
+# error anywhere, until each one re-subscribes. Rotate it the way you rotate
+# AUTH_SECRET — knowing what it costs — not the way you rotate an API key.
+#
+# VAPID_SUBJECT is a contact the push service can use to reach you about your
+# traffic. It must be a mailto: or https: URL; web-push rejects anything else
+# before a single request goes out.
+#
+# So this file now holds FIVE key families, and only three of them are provider
+# accounts at all:
+#
+#   LLM_API_KEY         z.ai (GLM). The only one the running app uses for text.
+#   EMBEDDING_API_KEY   OpenAI, project `dword-embeddings`. Runtime, F15 journal dedup.
+#   OPENAI_API_KEY      offline badge/level art tooling only. Never under src/.
+#   OPENROUTER_API_KEY  offline badge/level art tooling only. Never under src/.
+#   VAPID_*             no provider, no account, no bill. Generated on this machine.
+#
+# The rule that binds all of them is unchanged: do not paste one secret into two
+# variables. It hollows out the separation while appearing to honour it.
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:you@example.com
+
+# CRON_SECRET is a sixth thing again, and it is not a key at all: it is a shared
+# secret between the GitHub Actions workflow and POST /api/push/tick, and its
+# only job is to make that route unusable by whoever finds the URL. The route
+# compares it with timingSafeEqual; unset on the server, it refuses everyone.
+#
+#     openssl rand -base64 32
+#
+# IT IS SET IN TWO PLACES AND THEY MUST MATCH: the Vercel project's environment
+# variables, and the repository's Actions secrets. A mismatch is a silent 401 —
+# nothing is written, the app is up and healthy, and no log you would think to
+# open says anything at all. The only place the symptom is visible is the repo's
+# Actions tab, in that run's curl step. Check there first when reminders simply
+# stop, before looking at anything in src/.
+#
+# Like VAPID_PRIVATE_KEY it is server-only. `npm run push:check` asserts the
+# property that makes that true rather than a list of filenames: every file under
+# src/ that names either literal begins with `import 'server-only'`, which turns
+# a client import into a build error instead of a leak.
+CRON_SECRET=
+```
+
+**Impact:** none. `.env.example` is not read by any code; it is read by the next
+person setting the project up, which is precisely who the paragraph is for.
+
+---
+
+### Step 9: src/lib/db/schema.ts — the `shares` comment, amended
+
+**File:** `src/lib/db/schema.ts:549-551`
+**Change:** The conclusion is unchanged — `shares` still has no `expires_at` and
+still should not. What changed is that its *first* reason has evaporated, and
+leaving the old sentence standing would make the schema assert something the
+repo no longer believes. The second reason was always the stronger one and now
+carries it alone. **This is the only edit this phase makes under `src/`, and it
+is a comment.**
+
+**Code — before:**
+```ts
+    createdAt: tsz('created_at').notNull().defaultNow(),
+    // No expires_at. There is no cron in this app ([R11]); a TTL with nothing to
+    // enforce it is a lie in the schema. Revocation is manual and immediate.
+  },
+```
+
+**Code — after:**
+```ts
+    createdAt: tsz('created_at').notNull().defaultNow(),
+    // No expires_at. Written when there was no cron in this app at all ([R11]),
+    // on the grounds that a TTL with nothing to enforce it is a lie in the
+    // schema. Revocation is manual and immediate.
+    //
+    // Amended by F30 ([R24]): there is now exactly one scheduled job, an hourly
+    // tick that sends card reminders, so "there is nothing that could enforce
+    // it" is no longer the reason. The column stays absent on the half of the
+    // argument that was always the stronger one — a TTL checked on read is a
+    // different feature, with a different sentence in front of a stranger
+    // ("your link expired"), that nobody has asked for. The tick writes to
+    // push_deliveries and to nothing else: it is not an expiry sweep and must
+    // not be grown into one.
+  },
+```
+
+**Impact:** none. `npm run typecheck`, `npm run lint` and `npm run build` are
+unaffected by a comment; `npm run share:check`'s grep over `lib/share/serialize.ts`
+is not this file and is unaffected either.
+
+---
+
+### Step 10: plans/F30-push-reminders.md — the feature plan
+
+**File:** `plans/F30-push-reminders.md` (new)
+**Change:** create with the content below, verbatim. Written **after the fact**,
+in past-decided voice, the way `plans/F29-collection-scroll-memory.md` reads: it
+records what was built and why, not what might be.
+
+**Code:**
+```markdown
+# F30 — Push reminders to make today's card
+
+**Plan set:** `PUSH_CARD_REMINDERS_PLAN.md`, five phases, 2026-09-14. Branch
+`feature/push-card-reminders`.
+
+The user's words, verbatim: *"make sure the app send a different reminder as a
+push notification in my xs max to generate today's card. start from 7 am in the
+morning, then send a new one every 2 hours until 8 pm."*
+
+**Supersedes, in part.** This plan is the first in the repository to build a
+scheduled job or a notification of any kind, and eleven earlier plans forbid
+one. §8 is the table of which of those sentences moved and which are simply
+still true — it is the most useful section in this file, because a reader who
+finds a prohibition in `plans/F9` needs to know which kind it is. In summary
+it supersedes: `plans/F1-foundation.md:93` (as to the service worker and push,
+**not** as to offline caching), `plans/F5-daily-card.md:87`,
+`plans/F7-onboarding.md:76` (as to reminders, **not** as to the nag),
+`plans/F8-discovery.md:105` (as to notifications, **not** as to scheduled
+discovery or auto-adding), `plans/F9-gamification.md:69` (as to push, **not** as
+to loss aversion), and `plans/F16-share-infra.md:219`'s `expires_at` paragraph.
+It supersedes nothing in `plans/F3:76`, `F6:76`, `F10:77`, `F13:213` or
+`F17:277`, all of which remain true as written.
+
+**Binding context:** `ROADMAP_v0.1.0.md` **[R24]**, which is what authorises any
+of this and which was written before a line of code (phase 1), because
+`CLAUDE.md`'s authority order makes the roadmap win over any plan and building
+four phases against a document that forbids the feature is the contradiction the
+order exists to prevent.
+
+---
+
+## 1. What was asked, and the two words it turns on
+
+Two phrases in the request are load-bearing beyond the obvious.
+
+**"a different reminder."** The thing being asked against is the same sentence
+seven times a day. That is a requirement about *copy*, and it is the one part of
+this feature that a user experiences directly and repeatedly. R2.
+
+**"to generate today's card."** The notification's job is to bring a person to
+the button. It is not to press it. Everything in §2 follows from that reading,
+and the reading is not strained: the app's central claim, in the README's second
+paragraph and in `POST /api/cards`'s own header comment, is that nothing is
+generated until you press.
+
+The third requirement is arithmetic. R3: 07:00, every two hours, until 20:00.
+
+## 2. The ruling that had to come first
+
+`ROADMAP_v0.1.0.md` forbade this feature twice:
+
+> § Explicitly out of scope — *"Push notifications or reminders of any kind"*
+>
+> **[R11]** — *"No cron job — a scheduled job is the first step toward the
+> notifications this roadmap forbids, and recomputation is trivially cheap at
+> one user."*
+
+The precedent for what to do about that is `[R23]`, which amended `[R21]` on a
+direct user request recorded in the session that asked for it, and `[R22]`,
+which says out loud that the table *"is authoritative; it is also amendable, and
+this is what an amendment looks like."* This request has exactly that
+provenance. So the roadmap was **amended, not ignored**, and `[R24]` was written
+first, in phase 1, before any schema or any route.
+
+Two things about `[R24]` matter more than the ruling itself.
+
+**`[R11]`'s actual ruling is untouched.** `user_stats` is still a cache, still
+recomputed on read at every consumer, still never displayed from the row. This
+feature does not read that table and does not write it. What `[R24]` supersedes
+is only the generalisation hung off the end of `[R11]` — that *any* scheduled
+job is the first step toward notifications. The step was taken deliberately,
+once, for one thing, by the person who wrote the prohibition.
+
+**The prohibition is replaced, not removed.** The invariant that took its place
+is narrower and stronger, and every phase in the set was checked against it:
+
+> **Nothing scheduled may create a card.**
+
+## 3. What was built
+
+```
+GitHub Actions, hourly ──► POST /api/push/tick   (CRON_SECRET, timingSafeEqual)
+                                 │
+                  per subscribed user:
+                    resolveTimezone      ──► !ok ? send nothing, write nothing
+                    localDateNow + localHour       (lib/time/local-date.ts)
+                    getCardForDate       ──► card exists ? quiet for the rest of the day
+                    dueSlot({ localHour, delivered })  ──► 7 9 11 13 15 17 19, or none
+                    reminderFor(date, slot)
+                    claim the slot, send, record the outcome
+                                 │
+                    web-push ──► the vendor's push service ──► public/sw.js
+                                      'push'              ──► showNotification
+                                      'notificationclick' ──► /today
+```
+
+| Phase | What it owns |
+|---|---|
+| 1 | `[R24]`; `push_subscriptions`, `push_deliveries`, migration 0010; `lib/push/schedule.ts`; `lib/push/reminders.ts`; `push:check` |
+| 2 | the four environment variables; `web-push`; `lib/db/queries/push.ts`; `lib/push/{send,schemas,client}.ts`; `GET /api/push/key`; `POST`/`DELETE /api/push/subscription` |
+| 3 | `public/sw.js`; the middleware exemption and `badges:check` §12; the `/sw.js` no-cache header; `<PushSync />`; the `/profile/edit` switch |
+| 4 | `lib/push/tick.ts`; `POST /api/push/tick`; `.github/workflows/push-reminders.yml`; `push:send`; `push:db` |
+| 5 | this file, and the doc sweep |
+
+## 4. The schedule is three constants, and the slots are derived
+
+`src/lib/push/schedule.ts`:
+
+```ts
+REMINDER_FIRST_HOUR  = 7
+REMINDER_EVERY_HOURS = 2
+REMINDER_UNTIL_HOUR  = 20
+```
+
+`REMINDER_SLOTS` is computed from them and comes out as
+`[7, 9, 11, 13, 15, 17, 19]`.
+
+**"until 8 pm" is a window bound, not a slot.** No two-hour step from 07:00
+lands on 20:00, so the last reminder is at 19:00. That reading is an
+interpretation of a sentence and is written down here as one — but it is encoded
+as three numbers rather than as a hand-written array of seven precisely so that
+if the reading is wrong, the fix is one digit and the slots follow. A literal
+array would have made the sentence and the code two separate things that agree
+by coincidence.
+
+Every hour and every day boundary goes through `src/lib/time/local-date.ts`,
+which is the only file in the app allowed to construct `Intl.DateTimeFormat` or
+do date arithmetic. `localHour` already existed — it drives the `midnight_oil`
+badge — and is exactly the function a slot resolver needs.
+
+`dueSlot({ localHour, delivered })` is the catch-up rule: given the current
+local hour and the set of slots already delivered today, it answers with the one
+slot that is due **now**, or none. It never returns a backlog. That is what
+makes a late scheduler survivable rather than a burst of four notifications at
+teatime — see D5.
+
+## 5. Why a deck and not a model call
+
+The copy lives in `src/lib/push/reminders.ts` as a curated list, and
+`reminderFor(date, slot)` is deterministic in `(local date, slot)`.
+
+A fan-out through `lib/llm/` was rejected on four counts, and the first alone
+would have decided it. An hourly unattended path is the worst place in the app
+to put a network call that can fail, because nobody is watching and the failure
+mode is silence — which is indistinguishable from "no card is due". It would be
+billable, on a schedule, forever. It would be non-deterministic, so
+`npm run push:check` could assert nothing about the copy, where against a deck
+it asserts that no two lines share a body and that a whole day's seven are
+pairwise distinct across four hundred consecutive dates. And R2 does not ask for
+generated copy — it asks for *different* copy, which a deck delivers exactly.
+
+## 6. Where the scheduler lives
+
+**`.github/workflows/push-reminders.yml`, hourly.** One `curl` at
+`POST /api/push/tick`, one secret. It is the repository's first `.github/`
+directory; there is still no CI.
+
+**Not `vercel.json`.** That file is two lines with one purpose —
+`regions: ["sin1"]`, so the functions run beside Neon in `ap-southeast-1` — and
+`CLAUDE.md` has a section about why that one purpose is the whole of it. A
+`crons` entry finer than once a day is rejected at deploy time on a Hobby plan:
+the *deployment* fails, not the cron. Trading "the scheduler lives in a second
+file" for "a config change can take the whole app down" is not a trade.
+
+The workflow ticks hourly and the slots are two hours apart, so roughly half the
+ticks find nothing due and answer immediately. That is the intended shape: an
+hourly tick is what makes `dueSlot`'s catch-up cheap, because the worst case for
+a missed run is one hour of lateness rather than two.
+
+## 7. iOS, and the four honest states
+
+**iOS grants Web Push only to a Home-Screen install.** Safari on iOS 16.4+
+exposes `pushManager` exclusively to a web app launched from the Home Screen; in
+an ordinary tab `navigator.serviceWorker` exists and `registration.pushManager`
+does not. The app already shipped `public/manifest.webmanifest` with
+`display: standalone` and `start_url: /today`, so nothing about the install had
+to be built — only said.
+
+The switch on `/profile/edit` therefore has four states rather than two: on, off,
+"your browser cannot do this", and "add Daily Words to your Home Screen first,
+then come back". The fourth is the one that matters, and the reason it is copy
+rather than a disabled control is that a dead toggle is a bug report. Two
+further constraints shaped it: `Notification.requestPermission()` must be called
+from a user gesture on iOS or it is refused silently, so the tap asks and
+nothing else may; and permission, once denied, cannot be re-requested by the
+page, so the denied state has to name the Settings app rather than offer a
+button that does nothing.
+
+It is on `/profile/edit` and not on `/profile`, which is the pride screen and
+holds no settings ([R11]'s neighbours, F9 §10.3, F13), and not on `/today`,
+which has no vertical budget for it — F18 D3 measured what one extra header
+control costs there and the answer was a wrapped title at 375px.
+
+## 8. What `[R24]` moved, and what it did not
+
+This is the table to read before citing any earlier plan's prohibition.
+
+| Where | What it says | Status |
+|---|---|---|
+| `ROADMAP:422` | "Push notifications or reminders of any kind" | **Amended** by [R24], for the daily-card reminder only |
+| `ROADMAP:562` ([R11]) | "No cron job — a scheduled job is the first step toward the notifications this roadmap forbids" | **Amended** by [R24]. [R11]'s ruling on `user_stats` is untouched |
+| `plans/F1:93` | "Service worker, offline caching, push notifications" | **Amended** as to the service worker and push. **Offline caching is still out of scope and still absent** — `sw.js` has no `fetch` handler |
+| `plans/F5:87` | "Notifications or reminders of any kind" | **Amended.** This is the feature |
+| `plans/F7:76` | "Push notifications, reminders, or a 'finish your profile' nag anywhere in the app" | **Amended** as to reminders. The nag clause stands, and F17 §"Is the user ever prompted to finish?" relies on it |
+| `plans/F8:105` | "Notifications, scheduled discovery, or auto-adding words" | **Amended** as to notifications. Scheduled discovery and auto-adding remain forbidden, and roadmap principle 5 — *the user nudges, always* — is untouched: the reminder nudges the **user**, not the app |
+| `plans/F9:69` | "Notifications, reminders, push, email of any kind" | **Amended** as to push, for one message type. **Email is still forbidden.** The loss-aversion clause immediately below it — no "your streak is at risk", no countdown, no red warning states — is **not** amended and constrains this feature's copy directly |
+| `plans/F16:219` | "Shares never expire… there is no cron in this app and none is coming" | **Amended** as to the premise. `expires_at` is still correctly absent — see `schema.ts`'s amended comment |
+| `plans/F3:76` | "Any background job, queue, cron, or `waitUntil`" | **Stands.** F3's enrichment path is still synchronous inside the request that starts it |
+| `plans/F6:76` | "Push notifications or nudges to resume a chat" | **Stands.** One notification type, one destination |
+| `plans/F10:77` | "Background jobs, queues, cron, or webhooks" for the journal | **Stands.** The insight call is still synchronous inside an explicit tap |
+| `plans/F13:213` | "No notification, no reminder, no calendar marker, no badge dot on the Profile tab" | **Stands, entirely.** Badges notify nobody |
+| `plans/F17:277` | "Is the user ever prompted to finish? No, and deliberately" | **Stands** |
+
+Four moved in part, two moved outright, seven stand. The point of writing it out
+is that "the roadmap forbids notifications" is no longer a sentence anyone can
+use without checking which clause they mean.
+
+## 9. Decisions
+
+### D1 — The roadmap is amended, not ignored.
+
+`[R24]` is written in `[R23]`'s shape, and for `[R22]`'s stated reason: the
+table is authoritative and amendable, and an amendment is what a direct user
+request against a locked decision produces. It was written in **phase 1**,
+before the schema, because the authority order makes the roadmap win over any
+plan and four phases built against a document that forbids them is the exact
+contradiction this workflow exists to surface.
+
+### D2 — The scheduler sends a message. It does not press the button.
+
+`POST /api/cards` is unchanged and its comment — *"If you find yourself writing
+a scheduler, stop"* — is unchanged, byte for byte. It was never relaxed and
+never needed to be: it is a rule about **card creation**, and the tick has no
+write path into `daily_cards`.
+
+The alternative was obvious and was rejected on the app's central claim rather
+than on difficulty. A scheduled job that made the card would mean waking up to a
+card you did not make, which is the state the README's second paragraph
+promises does not exist, and which would quietly turn a daily exercise into a
+daily feed.
+
+### D3 — Three constants, not an array of seven.
+
+§4. The sentence the user wrote is what the code says, and a re-reading of the
+window bound is a one-digit change.
+
+### D4 — A curated deterministic deck, not a model call.
+
+§5. The first of its four reasons — an unattended hourly network call whose
+failure is indistinguishable from "nothing is due" — would have decided it
+alone.
+
+### D5 — `dueSlot` answers with the slot due now, never a backlog.
+
+GitHub Actions' cron is a best-effort queue, not a guarantee, and a run can land
+well behind its stamp. Without a catch-up rule, lateness becomes either a lost
+reminder or a burst. `dueSlot` takes the current local hour and the set of slots
+already delivered today and returns at most one slot. A tick that misses 11:00
+and arrives after 13:00 sends one line.
+
+The burst is the failure worth naming: four notifications in a row is how a
+person learns to ignore the lock screen, and after that the feature is worse
+than not shipping it.
+
+### D6 — The delivery row is claimed before the send, not written after it.
+
+Enforced by a unique index on `(user, local date, slot)` rather than by
+application code — the `chat_messages` opener precedent, where a second opener
+in a round is refused by a partial unique index. Two overlapping ticks (a late
+run beside the next scheduled one) would otherwise both find the slot
+undelivered and both send.
+
+**The cost, stated plainly:** a send that fails leaves a failed row rather than
+retrying, so a transient failure is a missed reminder. With seven slots a day
+that is cheap, and it is the correct direction to fail — a duplicate two hours
+later trains the user to stop reading, and a missed one costs nothing they will
+notice.
+
+### D7 — `push_deliveries` is a record, not a queue.
+
+No retry, no backoff, no job table, no `waitUntil`. One user and single-digit
+devices; the tick iterates every subscription in one request. The ceiling is
+named rather than engineered around, which is the same call
+`lib/vocab/suggestion-rate-limit.ts` made and defended: *"Revisit only if quota
+is actually exhausted."* Past it, the honest fix is a queue, not a bigger
+timeout.
+
+### D8 — An unresolvable timezone means send nothing.
+
+`resolveTimezone` returns `{ ok: false, timezone: DEFAULT }` for a missing or
+invalid zone, and the app's rule is that **reads may fall back and writes may
+not**. A reminder sits awkwardly between the two: it is a read, but it produces
+a durable artefact on someone's lock screen at an hour chosen by a guess. A
+guessed zone means a 07:00 reminder arriving at 02:00, repeatedly, silently, and
+the person cannot tell why. So `!ok` is treated as a write: no send, no row.
+`POST /api/cards` refuses with a 409 in the same situation for the same reason.
+
+### D9 — The switch is on `/profile/edit`.
+
+§7. Not `/profile`, which is the pride screen and holds no settings; not
+`/today`, which has no room. It writes on tap rather than through the Save
+button, the way the timezone is its own request — because a reminder toggle that
+silently needs a Save is a toggle that does not work.
+
+### D10 — One notification type, one destination.
+
+No badge news, no chat nudge, no journal prompt, no digest, no email. `[R24]`
+amended a clause, not a category, and the clause it amended names the daily
+card. F9's loss-aversion ban constrains the copy directly: the deck contains no
+"your streak is at risk", no countdown and no warning register, because that ban
+was never about the delivery mechanism.
+
+## 10. What is touched
+
+| File | Change | Phase |
+|---|---|---|
+| `ROADMAP_v0.1.0.md` | `[R24]`; the out-of-scope bullet and `[R11]`'s closing paragraph, amended | 1 |
+| `src/lib/db/schema.ts` | `push_subscriptions`, `push_deliveries`; the `shares` comment amended | 1, 5 |
+| `src/lib/db/types.ts`, `drizzle/0010_*` | the inferred types and the additive migration | 1 |
+| `src/lib/push/schedule.ts`, `reminders.ts` | new — the slots and the deck | 1 |
+| `src/lib/env.ts` | four optional variables | 2 |
+| `src/lib/db/queries/push.ts` | new — CRUD, plus `listReminderCandidates()` | 2 |
+| `src/lib/push/{send,schemas,client}.ts` | new | 2 |
+| `src/app/api/push/{key,subscription}/route.ts` | new | 2 |
+| `public/sw.js` | new — `push` and `notificationclick`, no `fetch` | 3 |
+| `src/middleware.ts`, `scripts/check-badge-art.ts` §12, `next.config.ts` | the exemption, its guard, and the no-cache header | 3 |
+| `src/components/push/{push-sync,reminder-toggle}.tsx` | new | 3 |
+| `src/app/(app)/layout.tsx`, `src/components/profile/profile-edit-form.tsx` | mount and section | 3 |
+| `src/lib/push/tick.ts`, `src/app/api/push/tick/route.ts` | new | 4 |
+| `.github/workflows/push-reminders.yml` | new — the scheduler | 4 |
+| `scripts/{push-send,check-push,check-push-db}.ts`, `package.json` | three scripts | 1, 4 |
+| `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.env.example`, this file | the doc sweep | 5 |
+
+## 11. How it is verified
+
+- **`npm run push:check`** — offline, no environment, no network. Slot
+  derivation from the three constants; the catch-up matrix over all 24 local
+  hours against every subset of already-delivered slots; no two deck lines
+  sharing a body; a whole day's seven pairwise distinct across 400 consecutive
+  dates; the same `(date, slot)` always yielding the same line; and the secret
+  property — **every file under `src/` naming `VAPID_PRIVATE_KEY` or
+  `CRON_SECRET` begins with `import 'server-only'`**, so neither literal can
+  reach a client bundle. Not a list of sanctioned filenames: `lib/push/send.ts`
+  and the tick route each name one legitimately.
+- **`npm run push:db`** — the unique index, delivery idempotence, the 410 sweep
+  deleting rather than retrying, and a user with today's card getting nothing
+  and no row. Seeds and deletes a fixture user.
+- **`npm run push:send`** — one real notification at your own subscriptions. No
+  schedule, no rows. The equivalent of `chat:dry-run`, and the only thing that
+  proves the phone half.
+- **`curl -sI http://localhost:3200/sw.js` with no cookie jar** — 200,
+  `application/javascript`, and a cache header that is not `immutable`. A 307
+  means the matcher exemption is gone, and the author, who is signed in, will
+  never see it.
+- **The phone.** Add to Home Screen, open from the icon, turn the switch on,
+  `npm run push:send`. Nothing on a desktop can tell you whether this works.
+- **`npm run badges:check`** — §12 with `sw` in its excluded-prefix regex.
+- **`npm run test:layout`** — the eighteen no-scroll assertions, unchanged and
+  green, because nothing was added to `/today`.
+- **`npm run typecheck`, `npm run lint`, `npm run build`**, and every
+  pre-existing check script.
+````
+
+**Impact:** none on behaviour. `plans/` is documentation.
+
+---
+
+## Verification
+
+This phase changes no code path, so every command below must produce **exactly
+the result it produced before this phase**, with the single exception of the
+greps.
+
+**Build:**
+```bash
+npm run typecheck
+npm run lint
+npm run build
+```
+
+**Tests / check scripts** — all of them, because a doc sweep that broke one
+would be the surprising outcome worth catching:
+```bash
+npm run push:check && npm run push:db
+npm run vocab:check && npm run dates:check && npm run nav:check
+npm run profile:check && npm run chat:check && npm run discover:check
+npm run journal:check && npm run share:check && npm run claim:check
+npm run badges:check && npm run stats:check
+npm run test:layout
+```
+
+**Grep 1 — the "no cron" sweep.**
+```bash
+grep -rn -i "no cron\|there is no cron" README.md CLAUDE.md CHANGELOG.md src/
+```
+Expected, and **only** these:
+
+| Hit | Why it survives |
+|---|---|
+| `CHANGELOG.md:~245` (`[v0.1.0]`, F5 bullet) | History. True of the release it documents; left as written, and named by `file:line` in the new `[Unreleased]` entry |
+| `CHANGELOG.md:~396` (`[v0.2.0]` § Known gaps) | History, same reason |
+| `src/lib/db/schema.ts:~550` | **Amended** — "Written when there was no cron in this app at all ([R11])", followed by the F30 amendment |
+
+`README.md` and `CLAUDE.md` must return **zero** hits: Steps 2, 3 and 6 removed
+every one of them, replacing each with a sentence that says what the rule is now.
+A hit in either file is a missed edit.
+
+**Grep 2 — the notification sweep.**
+```bash
+grep -rn -i "notification" ROADMAP_v0.1.0.md README.md CLAUDE.md
+```
+Expected:
+
+| File | What the hits must say |
+|---|---|
+| `ROADMAP_v0.1.0.md` | `:422`'s bullet and `[R11]`'s paragraph, both amended by **phase 1**, plus `[R24]` itself. **This phase must contribute zero edits here** — if a hit in this file is in prose this phase wrote, the boundary was crossed |
+| `README.md` | only the amended `## Status` paragraph — "Push notifications left that list in F30, under roadmap ruling [R24], and only for one thing…". The bare "push / notifications" item in the out-of-scope list must be **gone** |
+| `CLAUDE.md` | only the new `## The app has one scheduled job…` section: the `[R11]` quotation, the `userVisibleOnly` trap, and the closing "what this feature is still not" paragraph |
+
+**Grep 3 — the roadmap boundary, which is the one thing reconciliation needs proved.**
+```bash
+git diff --stat -- ROADMAP_v0.1.0.md
+```
+Must be **empty for this phase's commit**. Phase 1 owns every byte of that file.
+
+**Grep 4 — the `.env.example` boundary.**
+```bash
+git diff -- .env.example | head -40
+```
+The first changed line must be at or after the original `APP_URL=` (`:62`).
+Lines 1–62 must be untouched.
+
+**Grep 5 — the `src/` boundary.**
+```bash
+git diff --stat -- src/
+```
+Must show exactly one file, `src/lib/db/schema.ts`, and the diff must be
+comment-only.
+
+**Manual check:** read the new `CLAUDE.md` section straight through against the
+`## Traps that fail silently` section two headings below it. They must not
+duplicate each other — the new section's traps are push-specific and stay where
+they are; the general list gains nothing.
+
+**Exit criteria:**
+- `grep -rn -i "no cron" README.md CLAUDE.md` returns nothing.
+- Every surviving "no cron" hit in `CHANGELOG.md` and `src/` is either history
+  explicitly named in the new `[Unreleased]` entry, or an amended sentence that
+  states what changed.
+- `plans/F30-push-reminders.md` exists, names `[R24]`, and its §8 table accounts
+  for all thirteen prohibitions the analysis's Reference List enumerated.
+- `.env.example` explains the VAPID pair as a locally generated identity rather
+  than a provider account, and `CRON_SECRET` as a two-place shared secret whose
+  mismatch is a silent 401.
+- `git diff --stat` names no file outside this phase's six.
+- `npm run typecheck`, `npm run lint` and every check script pass, unchanged.
+
+---
+
+## Handoffs
+
+- **`ROADMAP_v0.1.0.md` and `[R24]` — Phase 1.** This phase cites `[R24]` in six
+  places (`CLAUDE.md`'s new section and authority order, `README.md`'s status
+  paragraph, the `CHANGELOG` entry, `schema.ts`'s comment, and
+  `plans/F30-push-reminders.md` §2 and §8) and writes none of it. If phase 1
+  numbers the ruling differently, every one of those citations changes and
+  nothing else does.
+- **`src/app/api/cards/route.ts:25` — Phase 4.** This phase asserts, in
+  `CLAUDE.md` and in the `CHANGELOG`, that the "If you find yourself writing a
+  scheduler, stop" comment is **unchanged, byte for byte**. The plan index says
+  phase 4 does not touch that file. If it does, this phase's prose becomes the
+  false sentence it exists to remove.
+- **`plans/F1`–`F29` are not edited.** Eleven of them contain a prohibition this
+  feature moved or preserved. The house convention is that a plan's *header*
+  lists what supersedes it — but retrofitting a header line into eleven files
+  written by eleven agents is a second card's worth of churn for a fact that
+  `plans/F30-push-reminders.md` §8 states once, in a table, in the place a reader
+  of F30 is already standing. Named here so the next round starts from a
+  decision rather than from an oversight.
+- **`README.md`'s `## Status` paragraph still says "F11–F22 followed"** and has
+  not named F23–F29. That staleness predates this plan set and is not this
+  phase's to fix; F30 is described in the out-of-scope amendment immediately
+  below it, so no claim in that section is false.
+- **`docs/media/*` is not re-shot.** No screen this feature touches is in the
+  README's capture set — the switch is on `/profile/edit`, which has no figure —
+  and `npm run demo:capture` costs ninety seconds against a running app and a
+  seeded account. If the switch should appear in the README later, that is a
+  `demo:seed` / `demo:capture` pass, not a PNG edit.
+- **Serves no requirement id, deliberately.** No step in this phase implements any
+  part of R1, R2 or R3; if a step here appears to, it is in the wrong phase. What
+  it serves is invariant 12, and reconciliation removed this phase from the
+  index's Requirements table so that a task board built from that table does not
+  file a doc sweep as delivery work.
+
+---
+
+## Rollback
+
+Every edit in this phase is prose, and none of it is imported, parsed, hashed or
+asserted by any script. Reverting is `git revert` of this phase's commit, or by
+hand:
+
+1. `git checkout HEAD~1 -- CLAUDE.md README.md CHANGELOG.md .env.example src/lib/db/schema.ts`
+2. `rm plans/F30-push-reminders.md`
+
+Nothing else has to be undone, no migration runs backwards, and no check script
+changes its answer. **The cost of rolling back is exactly the cost of not doing
+this phase**: the repository ships a scheduler and a notification while five
+files tell the next reader it has neither, and that is the one drift no check
+script in this project can see — which is why `PUSH_CARD_REMINDERS_PLAN.md`
+invariant 12 names it.
+
+If only part of this phase must be rolled back, the five `CLAUDE.md` edits, the
+three `README.md` edits, the `CHANGELOG` entry, the `.env.example` block, the
+`schema.ts` comment and `plans/F30-push-reminders.md` are fully independent of
+one another and can be reverted individually.
