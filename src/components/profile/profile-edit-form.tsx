@@ -8,6 +8,7 @@ import { ChipSelect } from "@/components/profile/chip-select";
 import { InterestsField } from "@/components/profile/interests-field";
 import { OptionRows } from "@/components/profile/option-rows";
 import { TimezoneField } from "@/components/profile/timezone-field";
+import { ReminderToggle } from "@/components/push/reminder-toggle";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { TextInput } from "@/components/ui/text-input";
@@ -45,6 +46,12 @@ import type { ProfileResponse } from "@/lib/profile/schemas";
  * different rule — saving it by hand sets `timezone_source = 'manual'`, which
  * permanently stops the automatic re-detection in `<TimezoneSync />`. It goes
  * first, so a failure there does not leave the answers saved and the zone not.
+ *
+ * `<ReminderToggle />` carries that argument one step further: it is a different
+ * resource with a different rule *and* it writes on the tap, so `save()` below
+ * knows nothing about it. That is why it is drawn last, under everything the
+ * button does commit — a control Save ignores, sitting between two controls Save
+ * honours, is a promise the button cannot keep.
  */
 
 const CONTEXT_CHIPS = ENGLISH_CONTEXTS.map((slug) => ({
@@ -225,6 +232,14 @@ export function ProfileEditForm({
           changed={timezoneChanged}
           onChange={setTimezone}
         />
+
+        {/* Last, and outside `save()` entirely — it writes on the tap. It draws
+            its own top rule, which is the division: the timezone block above
+            deliberately has none, so this is the first hairline since the tone
+            list and reads as a section rather than as a rendering fault. On a
+            device that cannot do push it draws the same frame with a sentence
+            instead of a switch, so the page keeps its shape either way. */}
+        <ReminderToggle />
       </ScreenBody>
 
       {/* Sticky by position, not by `position: fixed` — it is the last row of the

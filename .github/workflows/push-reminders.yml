@@ -1,0 +1,103 @@
+# Daily Words — the reminder tick.
+#
+# Every hour, POST `/api/push/tick`. That endpoint decides, per subscribed user
+# and in that user's own timezone, whether a two-hourly reminder slot is due on
+# a day with no card, and sends one notification if so.
+#
+# It creates no cards. `POST /api/cards` is still the only path that makes one,
+# and the notification points at the button rather than pressing it.
+#
+# ── Why this is not a `crons` entry in `vercel.json` ─────────────────────────
+# Vercel rejects a cron expression more frequent than once per day on the Hobby
+# plan, so an hourly `"crons"` block can make the *deployment itself* fail. A
+# change that breaks deploys is a worse failure than a scheduler living one file
+# away, so the schedule lives here and `vercel.json` stays two lines about
+# `sin1`.
+#
+# Moving to Vercel Cron later is two lines in `vercel.json` plus a `GET` shim
+# beside the route's `POST` (Vercel Cron issues a GET). The swap is invisible to
+# users because of the catch-up rule in `src/lib/push/schedule.ts`: a slot that
+# was missed while the schedulers changed hands is superseded by the next tick
+# rather than replayed as a burst of backdated reminders.
+#
+# ── Why hourly and not every 30 minutes ─────────────────────────────────────
+# The slots are two hours apart, so hourly resolution is ample. 24 runs a day
+# stays well inside the free Actions minutes even on a private repo, where 48
+# would not.
+#
+# GitHub's scheduler is **best-effort** and can run tens of minutes late, or skip
+# a run entirely under load. That is acceptable precisely because of the catch-up
+# rule: a late tick delivers the *current* slot rather than a burst, and a slot
+# that was missed is recorded `'skipped'` rather than replayed. A reminder
+# arriving at 09:24 instead of 09:00 is the feature working.
+#
+# ── Configuration ───────────────────────────────────────────────────────────
+#   secrets.CRON_SECRET  (required) — must equal `CRON_SECRET` in the Vercel
+#                                     project's environment variables.
+#   vars.PUSH_TICK_URL   (optional) — override the endpoint, e.g. to aim a
+#                                     manual run at a preview deployment.
+#
+# ── How to turn reminders off ───────────────────────────────────────────────
+# Actions → "push reminders" → ⋯ → Disable workflow. Or delete this file. Either
+# one stops every reminder in the app: nothing else here has a clock.
+#
+# GitHub also disables scheduled workflows by itself after 60 days with no
+# repository activity. That is the one way reminders can stop silently, and it
+# is the reason this paragraph exists.
+
+name: push reminders
+
+on:
+  schedule:
+    # Hourly, on the hour, UTC. The user's local slot is resolved server-side.
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+# Nothing here reads or writes the repository.
+permissions: {}
+
+# A late scheduled run must not overlap a manual one. Queue, never cancel:
+# cancelling mid-flight would abandon a fan-out with some rows claimed.
+concurrency:
+  group: push-reminders
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST the tick
+        env:
+          TICK_URL: ${{ vars.PUSH_TICK_URL || 'https://dword.site/api/push/tick' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          # An unset secret makes every tick a 401, which looks exactly like
+          # "there was nothing to send". Fail here instead, where it is legible.
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::secrets.CRON_SECRET is not set. Every tick would answer 401 and no reminder would ever be sent."
+            exit 1
+          fi
+
+          code="$(curl -sS -X POST "${TICK_URL}" \
+            -H "authorization: Bearer ${CRON_SECRET}" \
+            -H "content-type: application/json" \
+            --data '{}' \
+            --max-time 120 \
+            -o response.json \
+            -w '%{http_code}')"
+
+          echo "HTTP ${code}"
+          cat response.json || true
+          echo
+
+          # The whole point of this step. Without it a 401, a 503 or a 500 is a
+          # green tick in the Actions tab and a feature that silently does
+          # nothing — which is the one failure mode this feature cannot have,
+          # because nobody notices a notification that never arrives.
+          if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+            echo "::error::the tick answered ${code}"
+            exit 1
+          fi

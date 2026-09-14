@@ -466,6 +466,15 @@ section('§12 no route may begin with an excluded asset prefix')
  * which is why `isPublicSharePath` lives in the middleware body instead. Here
  * the matcher is the right place and the constraint is cheap to check, so it is
  * checked rather than remembered (F22 D6).
+ *
+ * F30 added `sw\.js` — the service worker, exempted for the same reason as the
+ * manifest beside it: a browser fetches it with no session. `sw` joins this
+ * list rather than `sw\.js`, and that makes the assertion **stricter than the
+ * matcher**: the escaped dot means `/sweep` is not in fact exempt, so forbidding
+ * a `src/app/sweep/` route forbids one more name than is strictly necessary.
+ * That is the trade taken on purpose. This check is the thing that survives
+ * somebody "tidying" the escape out of the matcher, and one lost route name is
+ * cheaper than an auth gate that disappears with nothing failing.
  */
 const appDirs = readdirSync(join(root, 'src', 'app'), { withFileTypes: true })
   .filter((e) => e.isDirectory())
@@ -473,7 +482,7 @@ const appDirs = readdirSync(join(root, 'src', 'app'), { withFileTypes: true })
 
 check(
   'no src/app route starts with an excluded prefix',
-  appDirs.filter((d) => /^(badges|levels)/.test(d)),
+  appDirs.filter((d) => /^(badges|levels|sw)/.test(d)),
   [],
 )
 

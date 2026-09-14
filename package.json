@@ -42,6 +42,9 @@
     "share:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-share-db.ts",
     "claim:check": "tsx --conditions=react-server scripts/check-claim.ts",
     "claim:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-claim-db.ts",
+    "push:check": "tsx scripts/check-push.ts",
+    "push:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-push-db.ts",
+    "push:send": "tsx --conditions=react-server --env-file=.env.local scripts/push-send.ts",
     "badges:check": "tsx scripts/check-badge-art.ts",
     "stats:check": "tsx scripts/check-gamification.ts",
     "stats:db": "tsx --conditions=react-server --env-file=.env.local scripts/check-gamification-db.ts",
@@ -61,6 +64,7 @@
     "react-dom": "19.1.0",
     "server-only": "0.0.1",
     "tailwind-merge": "^3.6.0",
+    "web-push": "3.6.7",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -70,6 +74,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "3.6.4",
     "dotenv": "^17",
     "drizzle-kit": "0.31.10",
     "eslint": "^9",

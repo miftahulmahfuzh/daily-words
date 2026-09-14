@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { PushSync } from '@/components/push/push-sync'
 import { TimezoneSync } from '@/components/profile/timezone-sync'
 import { requireOnboardedUser } from '@/lib/auth/guards'
 import { BIRTHDAY_PROMPT_HREF, needsBirthdayPrompt } from '@/lib/profile/birthday'
@@ -19,6 +20,15 @@ import { BIRTHDAY_PROMPT_HREF, needsBirthdayPrompt } from '@/lib/profile/birthda
  * `<TimezoneSync />` renders nothing and, in the steady state, issues no
  * requests — it compares the browser's zone against the one this render used and
  * only posts on a mismatch.
+ *
+ * `<PushSync />` is the second of those and holds to the same bargain for the
+ * same reason: it reconciles a push endpoint iOS may have rotated, it renders
+ * nothing, and it does two synchronous feature checks and stops unless the user
+ * has already granted notifications. It takes no props deliberately — its
+ * comparison value is a `localStorage` mirror rather than a server-rendered one,
+ * because reading a `push_subscriptions` row here would put a query on every
+ * navigation in the app to answer a question whose answer is "unchanged". It
+ * never prompts; only the switch on /profile/edit may ask.
  *
  * **The second redirect is the birthday question, and it fires exactly once per
  * user, ever.** It is here rather than on `/today` because "the first time they
@@ -45,6 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       {children}
       <TimezoneSync stored={profile.timezone} source={profile.timezoneSource} />
+      <PushSync />
     </>
   )
 }

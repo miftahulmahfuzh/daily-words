@@ -60,6 +60,41 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        /**
+         * F30's service worker, and the exact inverse of the two blocks above.
+         *
+         * Those two may say `immutable` for a year for one reason only: every
+         * filename under /badges/ and /levels/ carries the first 8 hex of its
+         * master's SHA-256, so new bytes mean a new name and every cache misses
+         * correctly. `/sw.js` carries no hash and cannot — the path is what the
+         * browser *registers*, and a registration is a standing promise to keep
+         * re-fetching that one URL. A content-hashed worker filename would mean
+         * a new registration on every deploy, which is the opposite of what a
+         * worker is for.
+         *
+         * So it gets the opposite rule. A cached worker is a worker that has
+         * stopped updating, and it fails with no symptom whatsoever: the phone
+         * keeps running last month's `push` handler, every deploy succeeds,
+         * every check passes, and the only evidence is a notification that
+         * still reads the way it used to.
+         *
+         * `no-cache`, not `no-store`: the browser may keep the bytes, it just
+         * may not use them without asking. That is what makes the update check
+         * a 304 rather than a download.
+         *
+         * This is the third source and it is deliberately its own block rather
+         * than a widened pattern, for the reason F22 gives above: a shared
+         * source makes a rule correct only against the union of what it covers.
+         */
+        source: "/sw.js",
+        headers: [
+          {
+            key: "cache-control",
+            value: "no-cache",
+          },
+        ],
+      },
     ];
   },
 };

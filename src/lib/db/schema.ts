@@ -547,8 +547,18 @@ export const shares = pgTable(
     payloadVersion: integer('payload_version').notNull().default(1),
 
     createdAt: tsz('created_at').notNull().defaultNow(),
-    // No expires_at. There is no cron in this app ([R11]); a TTL with nothing to
-    // enforce it is a lie in the schema. Revocation is manual and immediate.
+    // No expires_at. Written when there was no cron in this app at all ([R11]),
+    // on the grounds that a TTL with nothing to enforce it is a lie in the
+    // schema. Revocation is manual and immediate.
+    //
+    // Amended by F30 ([R24]): there is now exactly one scheduled job, an hourly
+    // tick that sends card reminders, so "there is nothing that could enforce
+    // it" is no longer the reason. The column stays absent on the half of the
+    // argument that was always the stronger one — a TTL checked on read is a
+    // different feature, with a different sentence in front of a stranger
+    // ("your link expired"), that nobody has asked for. The tick writes to
+    // push_deliveries and to nothing else: it is not an expiry sweep and must
+    // not be grown into one.
   },
   (t) => [
     /** The public read path, and the only one that takes no user id. */
@@ -596,6 +606,158 @@ export const shares = pgTable(
            and ${t.journalEntryId} is not null
            and ${t.vocabEntryId} is null and ${t.dailyCardId} is null)
       )`,
+    ),
+  ],
+)
+
+/* ----------------------------------- Push ----------------------------------- */
+
+/**
+ * F30. One row per device that has agreed to be reminded.
+ *
+ * **The row is the opt-in.** There is no `profiles.reminders_enabled`, and the
+ * argument is [S3]'s, from `shares`: a second column claiming to hold the same
+ * fact is a second source of truth, and the two disagree the first time iOS
+ * revokes an endpoint or a user clears their site data. Turning reminders on is
+ * creating a row; turning them off is deleting it; a phone that has forgotten
+ * its subscription *is* a phone that is not subscribed, and nothing has to be
+ * reconciled for that to be true. It also means the tick's candidate list is a
+ * join away rather than a filter over every profile in the table.
+ *
+ * `endpoint` is unique **globally, not per user**, and that is the browser's
+ * rule rather than ours: a push endpoint is issued by Apple or Google to one
+ * installed web app on one device, and it is the address the message is sent
+ * to. Two users cannot hold the same one, so a per-user unique index would
+ * permit a row that cannot exist — and in the one case where it looks like it
+ * could (a shared phone, a second Google account), the right outcome is that the
+ * new sign-in takes the endpoint over, which is exactly what an upsert on a
+ * global unique key does. A per-user index would instead leave the old user's
+ * row in place and deliver their reminders to somebody else's lock screen.
+ *
+ * `p256dh` and `auth` are the subscription's own encryption keys, base64url as
+ * the browser produced them. They are not secrets of ours and carry nothing
+ * about the user; `web-push` hands them back to the RFC 8291 encryption.
+ *
+ * `user_agent` answers "which device is this?" on a profile that has three. It
+ * is nullable because the browser may not send one and because nothing depends
+ * on it.
+ *
+ * `last_seen_at` is written by the reconciler on every app open, so a dead
+ * subscription is visible as a stale date rather than only as a 410 on the next
+ * send. Defaulted to now() rather than left null: a row that has never been
+ * seen since it was created has been seen, at creation.
+ */
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    userAgent: text('user_agent'),
+    createdAt: tsz('created_at').notNull().defaultNow(),
+    lastSeenAt: tsz('last_seen_at').notNull().defaultNow(),
+  },
+  (t) => [
+    /** What makes subscribe idempotent, and what the 410 sweep deletes by. */
+    uniqueIndex('push_subscriptions_endpoint_uniq').on(t.endpoint),
+    /**
+     * `listSubscriptions(userId)`, and the cascade from `users.id` — Postgres
+     * does not index the referencing side of a foreign key, so without this a
+     * deleted user is a sequential scan. The same reasoning as
+     * `shares_user_created_idx`.
+     */
+    index('push_subscriptions_user_idx').on(t.userId),
+  ],
+)
+
+/**
+ * F30. One row per slot the tick has decided about, per user, per local day.
+ *
+ * **This table is the idempotence, and the unique index is the enforcement.**
+ * Not application code: the tick may run twice in the same minute — a retried
+ * GitHub Actions job, a manual curl, two schedulers — and the guarantee that the
+ * user's phone lights up once is a `23505` on insert, exactly as the chat's one
+ * opener per round is a partial unique index rather than a `if (exists)`. A
+ * check written in TypeScript is a check with a race in it.
+ *
+ * `local_date` is a `date` and never a timestamp, because the day this row
+ * belongs to is the *user's* day. A `timestamptz` here would put a Jakarta
+ * evening and the following UTC morning on two different days, and the
+ * idempotence key would silently permit a second 19:00 notification. This is
+ * `localDate()` for the same reason `daily_cards.card_date` is.
+ *
+ * `slot` is the local hour, 0–23, and the CHECK bounds it structurally rather
+ * than to the seven hours `REMINDER_SLOTS` currently derives. Pinning the seven
+ * would mean a migration every time the user changes their mind about the
+ * schedule, and would make rows written under the old schedule unreadable
+ * against the new constraint — the bound that is true forever is the clock.
+ *
+ * `status`: `'sent'` is one notification actually accepted by the push service;
+ * `'failed'` is one it refused for a reason that is not "this endpoint is gone"
+ * (a gone endpoint deletes its subscription row instead); `'skipped'` is a slot
+ * the catch-up rule passed over, written so that a missed slot is *closed*
+ * rather than left looking outstanding for the rest of the day. All three are
+ * rows: an absent row means the tick never reached that slot, which is a fourth
+ * state and a real one.
+ *
+ * `reminder_key` is which line of the deck went out — the audit trail behind
+ * "each reminder is different", and what lets `reminderByKey` turn a row back
+ * into the sentence the user read. Null on a `'skipped'` row, because nothing
+ * was chosen, and the CHECK says so rather than leaving it to habit.
+ *
+ * There is no expiry and no pruning. At seven rows a day this is ~2,500 rows a
+ * year per user, and the history is the only record of what was said and when.
+ */
+export const pushDeliveries = pgTable(
+  'push_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    localDate: localDate('local_date').notNull(),
+    slot: integer('slot').notNull(),
+    status: text('status').$type<'sent' | 'skipped' | 'failed'>().notNull(),
+    reminderKey: text('reminder_key'),
+    /** When the tick decided. On a 'skipped' row nothing was sent at it. */
+    sentAt: tsz('sent_at').notNull().defaultNow(),
+    /**
+     * Why this row is not a plain send: `'superseded'` or `'no_active_words'`
+     * on a `'skipped'` row, and the transport detail on a `'failed'` one. Null
+     * on a `'sent'` row. Never rendered — it is read by `npm run push:db` and
+     * by a human with psql, and by nothing else.
+     *
+     * Named `reason` rather than `error` because two of its three writers are
+     * not errors. Phase 4 writes every value it ever holds.
+     */
+    reason: text('reason'),
+  },
+  (t) => [
+    /**
+     * The idempotence key, and **also the index the tick reads by**: its one
+     * question per user is "what has this user already had today?", which is a
+     * prefix scan on (user_id, local_date). A second index on those two columns
+     * would be a duplicate of this one's left-hand side and is deliberately not
+     * created. It serves the cascade from `users.id` for the same reason.
+     */
+    uniqueIndex('push_deliveries_user_date_slot_uniq').on(t.userId, t.localDate, t.slot),
+    /**
+     * `$type<>()` is the compile-time claim; these are the runtime ones. A
+     * fourth status arriving from a psql session would be a silent hole in the
+     * tick's branching rather than an error.
+     */
+    check(
+      'push_deliveries_status_check',
+      sql`${t.status} in ('sent', 'skipped', 'failed')`,
+    ),
+    check('push_deliveries_slot_check', sql`${t.slot} between 0 and 23`),
+    check(
+      'push_deliveries_reminder_key_check',
+      sql`${t.status} <> 'sent' or ${t.reminderKey} is not null`,
     ),
   ],
 )

@@ -103,6 +103,9 @@ npm run badges:check                     # F12's badge-art and F22's level-art m
 npm run stats:check                      # F9's streaks, levels, badges and reveal queue, plus F22's tier keys, offline
 npm run stats:db                         # F9's hook, idempotence and backfill; seeds two fixture users
 npm run stats:recompute -- --all --dry-run   # rebuild user_stats and replay badges
+npm run push:check                       # F30's slot derivation, catch-up matrix and copy deck, offline
+npm run push:db                          # F30's delivery idempotence, the 410 sweep and the card-exists suppression; seeds a fixture user
+npm run push:send                        # fire one real notification at your own subscriptions; no schedule, no rows written
 npm run demo:seed                        # the README's demo account; --clean removes it
 npm run demo:capture                     # rewrite docs/media/* from the running app
 ```
@@ -110,8 +113,12 @@ npm run demo:capture                     # rewrite docs/media/* from the running
 `npm run stats:recompute` takes `--user=<uuid|email>`, `--all`, `--dry-run`,
 `--prune` and `--force`. `--prune` is the only destructive operation in the app
 and refuses to combine with `--all` without `--force`. Run it after any change to
-`lib/gamification/badges.ts`, and never on a schedule — there is no cron in
-v0.1.0.
+`lib/gamification/badges.ts`, and **never on a schedule**. That instruction is
+unchanged and now needs its own reason, because it used to lean on one that has
+gone: F30 put a single scheduled job in the app ([R24]), and this is not a
+candidate for it. `--prune` deletes award rows, the hourly tick writes nothing
+outside `push_deliveries`, and the one destructive operation in the app stays
+something a person types on purpose after reading what changed.
 
 `npm run demo:seed` and `npm run demo:capture` are the only two scripts in the
 list that serve the documentation rather than the app, and they are a pair: the
@@ -495,10 +502,169 @@ relaxes was about confirmation modals; see [R22]'s neighbours and F13 D5.
 `onboard`, `tz <zone> [manual]`, `clear`, `delete`, `context`. Run it with
 `tsx --conditions=react-server --env-file=.env.local`.
 
+## The app has one scheduled job, and it cannot make a card
+
+`[R24]` is what authorises it, and it amends exactly two sentences in the
+roadmap: the "Push notifications or reminders of any kind" bullet in
+§ Explicitly out of scope, and the closing paragraph of `[R11]`. **`[R11]`'s
+actual ruling is untouched** — `user_stats` is still a cache, still recomputed
+on read, still never trusted for display, and nothing in this feature writes to
+it or reads it. What was superseded is only the generalisation *from* it — that
+a scheduled job is the first step toward the notifications this roadmap
+forbids. The step was taken deliberately, once, by the owner, for one thing,
+and the invariant that replaces it is narrower and stronger:
+
+> **Nothing scheduled may create a card.**
+
+`src/app/api/cards/route.ts:25` still says *"If you find yourself writing a
+scheduler, stop"* and it is **unchanged, byte for byte** — F30 did not relax it
+and did not need to. The scheduler sends a *message*; it does not press the
+button. A notification that made the card would take the app's one deliberate
+act and perform it on the user's behalf while they were asleep, which is the
+whole thing `/today` is about.
+
+The shape, end to end:
+
+```
+GitHub Actions, hourly ──► POST /api/push/tick   (CRON_SECRET, timingSafeEqual)
+                                 │
+                  per subscribed user:
+                    resolveTimezone      ──► !ok ? send nothing, write nothing
+                    localDateNow + localHour       (lib/time/local-date.ts, as always)
+                    getCardForDate       ──► card exists ? quiet for the rest of the day
+                    dueSlot({ localHour, delivered })  ──► 7 9 11 13 15 17 19, or none
+                    reminderFor(date, slot)            ──► a line nothing else that day used
+                    claim the slot, send, record the outcome
+                                 │
+                    web-push ──► web.push.apple.com ──► public/sw.js  'push'
+                                                          showNotification
+                                                          'notificationclick' ──► /today
+```
+
+Seven slots, and they are **derived** from `REMINDER_FIRST_HOUR = 7`,
+`REMINDER_EVERY_HOURS = 2` and `REMINDER_UNTIL_HOUR = 20` in
+`src/lib/push/schedule.ts` rather than written out as an array, so the sentence
+that was asked for is what the code says. 20:00 bounds the window and no
+two-hour step from 07:00 lands on it, which is why the last one is 19:00.
+
+**The copy is a deck, not a model call.** `src/lib/push/reminders.ts` is a
+curated list and `reminderFor(date, slot)` is deterministic in `(local date,
+slot)`, so a day's seven reminders are pairwise distinct and a replay of the
+same day says the same things. A cron fan-out through `lib/llm/` would put an
+unattended, billable, failure-prone call on the one path in the app whose entire
+job is to be quiet and reliable — and `npm run push:check` can assert a deck
+offline in a way it can never assert a model.
+
+### The scheduler is a GitHub Actions workflow, and `vercel.json` must not grow a `crons` block
+
+`vercel.json` is two lines with one purpose — `regions: ["sin1"]`, beside Neon —
+and it stays that way. A `crons` entry finer than once a day is **rejected at
+deploy time on a Hobby plan**: not the cron failing, the *deployment* failing,
+which takes the whole app down for a scheduling convenience. `.github/workflows/push-reminders.yml`
+is one `curl` and one secret and cannot do that. It is also the repo's first
+`.github/` directory of any kind; there is still no CI.
+
+### Traps, each of which fails without throwing
+
+- **iOS grants Web Push only to a Home-Screen install.** Safari on iOS 16.4+
+  exposes `pushManager` exclusively to a web app launched from the Home Screen.
+  In an ordinary Safari tab `navigator.serviceWorker` exists and
+  `registration.pushManager` does not. **The author testing this is on a desktop
+  and is always signed in**, where everything works first time — desktop Chrome
+  grants push to a plain tab. The only proof is the phone, installed to the Home
+  Screen, plus `npm run push:send`. The switch on `/profile/edit` says this in
+  its own copy rather than drawing a dead control, which is the same honesty the
+  `curl`-with-no-cookie-jar rule buys for `/s/<slug>`.
+- **`Notification.requestPermission()` must be called from a user gesture** on
+  iOS. An effect-driven prompt is refused silently: no throw, no dialog, no
+  console line. The toggle asks; nothing else may.
+- **`/sw.js` must stay in the middleware matcher's lookahead.** A service-worker
+  update check is a cookie-less fetch, so without the exemption it gets a 307 to
+  an HTML sign-in page and the browser is handed HTML where it asked for a
+  script. It fails only for a reader with no session, which the author never is
+  — the identical class of bug `isPublicSharePath` exists for. And the lookahead
+  is **prefix-matched**, which is why `badges:check` §12 now guards `sw`
+  alongside `badges` and `levels`: a route at `src/app/sw-settings/` would be
+  exempted from auth by a rule written for a file.
+- **`/sw.js` must never get the `immutable` header** that `/badges/*` and
+  `/levels/*` carry. Those filenames contain the first 8 hex of their content's
+  SHA-256, so regenerating a file changes its URL and every cache misses
+  correctly. `sw.js` is one fixed name whose bytes change, and a year of
+  `immutable` on it is a service worker that can never be updated — on a device
+  you cannot reach, for users who will never think to clear a website's data.
+  `next.config.ts` carries it as the deliberate inverse of the two blocks above
+  it.
+- **`userVisibleOnly: true` is a promise, and the browser collects on it.** A
+  push handled without calling `showNotification` costs the *subscription*, not
+  the message. So `public/sw.js` shows a notification on every `push` event,
+  including one whose payload will not parse.
+- **A `push_deliveries` row is claimed before the send, never after.** Two ticks
+  overlapping — a late run catching up beside the next scheduled one — would
+  otherwise both find the slot undelivered and both send. Same discipline as the
+  chat's `UPDATE … WHERE turn_count < 8` and the journal insight's conditional
+  claim, and the same cost, stated plainly: a send that fails leaves a failed row
+  rather than retrying, so a transient failure is one missed reminder instead of
+  a duplicate two hours later. With seven slots in a day, missing one is the
+  cheaper mistake, and it is the one that does not train a person to ignore the
+  lock screen.
+- **GitHub Actions' cron runs late.** It is a best-effort queue rather than a
+  guarantee, and a run can land well behind its stamp. That is survivable only
+  because `dueSlot` takes the *current* local hour and the set of slots already
+  delivered, and answers with **the slot that is due now, never a backlog**. A
+  tick that misses 11:00 and arrives after 13:00 sends one line, not four in a
+  row at teatime. Remove the catch-up rule and lateness becomes a burst.
+- **`CRON_SECRET` is set in two places and they must match** — the Vercel
+  project's environment variables and the repository's Actions secrets. A
+  mismatch is a 401 that writes nothing and logs nothing anywhere you would
+  think to look; the symptom is in the Actions tab, in that run's `curl` step.
+  Unset on the server, the tick refuses everyone, which is the same silence from
+  the other side.
+- **iOS rotates and revokes push endpoints.** A subscription that worked last
+  week answers 404 or 410, and the only correct response is to delete the row —
+  retrying a Gone endpoint is a request that can never succeed. `<PushSync />`
+  is the other half of that: it re-subscribes a rotated endpoint on the next app
+  open, exactly the way `<TimezoneSync />` reconciles a moved zone, and issues
+  zero requests in the steady state.
+
+### The manual pass, because none of it can be seen from a desktop
+
+```bash
+curl -sI http://localhost:3200/sw.js    # 200 with NO cookie jar, application/javascript.
+                                        # A 307 means the matcher exemption is gone.
+                                        # 'immutable' in cache-control is the other bug.
+npm run push:send                       # one real notification at your own subscriptions
+```
+
+Then the phone: Share → Add to Home Screen, open it from the Home Screen icon,
+turn the switch on under `/profile/edit`, and run `npm run push:send` again. A
+switch that works in desktop Chrome and does nothing on the phone is the
+expected failure of an install that did not happen, not a bug in this code.
+
+The tick itself, against a dev server, with the secret from `.env.local`:
+
+```bash
+curl -s -X POST http://localhost:3200/api/push/tick \
+  -H "Authorization: Bearer $CRON_SECRET"      # 200; a wrong secret is 401 and writes nothing
+```
+
+### What this feature is still not
+
+One notification type, one destination. No badge news, no chat nudge, no journal
+prompt, no email, no digest — and **no "your streak is at risk"**. F9's ban on
+loss-aversion mechanics is not what `[R24]` amended and it still holds
+completely; so do F13's "no badge dot on the Profile tab" and F17's "no 'finish
+your profile' nag anywhere in the app". `plans/F30-push-reminders.md` §8 lists
+every prohibition in the plan set and marks the four that moved against the
+seven that did not, so the next reader can tell a superseded sentence from one
+that is simply still true.
+
 ## Authority order for the docs
 
-1. `ROADMAP_v0.1.0.md` § **Reconciliation Decisions** ([R1]–[R21]) — wins over
-   everything, including the rest of that file.
+1. `ROADMAP_v0.1.0.md` § **Reconciliation Decisions** ([R1]–[R24]) — wins over
+   everything, including the rest of that file. The list is authoritative and it
+   is also **amendable**: [R22] says so out loud, [R23] amends [R21], and [R24]
+   amends [R11] and the out-of-scope list. A later number that contradicts an
+   earlier one is the mechanism working, not a conflict to resolve by guessing.
 2. `ROADMAP_v0.1.0.md` § Locked Decisions and § Database schema.
 3. `design/from-claude-design/Daily Words.dc.html` — the visual source of truth
    for layout ([R18]). Its *filler content* is not authoritative ([R20]).
@@ -551,8 +717,14 @@ throwing. Each cost real time.
   serialises an instant rather than a day.
 - Reads may fall back to a default timezone; **writes may not**. `POST /api/cards`
   refuses with 409 rather than date a card by guesswork.
-- The daily card is created by `POST /api/cards` and by nothing else. No cron, no
-  `revalidate`, no creation on page load.
+- The daily card is created by `POST /api/cards` and by nothing else. No
+  `revalidate`, no creation on page load — and **nothing scheduled may create a
+  card**, which is the narrower invariant that took over when F30 shipped a
+  scheduled job ([R24]). The hourly tick reads `daily_cards` to find out
+  whether to stay quiet; it has no write path into that table and never will.
+  `src/app/api/cards/route.ts:25` still says *"If you find yourself writing a
+  scheduler, stop"* and is unchanged, byte for byte: read it as being about card
+  creation, which is what it is about, rather than about the word "scheduler".
 - The chat's 8-turn cap is a conditional `UPDATE … WHERE turn_count < 8` taken
   **before** every model call, never after. `MAX_ASSISTANT_TURNS` lives in
   `lib/chat/turn-policy.ts` and the literal `8` appears nowhere else. A second

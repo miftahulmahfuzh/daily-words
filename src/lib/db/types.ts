@@ -11,6 +11,8 @@ import type {
   userStats,
   badgesAwarded,
   shares,
+  pushSubscriptions,
+  pushDeliveries,
 } from '@/lib/db/schema'
 
 export type { JournalInsight } from '@/lib/db/schema'
@@ -32,6 +34,10 @@ export type UserStats = typeof userStats.$inferSelect
 export type BadgeAward = typeof badgesAwarded.$inferSelect
 export type Share = typeof shares.$inferSelect
 export type NewShare = typeof shares.$inferInsert
+export type PushSubscription = typeof pushSubscriptions.$inferSelect
+export type NewPushSubscription = typeof pushSubscriptions.$inferInsert
+export type PushDelivery = typeof pushDeliveries.$inferSelect
+export type NewPushDelivery = typeof pushDeliveries.$inferInsert
 
 // 'shared' is F17's: a word claimed from somebody else's share link. Kept out of
 // 'manual' so F9's collector level keeps counting words the user typed.
@@ -44,3 +50,9 @@ export type ChatRole = ChatMessage['role'] // 'user' | 'assistant'
 export type ChatMessageKind = ChatMessage['kind'] // 'opener'|'reply'|'verdict'
 export type TimezoneSource = Profile['timezoneSource'] // 'detected' | 'manual'
 export type ShareEntityType = Share['entityType'] // 'vocab' | 'card' | 'journal'
+
+// 'skipped' is the catch-up rule's: a slot the tick passed over because a later
+// one was already due. It is a decision that was made, so it is a row — an
+// absent row means the tick never reached that slot at all, which is a fourth
+// state and a real one. See `dueSlot` in lib/push/schedule.ts.
+export type PushDeliveryStatus = PushDelivery['status'] // 'sent'|'skipped'|'failed'
