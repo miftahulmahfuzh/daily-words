@@ -79,7 +79,7 @@
         "R2",
         "R3"
       ],
-      "status": "pending",
+      "status": "spawned",
       "task_id": null,
       "title": "The tick, the scheduler and the copy in flight"
     },
@@ -107,7 +107,7 @@
   "plan": "/home/miftah/daily-words/.workflows/orchestration/push-card-reminders/PLAN.md",
   "repo": "/home/miftah/daily-words",
   "slug": "push-card-reminders",
-  "updated": "2026-09-14T05:04:07+00:00",
+  "updated": "2026-09-14T05:04:13+00:00",
   "verified_at": "2026-09-14T04:34:07+00:00",
   "worktree": "/home/miftah/.worktrees/daily-words/push-card-reminders"
 }
