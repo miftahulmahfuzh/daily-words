@@ -67,6 +67,8 @@ Two things this deliberately does **not** change:
 
 ## Commands
 
+To prove a change in the running app, use `.claude/skills/verify-daily-words/` (`scripts/verify.sh up|doctor|ui|api|layout|push|tick|sql|down`; feature map in `features/README.md`): each run is a snapshot on its own free loopback port and its own local Postgres, never 3200 and never `.env.local`'s database, so the port rule below is untouched.
+
 ```bash
 npm run dev              # 3200
 npm run typecheck        # tsc --noEmit
