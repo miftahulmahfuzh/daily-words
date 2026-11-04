@@ -143,7 +143,7 @@ check('isLocalMonth accepts', isLocalMonth('2026-08'), true)
 section('formatting (English throughout, per principle 4)')
 
 check('month label', formatMonthLabel('2026-08'), 'August 2026')
-check('/today header', formatLocalDateWeekday('2026-08-09'), 'Sunday, 9 August')
+check('/today header', formatLocalDateWeekday('2026-08-09'), 'Sunday 9 August')
 check('long date', formatLocalDateLong('2026-08-08'), '8 August 2026')
 
 section('timezone validation')

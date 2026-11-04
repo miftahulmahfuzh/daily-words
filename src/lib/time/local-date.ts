@@ -229,20 +229,30 @@ export function formatLocalDayMonth(date: LocalDate): string {
 }
 
 /**
- * "Friday, 18 September" — the /today header line.
+ * "Friday 18 September" — the /today header line, exactly as the design draws
+ * it ([R18]): no comma.
  *
  * No year: the header answers "what day is it", and a user looking at their own
  * phone knows the year. Formatted from the date string in UTC, so the weekday is
  * a property of the local calendar date rather than of the reader's machine.
+ *
+ * Assembled from parts rather than from one `format()` call, because the
+ * punctuation between them belongs to ICU, not to us: the ICU in Node 20 wrote
+ * "Sunday, 9 August" for en-GB and the one in Node 22 writes "Sunday 9 August",
+ * so the same build rendered a different header depending on the runtime it
+ * landed on. `dates:check` caught it as a failure on one machine only.
  */
 export function formatLocalDateWeekday(date: LocalDate): string {
   const { year, month, day } = parseLocalDate(date)
-  return new Intl.DateTimeFormat('en-GB', {
+  const parts = new Intl.DateTimeFormat('en-GB', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     timeZone: 'UTC',
-  }).format(new Date(Date.UTC(year, month - 1, day)))
+  }).formatToParts(new Date(Date.UTC(year, month - 1, day)))
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? ''
+  return `${part('weekday')} ${part('day')} ${part('month')}`
 }
 
 /** One letter for the week strip: S M T W T F S. English throughout, per principle 4. */
