@@ -25,14 +25,18 @@ processes and hides the actual problem. Two specific ways this bites:
 
 Neon is in `ap-southeast-1` — every connection string in `.env.local` and in the
 Vercel project reads `…c-3.ap-southeast-1.aws.neon.tech`. **`vercel.json` pins
-the functions to `sin1` so they run beside it.** The file has two lines and no
-other purpose; deleting it does not break a build, it just moves the whole app
-back across the Pacific.
+the functions to `sin1` so they run beside it.** That `regions` line is the
+file's first job; deleting it does not break a build, it just moves the whole app
+back across the Pacific. The file has one other job, a `git.deploymentEnabled`
+block (`7a5a960`) that deploys `main` and nothing else: every push used to keep a
+full preview build, and the free tier's Deployment Storage had reached 75%.
 
 The project's dashboard setting still reads `serverlessFunctionRegion: iad1`
 (Washington DC) and always did. `regions` in `vercel.json` overrides it per
 deployment, which is why the file rather than the dashboard is the record: it
-lives in the repo, it is reviewable, and a preview deploy gets it for free.
+lives in the repo, it is reviewable, and every deployment gets it for free.
+There are no preview deployments any more, so a branch push proves nothing about
+the region: check the `x-vercel-id` of `main`'s deploy, as below.
 
 **This is the one performance property of the app that nothing in the code can
 show you.** It shipped wrong for the whole of v0.1.0 and nothing failed — the
@@ -559,8 +563,9 @@ offline in a way it can never assert a model.
 
 ### The scheduler is a GitHub Actions workflow, and `vercel.json` must not grow a `crons` block
 
-`vercel.json` is two lines with one purpose — `regions: ["sin1"]`, beside Neon —
-and it stays that way. A `crons` entry finer than once a day is **rejected at
+`vercel.json` holds `regions: ["sin1"]`, beside Neon, and the
+`git.deploymentEnabled` block that keeps preview builds off, and it grows no
+third job. A `crons` entry finer than once a day is **rejected at
 deploy time on a Hobby plan**: not the cron failing, the *deployment* failing,
 which takes the whole app down for a scheduling convenience. `.github/workflows/push-reminders.yml`
 is one `curl` and one secret and cannot do that. It is also the repo's first
